@@ -31,7 +31,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Ready to Start
 
-- [ ] **#002 - Implement AVFoundation audio extraction**
+- [ ] **#009 - Implement AVFoundation audio extraction**
   - Priority: High
   - Dependencies: Logging system (#001)
   - Description: Extract audio from MP4 files using native AVFoundation
@@ -42,9 +42,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Handles file validation and error cases
     - Progress reporting via callbacks
 
-- [ ] **#003 - Create ffmpeg wrapper for fallback processing**
+- [ ] **#010 - Create ffmpeg wrapper for fallback processing**
   - Priority: High
-  - Dependencies: AVFoundation extraction (#002)
+  - Dependencies: AVFoundation extraction (#009)
   - Description: Fallback audio extraction using ffmpeg when AVFoundation fails
   - Acceptance Criteria:
     - FFmpegProcessor class as fallback
@@ -53,9 +53,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Same interface as AVFoundation processor
     - Progress parsing from ffmpeg output
 
-- [ ] **#004 - Add audio format detection and validation**
+- [ ] **#011 - Add audio format detection and validation**
   - Priority: Medium
-  - Dependencies: Audio extraction (#002, #003)
+  - Dependencies: Audio extraction (#009, #010)
   - Description: Detect and validate audio properties from extracted files
   - Acceptance Criteria:
     - AudioFormat struct population from file metadata
@@ -64,7 +64,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Format compatibility validation
     - Error reporting for unsupported formats
 
-- [ ] **#005 - Implement temporary file management**
+- [ ] **#012 - Implement temporary file management**
   - Priority: High
   - Dependencies: None
   - Description: Secure creation and cleanup of temporary audio files
@@ -75,9 +75,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Secure file permissions
     - Graceful handling of cleanup failures
 
-- [ ] **#006 - Add progress reporting for audio processing**
+- [ ] **#013 - Add progress reporting for audio processing**
   - Priority: Medium
-  - Dependencies: Audio processors (#002, #003)
+  - Dependencies: Audio processors (#009, #010)
   - Description: User feedback during audio extraction phase
   - Acceptance Criteria:
     - Progress protocol with percentage updates
@@ -86,7 +86,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Respects verbose/quiet modes
     - Works with both AVFoundation and ffmpeg
 
-- [ ] **#007 - Create comprehensive audio processing tests**
+- [ ] **#014 - Create comprehensive audio processing tests**
   - Priority: Medium
   - Dependencies: All audio processing components
   - Description: Unit and integration tests for audio extraction
@@ -103,9 +103,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Ready to Start
 
-- [ ] **#008 - Implement SpeechAnalyzer wrapper**
+- [ ] **#015 - Implement SpeechAnalyzer wrapper**
   - Priority: High
-  - Dependencies: Audio processing (#002-#006)
+  - Dependencies: Audio processing (#009-#013)
   - Description: Wrapper for Apple's Speech framework
   - Acceptance Criteria:
     - SpeechTranscriber class
@@ -114,9 +114,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Returns TranscriptionResult with segments
     - Proper error handling for speech framework issues
 
-- [ ] **#009 - Add language detection and preference handling**
+- [ ] **#016 - Add language detection and preference handling**
   - Priority: Medium
-  - Dependencies: SpeechAnalyzer wrapper (#008)
+  - Dependencies: SpeechAnalyzer wrapper (#015)
   - Description: Automatic language detection with user preference override
   - Acceptance Criteria:
     - Language detection from audio content
@@ -125,9 +125,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Support for major languages (en-US, es-ES, fr-FR, etc.)
     - Language confidence scoring
 
-- [ ] **#010 - Implement confidence scoring and validation**
+- [ ] **#017 - Implement confidence scoring and validation**
   - Priority: Medium
-  - Dependencies: SpeechAnalyzer wrapper (#008)
+  - Dependencies: SpeechAnalyzer wrapper (#015)
   - Description: Confidence metrics for transcription quality assessment
   - Acceptance Criteria:
     - Per-segment confidence scores
@@ -136,9 +136,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Low-confidence segment identification
     - Integration with fallback decision logic
 
-- [ ] **#011 - Create timestamp and segment extraction**
+- [ ] **#018 - Create timestamp and segment extraction**
   - Priority: High
-  - Dependencies: SpeechAnalyzer wrapper (#008)
+  - Dependencies: SpeechAnalyzer wrapper (#015)
   - Description: Extract precise timing information for transcribed segments
   - Acceptance Criteria:
     - Accurate start/end timestamps per segment
@@ -147,9 +147,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Speaker change detection
     - Silence gap handling
 
-- [ ] **#012 - Add progress reporting for transcription**
+- [ ] **#019 - Add progress reporting for transcription**
   - Priority: Medium
-  - Dependencies: SpeechAnalyzer wrapper (#008)
+  - Dependencies: SpeechAnalyzer wrapper (#015)
   - Description: User feedback during transcription processing
   - Acceptance Criteria:
     - Real-time transcription progress
@@ -158,7 +158,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Memory usage monitoring
     - Graceful handling of long audio files
 
-- [ ] **#013 - Optimize performance for both Intel and Apple Silicon**
+- [ ] **#020 - Optimize performance for both Intel and Apple Silicon**
   - Priority: Medium
   - Dependencies: Complete native transcription implementation
   - Description: Platform-specific optimizations for transcription performance
@@ -175,9 +175,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Ready to Start
 
-- [ ] **#014 - Implement OpenAI Whisper API client**
+- [ ] **#021 - Implement OpenAI Whisper API client**
   - Priority: High
-  - Dependencies: Audio processing (#002-#006)
+  - Dependencies: Audio processing (#009-#013)
   - Description: Integration with OpenAI's Whisper API for cloud transcription
   - Acceptance Criteria:
     - WhisperAPIClient class
@@ -187,9 +187,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Error handling for API failures
     - Rate limiting and quota management
 
-- [ ] **#015 - Implement Rev.ai API client**
+- [ ] **#022 - Implement Rev.ai API client**
   - Priority: High
-  - Dependencies: Audio processing (#002-#006)
+  - Dependencies: Audio processing (#009-#013)
   - Description: Alternative cloud transcription service integration
   - Acceptance Criteria:
     - RevAIClient class
@@ -199,9 +199,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Webhook support for large files
     - Error handling and retry logic
 
-- [ ] **#016 - Create intelligent fallback decision logic**
+- [ ] **#023 - Create intelligent fallback decision logic**
   - Priority: High
-  - Dependencies: Native transcription (#008-#013), Cloud APIs (#014-#015)
+  - Dependencies: Native transcription (#015-#020), Cloud APIs (#021-#022)
   - Description: Smart decision making between local and cloud transcription
   - Acceptance Criteria:
     - TranscriptionCoordinator class
@@ -211,9 +211,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Failure cascade handling
     - Performance vs accuracy trade-offs
 
-- [ ] **#017 - Add secure API key handling**
+- [ ] **#024 - Add secure API key handling**
   - Priority: High
-  - Dependencies: Cloud API clients (#014-#015)
+  - Dependencies: Cloud API clients (#021-#022)
   - Description: Secure storage and management of API credentials
   - Acceptance Criteria:
     - Environment variable support
@@ -223,9 +223,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - No persistence of keys in memory
     - Clear error messages for missing keys
 
-- [ ] **#018 - Implement retry mechanisms and error handling**
+- [ ] **#025 - Implement retry mechanisms and error handling**
   - Priority: Medium
-  - Dependencies: Cloud API clients (#014-#015)
+  - Dependencies: Cloud API clients (#021-#022)
   - Description: Robust error handling for cloud service failures
   - Acceptance Criteria:
     - Exponential backoff retry logic
@@ -235,9 +235,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Timeout management
     - User-friendly error messages
 
-- [ ] **#019 - Add file chunking for large audio files**
+- [ ] **#026 - Add file chunking for large audio files**
   - Priority: Medium
-  - Dependencies: Cloud API clients (#014-#015)
+  - Dependencies: Cloud API clients (#021-#022)
   - Description: Handle large audio files that exceed API limits
   - Acceptance Criteria:
     - Automatic file size detection
@@ -253,9 +253,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Ready to Start
 
-- [ ] **#020 - Implement plain text output formatter**
+- [ ] **#027 - Implement plain text output formatter**
   - Priority: High
-  - Dependencies: Transcription engines (#008-#019)
+  - Dependencies: Transcription engines (#015-#026)
   - Description: Clean text output with optional timestamps
   - Acceptance Criteria:
     - TextFormatter class
@@ -265,9 +265,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Confidence score annotations (optional)
     - Proper line breaking and paragraphs
 
-- [ ] **#021 - Implement SRT subtitle formatter**
+- [ ] **#028 - Implement SRT subtitle formatter**
   - Priority: High
-  - Dependencies: Transcription engines (#008-#019)
+  - Dependencies: Transcription engines (#015-#026)
   - Description: Standard subtitle format with precise timing
   - Acceptance Criteria:
     - SRTFormatter class
@@ -277,9 +277,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Line breaking for readability
     - Character encoding handling
 
-- [ ] **#022 - Implement JSON output formatter**
+- [ ] **#029 - Implement JSON output formatter**
   - Priority: Medium
-  - Dependencies: Transcription engines (#008-#019)
+  - Dependencies: Transcription engines (#015-#026)
   - Description: Structured JSON output with full metadata
   - Acceptance Criteria:
     - JSONFormatter class
@@ -289,9 +289,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Audio format information
     - Processing statistics
 
-- [ ] **#023 - Add comprehensive metadata inclusion**
+- [ ] **#030 - Add comprehensive metadata inclusion**
   - Priority: Medium
-  - Dependencies: Output formatters (#020-#022)
+  - Dependencies: Output formatters (#027-#029)
   - Description: Rich metadata in all output formats
   - Acceptance Criteria:
     - Processing timestamps
@@ -301,9 +301,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Language detection results
     - Performance metrics
 
-- [ ] **#024 - Create robust file writing with error recovery**
+- [ ] **#031 - Create robust file writing with error recovery**
   - Priority: High
-  - Dependencies: Output formatters (#020-#022)
+  - Dependencies: Output formatters (#027-#029)
   - Description: Reliable output file creation with error handling
   - Acceptance Criteria:
     - OutputWriter class
@@ -313,9 +313,9 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Backup and recovery options
     - Path validation and creation
 
-- [ ] **#025 - Add output validation and verification**
+- [ ] **#032 - Add output validation and verification**
   - Priority: Medium
-  - Dependencies: File writing (#024)
+  - Dependencies: File writing (#031)
   - Description: Verification of output file integrity
   - Acceptance Criteria:
     - Output format validation
@@ -330,7 +330,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Ready to Start
 
-- [ ] **#026 - Create unit tests for all components**
+- [ ] **#033 - Create unit tests for all components**
   - Priority: High
   - Dependencies: All implementation phases
   - Description: Comprehensive unit test coverage
@@ -341,7 +341,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Edge case testing
     - Error condition testing
 
-- [ ] **#027 - Add integration tests with sample files**
+- [ ] **#034 - Add integration tests with sample files**
   - Priority: High
   - Dependencies: Complete implementation
   - Description: End-to-end testing with real audio/video files
@@ -352,7 +352,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Error scenario testing
     - Performance benchmarking
 
-- [ ] **#028 - Performance testing on both architectures**
+- [ ] **#035 - Performance testing on both architectures**
   - Priority: Medium
   - Dependencies: Complete implementation
   - Description: Validate performance targets on Intel and Apple Silicon
@@ -363,7 +363,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Comparison between architectures
     - Performance regression detection
 
-- [ ] **#029 - Error handling and edge case testing**
+- [ ] **#036 - Error handling and edge case testing**
   - Priority: High
   - Dependencies: Complete implementation
   - Description: Comprehensive error scenario testing
@@ -374,7 +374,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Resource exhaustion testing
     - Graceful degradation validation
 
-- [ ] **#030 - User experience refinement**
+- [ ] **#037 - User experience refinement**
   - Priority: Medium
   - Dependencies: Complete implementation
   - Description: Polish user interface and experience
@@ -385,7 +385,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Comprehensive help text
     - Usage examples
 
-- [ ] **#031 - Documentation and usage examples**
+- [ ] **#038 - Documentation and usage examples**
   - Priority: Medium
   - Dependencies: Complete implementation
   - Description: User documentation and examples
@@ -402,7 +402,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 
 ### 🎯 Future Tasks
 
-- [ ] **#032 - Universal binary build optimization**
+- [ ] **#039 - Universal binary build optimization**
   - Priority: Medium
   - Description: Optimize build process for both architectures
   - Acceptance Criteria:
@@ -411,7 +411,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Release build validation
     - Size optimization
 
-- [ ] **#033 - Homebrew tap creation**
+- [ ] **#040 - Homebrew tap creation**
   - Priority: Low
   - Description: Create Homebrew formula for easy installation
   - Acceptance Criteria:
@@ -420,7 +420,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Version management
     - Dependency handling
 
-- [x] **#034 - GitHub Actions CI/CD**
+- [x] **#041 - GitHub Actions CI/CD**
   - Priority: Medium
   - Description: Automated testing and release pipeline
   - Acceptance Criteria:
@@ -464,10 +464,10 @@ When creating GitHub issues from this TODO, use this template:
 
 ## Progress Tracking
 
-- **Total Tasks**: 34
+- **Total Tasks**: 41
 - **Completed**: 6 (18%)
 - **In Progress**: 1 (3%)
-- **Ready to Start**: 27 (79%)
+- **Ready to Start**: 28 (78%)
 
 ### Phase Completion Status
 - Phase 1 (Infrastructure): 85% complete
