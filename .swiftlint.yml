@@ -117,11 +117,7 @@ custom_rules:
     message: "Use proper logging instead of print statements"
     severity: warning
   
-  no_force_cast:
-    name: "Avoid force casting"
-    regex: "as!"
-    message: "Use safe casting (as?) instead of force casting"
-    severity: error
+  # no_force_cast rule removed - using built-in force_cast rule instead
     
   no_force_unwrap:
     name: "Avoid force unwrapping"
