@@ -15,7 +15,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Setup Swift
-      uses: swift-actions/setup-swift@v1
+      uses: swift-actions/setup-swift@v2
       with:
         swift-version: '5.9'
     
@@ -123,46 +123,21 @@ jobs:
         cat release_notes.md
     
     - name: Create GitHub Release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
       id: create_release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.version.outputs.tag }}
-        release_name: Vox CLI ${{ steps.version.outputs.version }}
+        name: Vox CLI ${{ steps.version.outputs.version }}
         body_path: release_notes.md
         draft: false
         prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+        files: |
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
+          dist/checksums.txt
     
-    - name: Upload Universal Binary (tar.gz)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
-        asset_name: vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
-        asset_content_type: application/gzip
-    
-    - name: Upload Universal Binary (zip)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
-        asset_name: vox-${{ steps.version.outputs.version }}-macos-universal.zip
-        asset_content_type: application/zip
-    
-    - name: Upload Checksums
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/checksums.txt
-        asset_name: checksums.txt
-        asset_content_type: text/plain
 
   homebrew-update:
     name: Update Homebrew Formula
