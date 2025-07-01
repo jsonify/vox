@@ -9,6 +9,8 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: macos-latest
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
@@ -123,7 +125,7 @@ jobs:
         cat release_notes.md
     
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       id: create_release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
