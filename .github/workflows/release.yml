@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v1
+      with:
+        swift-version: '5.9'
+    
+    - name: Cache Swift dependencies
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}-swift-release-${{ hashFiles('Package.swift', 'Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-swift-release-
+          ${{ runner.os }}-swift-
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Release version: $VERSION"
+    
+    - name: Run tests
+      run: swift test --verbose
+    
+    - name: Build release binaries
+      run: |
+        echo "Building for arm64..."
+        swift build -c release --arch arm64
+        
+        echo "Building for x86_64..."
+        swift build -c release --arch x86_64
+        
+        echo "Creating universal binary..."
+        mkdir -p dist
+        lipo -create -output dist/vox \
+          .build/arm64-apple-macosx/release/vox \
+          .build/x86_64-apple-macosx/release/vox
+        
+        # Verify universal binary
+        file dist/vox
+        lipo -info dist/vox
+        
+        # Make executable
+        chmod +x dist/vox
+    
+    - name: Create distribution package
+      run: |
+        cd dist
+        
+        # Create tar.gz archive
+        tar -czf vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz vox
+        
+        # Create zip archive
+        zip vox-${{ steps.version.outputs.version }}-macos-universal.zip vox
+        
+        # Generate checksums
+        shasum -a 256 *.tar.gz *.zip > checksums.txt
+        
+        echo "Distribution files created:"
+        ls -la
+        cat checksums.txt
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        # Get previous tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        echo "Generating release notes..."
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "Changes since $PREVIOUS_TAG:" > release_notes.md
+          echo "" >> release_notes.md
+          git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD >> release_notes.md
+        else
+          echo "Initial release of Vox CLI" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Features" >> release_notes.md
+          echo "- MP4 video audio extraction" >> release_notes.md
+          echo "- Native macOS speech transcription" >> release_notes.md
+          echo "- Cloud API fallback support" >> release_notes.md
+          echo "- Multiple output formats (TXT, SRT, JSON)" >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "## Installation" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### macOS Universal Binary" >> release_notes.md
+        echo "1. Download \`vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz\`" >> release_notes.md
+        echo "2. Extract: \`tar -xzf vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz\`" >> release_notes.md
+        echo "3. Install: \`sudo mv vox /usr/local/bin/\`" >> release_notes.md
+        echo "4. Verify: \`vox --version\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Homebrew (Alternative)" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Add custom tap (when available)" >> release_notes.md
+        echo "brew tap jsonify/vox" >> release_notes.md
+        echo "brew install vox" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Checksums" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        cat dist/checksums.txt >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        
+        cat release_notes.md
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        release_name: Vox CLI ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+    
+    - name: Upload Universal Binary (tar.gz)
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+        asset_name: vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+        asset_content_type: application/gzip
+    
+    - name: Upload Universal Binary (zip)
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
+        asset_name: vox-${{ steps.version.outputs.version }}-macos-universal.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/checksums.txt
+        asset_name: checksums.txt
+        asset_content_type: text/plain
+
+  homebrew-update:
+    name: Update Homebrew Formula
+    runs-on: ubuntu-latest
+    needs: build-and-release
+    if: ${{ !contains(github.ref, '-') }} # Only for stable releases
+    
+    steps:
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Update Homebrew Formula
+      run: |
+        echo "Homebrew formula update would go here"
+        echo "Version: ${{ steps.version.outputs.version }}"
+        echo "This step would update a homebrew-tap repository"
+        echo "For now, this is a placeholder for future implementation"
+    
+    # Future: Implement automatic Homebrew tap update
+    # - name: Checkout homebrew-tap
+    #   uses: actions/checkout@v4
+    #   with:
+    #     repository: jsonify/homebrew-vox
+    #     token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    #     path: homebrew-tap
+    # 
+    # - name: Update formula
+    #   run: |
+    #     cd homebrew-tap
+    #     # Update vox.rb formula with new version and checksums
+    #     # Commit and push changes
+
+  notify:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [build-and-release, homebrew-update]
+    if: always()
+    
+    steps:
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Notify Success
+      if: needs.build-and-release.result == 'success'
+      run: |
+        echo "🎉 Vox CLI ${{ steps.version.outputs.version }} released successfully!"
+        echo "✅ Universal binary created and uploaded"
+        echo "✅ GitHub release created"
+        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+    
+    - name: Notify Failure
+      if: needs.build-and-release.result == 'failure'
+      run: |
+        echo "❌ Release failed for Vox CLI ${{ steps.version.outputs.version }}"
+        echo "Check the build logs for details"
+        exit 1
