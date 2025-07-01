@@ -168,7 +168,7 @@ class AudioProcessor {
         }
         
         // AVAssetTrack.formatDescriptions contains CMFormatDescription objects
-        // swiftlint:disable:next force_cast no_force_cast
+        // swiftlint:disable:next force_cast
         let cmFormatDescription = formatDescription as! CMFormatDescription
         
         guard CMFormatDescriptionGetMediaType(cmFormatDescription) == kCMMediaType_Audio,
