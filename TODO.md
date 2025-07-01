@@ -16,7 +16,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
 - [x] Configure universal binary build settings
 
 ### 🔄 In Progress
-- [ ] **#001 - Add comprehensive logging system**
+- [x] **#001 - Add comprehensive logging system**
   - Priority: High
   - Description: Implement structured logging with different verbosity levels
   - Acceptance Criteria:
@@ -420,7 +420,7 @@ This TODO document tracks the development of Vox, a native macOS CLI for audio t
     - Version management
     - Dependency handling
 
-- [ ] **#034 - GitHub Actions CI/CD**
+- [x] **#034 - GitHub Actions CI/CD**
   - Priority: Medium
   - Description: Automated testing and release pipeline
   - Acceptance Criteria:

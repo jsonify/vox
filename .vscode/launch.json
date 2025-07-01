@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vox}",
+            "name": "Debug vox",
+            "program": "${workspaceFolder:vox}/.build/debug/vox",
+            "preLaunchTask": "swift: Build Debug vox"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vox}",
+            "name": "Release vox",
+            "program": "${workspaceFolder:vox}/.build/release/vox",
+            "preLaunchTask": "swift: Build Release vox"
+        }
+    ]
+}
