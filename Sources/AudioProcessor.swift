@@ -7,6 +7,7 @@ class AudioProcessor {
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
     
     private let logger = Logger.shared
+    private let ffmpegProcessor = FFmpegProcessor()
     
     func extractAudio(from inputPath: String, 
                      progressCallback: ProgressCallback? = nil,
@@ -52,7 +53,20 @@ class AudioProcessor {
                 
             case .failure(let error):
                 self?.cleanupTemporaryFile(at: tempOutputURL)
-                completion(.failure(error))
+                self?.logger.warn("AVFoundation extraction failed, attempting ffmpeg fallback: \(error.localizedDescription)", component: "AudioProcessor")
+                
+                // Try ffmpeg fallback
+                self?.ffmpegProcessor.extractAudio(from: inputPath, progressCallback: progressCallback) { fallbackResult in
+                    switch fallbackResult {
+                    case .success(let audioFile):
+                        self?.logger.info("FFmpeg fallback extraction succeeded", component: "AudioProcessor")
+                        completion(.success(audioFile))
+                    case .failure(_):
+                        self?.logger.error("Both AVFoundation and ffmpeg extraction failed", component: "AudioProcessor")
+                        // Return the original AVFoundation error as it's the primary method
+                        completion(.failure(error))
+                    }
+                }
             }
         }
     }
