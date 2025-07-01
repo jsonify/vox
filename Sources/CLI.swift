@@ -41,7 +41,6 @@ struct Vox: ParsableCommand {
         Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
         Logger.shared.debug("Verbose logging enabled", component: "CLI")
         
-        
         Logger.shared.info("Input file: \(inputFile)", component: "CLI")
         Logger.shared.info("Output format: \(format)", component: "CLI")
         
@@ -81,5 +80,55 @@ struct Vox: ParsableCommand {
             print("Using native transcription with fallback")
         }
         
+        try processAudioFile()
+    }
+    
+    private func processAudioFile() throws {
+        let audioProcessor = AudioProcessor()
+        let semaphore = DispatchSemaphore(value: 0)
+        var processingError: Error?
+        
+        print("Extracting audio from: \(inputFile)")
+        
+        audioProcessor.extractAudio(from: inputFile, 
+                                  progressCallback: { progress in
+                                      if self.verbose {
+                                          print("Progress: \(Int(progress * 100))%")
+                                      }
+                                  }) { result in
+            switch result {
+            case .success(let audioFile):
+                Logger.shared.info("Audio extraction completed successfully", component: "CLI")
+                print("✓ Audio extracted successfully")
+                print("  - Format: \(audioFile.format.codec)")
+                print("  - Sample Rate: \(audioFile.format.sampleRate) Hz")
+                print("  - Channels: \(audioFile.format.channels)")
+                print("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds")
+                
+                if let bitRate = audioFile.format.bitRate {
+                    print("  - Bit Rate: \(bitRate) bps")
+                }
+                
+                if let tempPath = audioFile.temporaryPath {
+                    print("  - Temporary file: \(tempPath)")
+                }
+                
+                audioProcessor.cleanupTemporaryFiles(for: audioFile)
+                
+            case .failure(let error):
+                Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
+                processingError = error
+            }
+            
+            semaphore.signal()
+        }
+        
+        semaphore.wait()
+        
+        if let error = processingError {
+            throw error
+        }
+        
+        print("Audio processing completed successfully!")
     }
 }
