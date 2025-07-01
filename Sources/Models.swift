@@ -1,4 +1,5 @@
 import Foundation
+import ArgumentParser
 
 struct TranscriptionResult {
     let text: String
@@ -63,4 +64,38 @@ enum VoxError: Error, LocalizedError {
             return "Unsupported format: \(format)"
         }
     }
+    
+    func log() {
+        Logger.shared.error(self.localizedDescription, component: componentName)
+    }
+    
+    private var componentName: String {
+        switch self {
+        case .invalidInputFile, .unsupportedFormat:
+            return "FileProcessor"
+        case .audioExtractionFailed:
+            return "AudioProcessor"
+        case .transcriptionFailed:
+            return "Transcription"
+        case .outputWriteFailed:
+            return "OutputWriter"
+        case .apiKeyMissing:
+            return "API"
+        }
+    }
+}
+
+enum OutputFormat: String, CaseIterable, ExpressibleByArgument {
+    case txt
+    case srt
+    case json
+    
+    var defaultValueDescription: String {
+        return "txt"
+    }
+}
+
+enum FallbackAPI: String, CaseIterable, ExpressibleByArgument {
+    case openai
+    case revai
 }
