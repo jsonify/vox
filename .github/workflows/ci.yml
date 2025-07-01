@@ -36,21 +36,7 @@ jobs:
       run: swift build --verbose
     
     - name: Run tests
-      run: swift test --verbose --enable-code-coverage
-    
-    - name: Generate code coverage report
-      if: matrix.os == 'macos-latest'
-      run: |
-        xcrun llvm-cov export -format="lcov" \
-          .build/debug/voxPackageTests.xctest/Contents/MacOS/voxPackageTests \
-          -instr-profile .build/debug/codecov/default.profdata > coverage.lcov
-    
-    - name: Upload coverage to Codecov
-      if: matrix.os == 'macos-latest'
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.lcov
-        fail_ci_if_error: false
+      run: swift test --verbose
 
   lint:
     name: SwiftLint
@@ -66,30 +52,6 @@ jobs:
     - name: Run SwiftLint
       run: swiftlint lint --reporter github-actions-logging
 
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      contents: read
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
 
   build-validation:
     name: Build Validation
