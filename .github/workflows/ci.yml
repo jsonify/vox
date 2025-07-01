@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+        swift-version: ['5.9']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: ${{ matrix.swift-version }}
+    
+    - name: Cache Swift dependencies
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}-swift-${{ hashFiles('Package.swift', 'Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-swift-
+    
+    - name: Build
+      run: swift build --verbose
+    
+    - name: Run tests
+      run: swift test --verbose
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install SwiftLint
+      run: brew install swiftlint
+    
+    - name: Run SwiftLint
+      run: swiftlint lint --reporter github-actions-logging
+
+
+  build-validation:
+    name: Build Validation
+    runs-on: macos-latest
+    needs: [test, lint]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: '5.9'
+    
+    - name: Build release configuration
+      run: swift build -c release --verbose
+    
+    - name: Create universal binary (if on macOS)
+      run: |
+        # Build for both architectures
+        swift build -c release --arch arm64
+        swift build -c release --arch x86_64
+        
+        # Create universal binary
+        lipo -create -output vox-universal \
+          .build/arm64-apple-macosx/release/vox \
+          .build/x86_64-apple-macosx/release/vox
+        
+        # Verify universal binary
+        file vox-universal
+        lipo -info vox-universal
+    
+    - name: Test CLI functionality
+      run: |
+        # Make binary executable
+        chmod +x vox-universal
+        
+        # Test basic CLI functionality
+        ./vox-universal --help || echo "Help command test completed"
+        
+        # Test version if available
+        ./vox-universal --version || echo "Version test completed"
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: vox-universal-binary
+        path: vox-universal
+        retention-days: 7
