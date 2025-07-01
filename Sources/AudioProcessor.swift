@@ -121,24 +121,27 @@ class AudioProcessor {
     
     private func isValidMP4File(path: String) -> Bool {
         let url = URL(fileURLWithPath: path)
-        let asset = AVAsset(url: url)
-        
-        let hasVideoTrack = !asset.tracks(withMediaType: .video).isEmpty
-        let hasAudioTrack = !asset.tracks(withMediaType: .audio).isEmpty
-        
         let pathExtension = url.pathExtension.lowercased()
         let validExtensions = ["mp4", "m4v", "mov"]
         
-        let validExtension = validExtensions.contains(pathExtension)
-        let hasRequiredTracks = hasVideoTrack && hasAudioTrack
+        // Check extension first to avoid creating AVAsset for obviously invalid files
+        guard validExtensions.contains(pathExtension) else {
+            logger.debug("File validation failed - Invalid extension: \(pathExtension)", 
+                        component: "AudioProcessor")
+            return false
+        }
         
-        logger.debug("File validation - Extension: \(validExtension), Video: \(hasVideoTrack), Audio: \(hasAudioTrack)", 
+        let asset = AVAsset(url: url)
+        let hasVideoTrack = !asset.tracks(withMediaType: .video).isEmpty
+        let hasAudioTrack = !asset.tracks(withMediaType: .audio).isEmpty
+        
+        logger.debug("File validation - Extension: valid, Video: \(hasVideoTrack), Audio: \(hasAudioTrack)", 
                     component: "AudioProcessor")
         
-        return validExtension && hasRequiredTracks
+        return hasVideoTrack && hasAudioTrack
     }
     
-    private func createTemporaryAudioFile() -> URL? {
+    internal func createTemporaryAudioFile() -> URL? {
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "vox_temp_\(UUID().uuidString).m4a"
         return tempDir.appendingPathComponent(fileName)
@@ -164,10 +167,17 @@ class AudioProcessor {
             return nil
         }
         
-        let basicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription as! CMAudioFormatDescription)
+        // AVAssetTrack.formatDescriptions contains CMFormatDescription objects
+        // swiftlint:disable:next force_cast no_force_cast
+        let cmFormatDescription = formatDescription as! CMFormatDescription
         
-        let sampleRate = Int(basicDescription?.pointee.mSampleRate ?? 44100)
-        let channels = Int(basicDescription?.pointee.mChannelsPerFrame ?? 2)
+        guard CMFormatDescriptionGetMediaType(cmFormatDescription) == kCMMediaType_Audio,
+              let basicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(cmFormatDescription) else {
+            return nil
+        }
+        
+        let sampleRate = Int(basicDescription.pointee.mSampleRate)
+        let channels = Int(basicDescription.pointee.mChannelsPerFrame)
         let bitRate = Int(audioTrack.estimatedDataRate)
         let duration = CMTimeGetSeconds(asset.duration)
         
