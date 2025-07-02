@@ -1,0 +1,221 @@
+import XCTest
+import Foundation
+import AVFoundation
+@testable import vox
+
+final class AudioProcessingErrorTests: XCTestCase {
+    
+    var audioProcessor: AudioProcessor!
+    var ffmpegProcessor: FFmpegProcessor!
+    var testFileGenerator: TestAudioFileGenerator!
+    var tempDirectory: URL!
+    
+    override func setUp() {
+        super.setUp()
+        audioProcessor = AudioProcessor()
+        ffmpegProcessor = FFmpegProcessor()
+        testFileGenerator = TestAudioFileGenerator.shared
+        tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("error_tests_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    }
+    
+    override func tearDown() {
+        audioProcessor = nil
+        ffmpegProcessor = nil
+        try? FileManager.default.removeItem(at: tempDirectory)
+        testFileGenerator?.cleanup()
+        testFileGenerator = nil
+        super.tearDown()
+    }
+    
+    // MARK: - File System Error Tests
+    
+    func testExtractionWithNonexistentFile() {
+        let nonexistentPath = "/this/path/absolutely/does/not/exist/video.mp4"
+        let expectation = XCTestExpectation(description: "Nonexistent file error")
+        
+        audioProcessor.extractAudio(from: nonexistentPath) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with nonexistent file")
+            case .failure(let error):
+                if case .invalidInputFile(let message) = error {
+                    XCTAssertTrue(message.contains(nonexistentPath))
+                    XCTAssertTrue(message.contains("does not exist"))
+                } else {
+                    XCTFail("Expected invalidInputFile error, got \(error)")
+                }
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+    }
+    
+    func testExtractionWithEmptyPath() {
+        let expectation = XCTestExpectation(description: "Empty path error")
+        
+        audioProcessor.extractAudio(from: "") { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with empty path")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+    }
+    
+    func testExtractionWithDirectoryPath() {
+        let directoryPath = tempDirectory.path
+        let expectation = XCTestExpectation(description: "Directory path error")
+        
+        audioProcessor.extractAudio(from: directoryPath) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with directory path")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+    }
+    
+    func testExtractionWithInvalidExtension() {
+        let textFile = tempDirectory.appendingPathComponent("not_a_video.txt")
+        let testData = "This is just text, not a video file".data(using: .utf8)!
+        FileManager.default.createFile(atPath: textFile.path, contents: testData)
+        
+        let expectation = XCTestExpectation(description: "Invalid extension error")
+        
+        audioProcessor.extractAudio(from: textFile.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with invalid extension")
+            case .failure(let error):
+                if case .unsupportedFormat(let message) = error {
+                    XCTAssertTrue(message.contains("not a valid MP4"))
+                } else {
+                    XCTFail("Expected unsupportedFormat error, got \(error)")
+                }
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+    }
+    
+    // MARK: - Invalid File Content Tests
+    
+    func testExtractionWithInvalidMP4Content() {
+        let invalidMP4 = testFileGenerator.createInvalidMP4File()
+        let expectation = XCTestExpectation(description: "Invalid MP4 content error")
+        
+        audioProcessor.extractAudio(from: invalidMP4.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with invalid MP4 content")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+                // Should be either unsupportedFormat or audioExtractionFailed
+                switch error {
+                case .unsupportedFormat, .audioExtractionFailed:
+                    break // Expected
+                default:
+                    XCTFail("Unexpected error type: \(error)")
+                }
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 10.0)
+    }
+    
+    func testExtractionWithEmptyMP4File() {
+        let emptyMP4 = testFileGenerator.createEmptyMP4File()
+        let expectation = XCTestExpectation(description: "Empty MP4 file error")
+        
+        audioProcessor.extractAudio(from: emptyMP4.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with empty MP4 file")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 10.0)
+    }
+    
+    func testExtractionWithCorruptedMP4File() {
+        let corruptedMP4 = testFileGenerator.createCorruptedMP4File()
+        let expectation = XCTestExpectation(description: "Corrupted MP4 file error")
+        
+        audioProcessor.extractAudio(from: corruptedMP4.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with corrupted MP4 file")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 10.0)
+    }
+    
+    func testExtractionWithVideoOnlyMP4File() {
+        guard let videoOnlyMP4 = testFileGenerator.createVideoOnlyMP4File() else {
+            XCTFail("Failed to create video-only MP4 file")
+            return
+        }
+        
+        let expectation = XCTestExpectation(description: "Video-only MP4 file error")
+        
+        audioProcessor.extractAudio(from: videoOnlyMP4.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with video-only MP4 file")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+                // Should fail during validation or extraction
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 15.0)
+    }
+    
+    // MARK: - FFmpeg-Specific Error Tests
+    
+    func testFFmpegUnavailableError() {
+        // Create a processor and test when ffmpeg is not available
+        let testFile = tempDirectory.appendingPathComponent("test.mp4")
+        let testData = "fake mp4 data".data(using: .utf8)!
+        FileManager.default.createFile(atPath: testFile.path, contents: testData)
+        
+        let expectation = XCTestExpectation(description: "FFmpeg unavailable error")
+        
+        ffmpegProcessor.extractAudio(from: testFile.path) { result in
+            switch result {
+            case .success:
+                XCTFail("Should fail with invalid MP4 or missing ffmpeg")
+            case .failure(let error):
+                XCTAssertTrue(error is VoxError)
+                // Error should mention ffmpeg or extraction failure
+                XCTAssertTrue(
+                    error.localizedDescription.contains("ffmpeg") ||
+                    error.localizedDescription.contains("extraction failed")
+                )
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 15.0)
+    }
+}
