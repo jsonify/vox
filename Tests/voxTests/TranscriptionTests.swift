@@ -126,9 +126,9 @@ final class TranscriptionTests: XCTestCase {
             speakerID: nil
         )
         
-        XCTAssertEqual(segment.startTime, segment.endTime)
-        XCTAssertEqual(segment.startTime, 5.0)
-        XCTAssertEqual(segment.duration, 0.0)
+        XCTAssertEqual(segment.startTime, segment.endTime, accuracy: 0.001)
+        XCTAssertEqual(segment.startTime, 5.0, accuracy: 0.001)
+        XCTAssertEqual(segment.duration, 0.0, accuracy: 0.001)
     }
     
     // MARK: - Enhanced Timing Features Tests
@@ -151,9 +151,9 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertEqual(segment.words?.count, 2)
         XCTAssertEqual(segment.words?[0].word, "Hello")
-        XCTAssertEqual(segment.words?[0].duration, 0.5)
+        XCTAssertEqual(segment.words?[0].duration ?? 0.0, 0.5, accuracy: 0.001)
         XCTAssertEqual(segment.words?[1].word, "world")
-        XCTAssertEqual(segment.words?[1].duration, 0.6)
+        XCTAssertEqual(segment.words?[1].duration ?? 0.0, 0.6, accuracy: 0.001)
         XCTAssertEqual(segment.segmentType, .speech)
     }
     
@@ -183,7 +183,7 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertTrue(segment.hasSpeakerChange)
         XCTAssertEqual(segment.speakerID, "Speaker2")
-        XCTAssertEqual(segment.pauseDuration, 2.5)
+        XCTAssertEqual(segment.pauseDuration ?? 0.0, 2.5, accuracy: 0.001)
     }
     
     func testTranscriptionSegmentWithSilenceGap() {
@@ -212,6 +212,7 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertTrue(segment.isParagraphBoundary)
         XCTAssertTrue(segment.isSentenceBoundary) // Should also be sentence boundary
+        XCTAssertEqual(segment.pauseDuration ?? 0.0, 1.8, accuracy: 0.001)
     }
     
     // MARK: - WordTiming Tests
@@ -225,10 +226,10 @@ final class TranscriptionTests: XCTestCase {
         )
         
         XCTAssertEqual(wordTiming.word, "example")
-        XCTAssertEqual(wordTiming.startTime, 1.0)
-        XCTAssertEqual(wordTiming.endTime, 1.7)
-        XCTAssertEqual(wordTiming.duration, 0.7)
-        XCTAssertEqual(wordTiming.confidence, 0.92)
+        XCTAssertEqual(wordTiming.startTime, 1.0, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.endTime, 1.7, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.duration, 0.7, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.confidence, 0.92, accuracy: 0.001)
     }
     
     // MARK: - SegmentType Tests

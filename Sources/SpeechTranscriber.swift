@@ -9,6 +9,7 @@ class SpeechTranscriber {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     
+    
     // MARK: - Initialization
     
     init(locale: Locale = Locale(identifier: "en-US")) throws {
@@ -198,8 +199,8 @@ class SpeechTranscriber {
         isLastSegment: Bool,
         previousText: String?
     ) -> SegmentType {
-        // Check for silence gaps (pause > 2 seconds typically indicates speaker change or paragraph break)
-        if let pause = pauseDuration, pause > 2.0 {
+        // Check for silence gaps (pause > speaker change threshold typically indicates speaker change or paragraph break)
+        if let pause = pauseDuration, pause > TimingThresholds.speakerChangeThreshold {
             return .speakerChange
         }
         
@@ -209,7 +210,7 @@ class SpeechTranscriber {
         }
         
         // Check for paragraph boundaries (long pause + sentence ending)
-        if let pause = pauseDuration, pause > 1.5,
+        if let pause = pauseDuration, pause > TimingThresholds.paragraphBoundaryThreshold,
            let prevText = previousText,
            (prevText.hasSuffix(".") || prevText.hasSuffix("!") || prevText.hasSuffix("?")) {
             return .paragraphBoundary
@@ -251,8 +252,8 @@ class SpeechTranscriber {
         let previousSegment = segments[index - 1]
         let pauseDuration = currentSegment.timestamp - (previousSegment.timestamp + previousSegment.duration)
         
-        // Simple heuristic: if there's a pause > 3 seconds, assume speaker change
-        if pauseDuration > 3.0 {
+        // Simple heuristic: if there's a pause > definite speaker change threshold, assume speaker change
+        if pauseDuration > TimingThresholds.definiteSpeakerChangeThreshold {
             return "Speaker\((index % 4) + 1)" // Cycle through up to 4 speakers
         }
         
