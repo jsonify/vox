@@ -57,6 +57,10 @@ public class Logger: @unchecked Sendable {
         minimumLevel = verbose ? .debug : .info
     }
     
+    public func enableLogging(level: LogLevel) {
+        minimumLevel = level
+    }
+    
     public func debug(_ message: String, component: String? = nil, file: String = #file, line: Int = #line) {
         log(level: .debug, message: message, component: component, file: file, line: line)
     }
