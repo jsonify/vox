@@ -98,32 +98,40 @@ class SpeechTranscriber {
                 }
                 
                 if let result = result {
-                    self.processRecognitionResult(
-                        result,
+                    let context = RecognitionContext(
                         audioFile: audioFile,
                         startTime: startTime,
                         progressReporter: progressReporter,
                         progressCallback: progressCallback,
+                        continuation: continuation
+                    )
+                    
+                    self.processRecognitionResult(
+                        result,
+                        context: context,
                         segments: &segments,
                         finalText: &finalTranscriptionText,
-                        confidence: &confidence,
-                        continuation: continuation
+                        confidence: &confidence
                     )
                 }
             }
         }
     }
     
+    private struct RecognitionContext {
+        let audioFile: AudioFile
+        let startTime: Date
+        let progressReporter: EnhancedProgressReporter
+        let progressCallback: ProgressCallback?
+        let continuation: CheckedContinuation<TranscriptionResult, Error>
+    }
+    
     private func processRecognitionResult(
         _ result: SFSpeechRecognitionResult,
-        audioFile: AudioFile,
-        startTime: Date,
-        progressReporter: EnhancedProgressReporter,
-        progressCallback: ProgressCallback?,
+        context: RecognitionContext,
         segments: inout [TranscriptionSegment],
         finalText: inout String,
-        confidence: inout Double,
-        continuation: CheckedContinuation<TranscriptionResult, Error>
+        confidence: inout Double
     ) {
         finalText = result.bestTranscription.formattedString
         
@@ -138,12 +146,12 @@ class SpeechTranscriber {
         
         // Enhanced progress reporting with segment-level details
         let currentSegmentCount = result.bestTranscription.segments.count
-        let estimatedTotalSegments = estimateSegmentCount(for: audioFile.format.duration)
+        let estimatedTotalSegments = estimateSegmentCount(for: context.audioFile.format.duration)
         let audioProcessed = calculateAudioProcessed(from: result.bestTranscription.segments)
         
         // Update progress with enhanced metrics
         let lastSegmentText = result.bestTranscription.segments.last?.substring
-        progressReporter.updateProgress(
+        context.progressReporter.updateProgress(
             segmentIndex: currentSegmentCount,
             totalSegments: estimatedTotalSegments,
             segmentText: lastSegmentText,
@@ -151,8 +159,8 @@ class SpeechTranscriber {
             audioTimeProcessed: audioProcessed
         )
         
-        if let callback = progressCallback {
-            callback(progressReporter.generateDetailedProgressReport())
+        if let callback = context.progressCallback {
+            callback(context.progressReporter.generateDetailedProgressReport())
         }
         
         // Log detailed progress for verbose mode
@@ -162,22 +170,22 @@ class SpeechTranscriber {
         }
         
         if result.isFinal {
-            let processingTime = Date().timeIntervalSince(startTime)
-            let realTimeRatio = audioFile.format.duration > 0 ? processingTime / audioFile.format.duration : 0
+            let processingTime = Date().timeIntervalSince(context.startTime)
+            let realTimeRatio = context.audioFile.format.duration > 0 ? processingTime / context.audioFile.format.duration : 0
             
             let transcriptionResult = TranscriptionResult(
                 text: finalText,
                 language: self.speechRecognizer.locale.identifier,
                 confidence: confidence,
-                duration: audioFile.format.duration,
+                duration: context.audioFile.format.duration,
                 segments: segments,
                 engine: .speechAnalyzer,
                 processingTime: processingTime,
-                audioFormat: audioFile.format
+                audioFormat: context.audioFile.format
             )
             
             Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)", component: "SpeechTranscriber")
-            continuation.resume(returning: transcriptionResult)
+            context.continuation.resume(returning: transcriptionResult)
         }
     }
     
@@ -271,7 +279,7 @@ class SpeechTranscriber {
         // Check for paragraph boundaries (long pause + sentence ending)
         if let pause = pauseDuration, pause > TimingThresholds.paragraphBoundaryThreshold,
            let prevText = previousText,
-           (prevText.hasSuffix(".") || prevText.hasSuffix("!") || prevText.hasSuffix("?")) {
+           prevText.hasSuffix(".") || prevText.hasSuffix("!") || prevText.hasSuffix("?") {
             return .paragraphBoundary
         }
         
