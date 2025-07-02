@@ -11,19 +11,13 @@ public final class OptimizedTranscriptionEngine {
     public typealias CompletionCallback = (Result<TranscriptionResult, Error>) -> Void
     
     private struct TranscriptionTask {
-        let audioSegment: AudioSegment
+        let audioSegment: AudioSegmenter.AudioSegmentFile
         let recognizer: SFSpeechRecognizer
         let startTime: Date
         let taskID: String
     }
     
-    private struct AudioSegment {
-        let url: URL
-        let startTime: TimeInterval
-        let duration: TimeInterval
-        let segmentIndex: Int
-        let totalSegments: Int
-    }
+    // AudioSegment replaced by AudioSegmenter.AudioSegmentFile
     
     // MARK: - Properties
     
@@ -37,7 +31,10 @@ public final class OptimizedTranscriptionEngine {
     
     private var recognitionTasks: [String: SFSpeechRecognitionTask] = [:]
     private var completedSegments: [TranscriptionSegment] = []
+    private var totalSegmentsExpected = 0
+    private var transcriptionStartTime: Date?
     private var isProcessing = false
+    private var audioSegmenter: AudioSegmenter?
     
     private let segmentLock = NSLock()
     private let taskLock = NSLock()
@@ -95,6 +92,8 @@ public final class OptimizedTranscriptionEngine {
         
         isProcessing = true
         let startTime = Date()
+        transcriptionStartTime = startTime
+        audioSegmenter = AudioSegmenter()
         
         // Initialize enhanced progress reporting
         setupProgressReporting(for: audioFile, progressCallback: progressCallback)
@@ -207,54 +206,51 @@ public final class OptimizedTranscriptionEngine {
     ) {
         Logger.shared.info("Using segmented transcription with \(segmentDuration)s segments", component: "OptimizedTranscriptionEngine")
         
-        // Create audio segments
-        let segments = createAudioSegments(from: audioFile, segmentDuration: segmentDuration)
-        
-        guard !segments.isEmpty else {
-            completion(.failure(VoxError.invalidAudioFile))
-            return
+        Task { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // Create actual audio segment files
+                guard let segmenter = self.audioSegmenter else {
+                    throw VoxError.invalidAudioFile
+                }
+                
+                let segments = try await segmenter.createSegments(
+                    from: audioFile,
+                    segmentDuration: segmentDuration
+                )
+                
+                guard !segments.isEmpty else {
+                    completion(.failure(VoxError.invalidAudioFile))
+                    return
+                }
+                
+                // Update total segments expected for progress reporting
+                self.totalSegmentsExpected = segments.count
+                
+                // Process segments concurrently with platform-optimized concurrency
+                let audioConfig = self.platformOptimizer.getAudioProcessingConfig()
+                let maxConcurrentTasks = audioConfig.concurrentOperations
+                
+                self.transcribeSegmentsConcurrently(
+                    segments,
+                    maxConcurrentTasks: maxConcurrentTasks,
+                    language: language,
+                    originalAudioFile: audioFile,
+                    startTime: startTime,
+                    completion: completion
+                )
+                
+            } catch {
+                completion(.failure(VoxError.transcriptionFailed("Audio segmentation failed: \(error.localizedDescription)")))
+            }
         }
-        
-        // Process segments concurrently with platform-optimized concurrency
-        let audioConfig = platformOptimizer.getAudioProcessingConfig()
-        let maxConcurrentTasks = audioConfig.concurrentOperations
-        
-        transcribeSegmentsConcurrently(
-            segments,
-            maxConcurrentTasks: maxConcurrentTasks,
-            language: language,
-            originalAudioFile: audioFile,
-            startTime: startTime,
-            completion: completion
-        )
     }
     
-    private func createAudioSegments(from audioFile: AudioFile, segmentDuration: TimeInterval) -> [AudioSegment] {
-        let totalDuration = audioFile.format.duration
-        let segmentCount = Int(ceil(totalDuration / segmentDuration))
-        var segments: [AudioSegment] = []
-        
-        for i in 0..<segmentCount {
-            let startTime = TimeInterval(i) * segmentDuration
-            let duration = min(segmentDuration, totalDuration - startTime)
-            
-            // Create segment file reference (would need actual audio segmentation in production)
-            let segment = AudioSegment(
-                url: audioFile.url, // Simplified - in production would need actual segments
-                startTime: startTime,
-                duration: duration,
-                segmentIndex: i,
-                totalSegments: segmentCount
-            )
-            
-            segments.append(segment)
-        }
-        
-        return segments
-    }
+    // Audio segmentation now handled by AudioSegmenter
     
     private func transcribeSegmentsConcurrently(
-        _ segments: [AudioSegment],
+        _ segments: [AudioSegmenter.AudioSegmentFile],
         maxConcurrentTasks: Int,
         language: String?,
         originalAudioFile: AudioFile,
@@ -281,11 +277,15 @@ public final class OptimizedTranscriptionEngine {
                 
                 guard !hasError else { return }
                 
-                self.transcribeSegment(segment, language: language) { result in
+                self.transcribeSegment(segment, language: language) { [weak self] result in
                     resultsLock.lock()
                     switch result {
                     case .success(let segmentResult):
                         segmentResults[segment.segmentIndex] = segmentResult
+                        // Update completed segments for progress reporting
+                        self?.segmentLock.lock()
+                        self?.completedSegments.append(segmentResult)
+                        self?.segmentLock.unlock()
                     case .failure:
                         hasError = true
                     }
@@ -294,26 +294,33 @@ public final class OptimizedTranscriptionEngine {
             }
         }
         
-        group.notify(queue: .global(qos: .userInitiated)) {
+        group.notify(queue: .global(qos: .userInitiated)) { [weak self] in
+            // Cleanup segment files after processing
+            self?.audioSegmenter?.cleanupSegments(segments)
+            
             if hasError {
                 completion(.failure(VoxError.transcriptionFailed("Segment processing failed")))
                 return
             }
             
             // Combine segment results
-            let combinedResult = self.combineSegmentResults(
+            let combinedResult = self?.combineSegmentResults(
                 segmentResults,
                 totalSegments: segments.count,
                 originalAudioFile: originalAudioFile,
                 startTime: startTime
             )
             
-            completion(.success(combinedResult))
+            if let result = combinedResult {
+                completion(.success(result))
+            } else {
+                completion(.failure(VoxError.transcriptionFailed("Failed to combine segment results")))
+            }
         }
     }
     
     private func transcribeSegment(
-        _ segment: AudioSegment,
+        _ segment: AudioSegmenter.AudioSegmentFile,
         language: String?,
         completion: @escaping (Result<TranscriptionSegment, Error>) -> Void
     ) {
@@ -327,7 +334,7 @@ public final class OptimizedTranscriptionEngine {
         request.requiresOnDeviceRecognition = speechConfig.useOnDeviceRecognition
         request.shouldReportPartialResults = false // Only final results for segments
         
-        let recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
+        let recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             if let error = error {
                 completion(.failure(error))
                 return
@@ -338,7 +345,7 @@ public final class OptimizedTranscriptionEngine {
                     text: result.bestTranscription.formattedString,
                     startTime: segment.startTime,
                     endTime: segment.startTime + segment.duration,
-                    confidence: self.calculateConfidence(from: result),
+                    confidence: self?.calculateConfidence(from: result) ?? 0.0,
                     speakerID: nil
                 )
                 completion(.success(segmentResult))
@@ -403,10 +410,10 @@ public final class OptimizedTranscriptionEngine {
                 progress: progress,
                 status: "Transcribing with \(self.platformOptimizer.architecture.displayName) optimizations...",
                 phase: .extracting,
-                startTime: Date(),
+                startTime: self.transcriptionStartTime ?? Date(),
                 processingSpeed: nil,
-                currentSegment: nil,
-                totalSegments: nil,
+                currentSegment: self.completedSegments.count,
+                totalSegments: self.totalSegmentsExpected > 0 ? self.totalSegmentsExpected : nil,
                 confidence: nil,
                 memoryUsage: memoryUsage,
                 thermalState: thermalState,
@@ -438,8 +445,22 @@ public final class OptimizedTranscriptionEngine {
         segmentLock.lock()
         defer { segmentLock.unlock() }
         
-        // Simplified progress calculation
-        return Double(completedSegments.count) / max(1.0, Double(completedSegments.count + recognitionTasks.count))
+        // Calculate progress based on completed segments vs total expected
+        if totalSegmentsExpected > 0 {
+            return Double(completedSegments.count) / Double(totalSegmentsExpected)
+        }
+        
+        // Fallback for single file transcription
+        taskLock.lock()
+        let activeTaskCount = recognitionTasks.count
+        taskLock.unlock()
+        
+        if activeTaskCount > 0 {
+            // For single file, return partial progress while processing
+            return 0.5 // Midway point while processing
+        }
+        
+        return completedSegments.isEmpty ? 0.0 : 1.0
     }
     
     private func combineSegmentResults(
@@ -523,9 +544,15 @@ public final class OptimizedTranscriptionEngine {
         progressTimer = nil
         progressReporter = nil
         memoryMonitor = nil
+        transcriptionStartTime = nil
+        
+        // Cleanup audio segments
+        audioSegmenter?.cleanupAllSegments()
+        audioSegmenter = nil
         
         segmentLock.lock()
         completedSegments.removeAll()
+        totalSegmentsExpected = 0
         segmentLock.unlock()
     }
 }
