@@ -151,10 +151,10 @@ struct Vox: ParsableCommand {
         Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "CLI")
         
         let semaphore = DispatchSemaphore(value: 0)
-        var transcriptionError: Error?
-        var transcriptionResult: TranscriptionResult?
+        var taskResult: Result<TranscriptionResult, Error>?
         
         Task {
+            let result: Result<TranscriptionResult, Error>
             do {
                 if forceCloud {
                     // swiftlint:disable:next todo
@@ -164,34 +164,40 @@ struct Vox: ParsableCommand {
                 } else {
                     // Use native transcription with language detection
                     let speechTranscriber = try SpeechTranscriber()
-                    transcriptionResult = try await speechTranscriber.transcribeWithLanguageDetection(
+                    let transcriptionResult = try await speechTranscriber.transcribeWithLanguageDetection(
                         audioFile: audioFile,
                         preferredLanguages: preferredLanguages,
                         progressCallback: { progressReport in
                             self.displayProgress(progressReport)
                         })
+                    result = .success(transcriptionResult)
                 }
             } catch {
-                transcriptionError = error
+                result = .failure(error)
             }
+            taskResult = result
             semaphore.signal()
         }
         
         semaphore.wait()
         
-        if let error = transcriptionError {
+        guard let taskResult = taskResult else {
+            throw VoxError.transcriptionFailed("Transcription task did not complete")
+        }
+        
+        let transcriptionResult: TranscriptionResult
+        switch taskResult {
+        case .success(let result):
+            transcriptionResult = result
+        case .failure(let error):
             throw error
         }
         
-        guard let result = transcriptionResult else {
-            throw VoxError.transcriptionFailed("Transcription returned no result")
-        }
-        
-        displayTranscriptionResult(result)
+        displayTranscriptionResult(transcriptionResult)
         
         // Save output if requested
         if let outputPath = output {
-            try saveTranscriptionResult(result, to: outputPath)
+            try saveTranscriptionResult(transcriptionResult, to: outputPath)
         }
     }
     
