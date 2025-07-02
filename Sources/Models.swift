@@ -18,6 +18,67 @@ struct TranscriptionSegment: Codable {
     let endTime: TimeInterval
     let confidence: Double
     let speakerID: String?
+    let words: [WordTiming]?
+    let segmentType: SegmentType
+    let pauseDuration: TimeInterval?
+    
+    init(text: String, 
+         startTime: TimeInterval, 
+         endTime: TimeInterval, 
+         confidence: Double, 
+         speakerID: String? = nil,
+         words: [WordTiming]? = nil,
+         segmentType: SegmentType = .speech,
+         pauseDuration: TimeInterval? = nil) {
+        self.text = text
+        self.startTime = startTime
+        self.endTime = endTime
+        self.confidence = confidence
+        self.speakerID = speakerID
+        self.words = words
+        self.segmentType = segmentType
+        self.pauseDuration = pauseDuration
+    }
+    
+    var duration: TimeInterval {
+        return endTime - startTime
+    }
+    
+    var isSentenceBoundary: Bool {
+        return segmentType == .sentenceBoundary || text.hasSuffix(".") || text.hasSuffix("!") || text.hasSuffix("?")
+    }
+    
+    var isParagraphBoundary: Bool {
+        return segmentType == .paragraphBoundary
+    }
+    
+    var hasSpeakerChange: Bool {
+        return segmentType == .speakerChange
+    }
+    
+    var hasSilenceGap: Bool {
+        return segmentType == .silence || (pauseDuration ?? 0) > 1.0
+    }
+}
+
+struct WordTiming: Codable {
+    let word: String
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+    let confidence: Double
+    
+    var duration: TimeInterval {
+        return endTime - startTime
+    }
+}
+
+enum SegmentType: String, CaseIterable, Codable {
+    case speech = "speech"
+    case silence = "silence"
+    case sentenceBoundary = "sentence_boundary"
+    case paragraphBoundary = "paragraph_boundary"
+    case speakerChange = "speaker_change"
+    case backgroundNoise = "background_noise"
 }
 
 enum TranscriptionEngine: String, CaseIterable, Codable {
