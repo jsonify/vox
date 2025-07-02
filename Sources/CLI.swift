@@ -1,6 +1,40 @@
 import ArgumentParser
 import Foundation
 
+// Thread-safe result container for async operations
+final class ResultBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: T?
+    private var error: Error?
+    
+    func setValue(_ value: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.result = value
+    }
+    
+    func setError(_ error: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.error = error
+    }
+    
+    func getResult() throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        if let error = error {
+            throw error
+        }
+        
+        guard let result = result else {
+            throw VoxError.processingFailed("Async operation did not complete")
+        }
+        
+        return result
+    }
+}
+
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
@@ -150,49 +184,53 @@ struct Vox: ParsableCommand {
         
         Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "CLI")
         
+        let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
+        
+        displayTranscriptionResult(transcriptionResult)
+        
+        // Save output if requested
+        if let outputPath = output {
+            try saveTranscriptionResult(transcriptionResult, to: outputPath)
+        }
+    }
+    
+    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
+        let forceCloudCapture = forceCloud
+        return try runAsyncAndWait { @Sendable in
+            if forceCloudCapture {
+                // swiftlint:disable:next todo
+                // FIXME: Implement cloud transcription
+                Logger.shared.warn("Cloud transcription not yet implemented", component: "CLI")
+                throw VoxError.transcriptionFailed("Cloud transcription not yet implemented")
+            } else {
+                // Use native transcription with language detection
+                let speechTranscriber = try SpeechTranscriber()
+                return try await speechTranscriber.transcribeWithLanguageDetection(
+                    audioFile: audioFile,
+                    preferredLanguages: preferredLanguages,
+                    progressCallback: nil // Remove self reference for Sendable
+                )
+            }
+        }
+    }
+    
+    private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
         let semaphore = DispatchSemaphore(value: 0)
-        var transcriptionError: Error?
-        var transcriptionResult: TranscriptionResult?
+        let resultBox = ResultBox<T>()
         
         Task {
             do {
-                if forceCloud {
-                    // swiftlint:disable:next todo
-                    // FIXME: Implement cloud transcription
-                    Logger.shared.warn("Cloud transcription not yet implemented", component: "CLI")
-                    throw VoxError.transcriptionFailed("Cloud transcription not yet implemented")
-                } else {
-                    // Use native transcription with language detection
-                    let speechTranscriber = try SpeechTranscriber()
-                    transcriptionResult = try await speechTranscriber.transcribeWithLanguageDetection(
-                        audioFile: audioFile,
-                        preferredLanguages: preferredLanguages,
-                        progressCallback: { progressReport in
-                            self.displayProgress(progressReport)
-                        })
-                }
+                let value = try await operation()
+                resultBox.setValue(value)
             } catch {
-                transcriptionError = error
+                resultBox.setError(error)
             }
             semaphore.signal()
         }
         
         semaphore.wait()
         
-        if let error = transcriptionError {
-            throw error
-        }
-        
-        guard let result = transcriptionResult else {
-            throw VoxError.transcriptionFailed("Transcription returned no result")
-        }
-        
-        displayTranscriptionResult(result)
-        
-        // Save output if requested
-        if let outputPath = output {
-            try saveTranscriptionResult(result, to: outputPath)
-        }
+        return try resultBox.getResult()
     }
     
     private func buildLanguagePreferences() -> [String] {
