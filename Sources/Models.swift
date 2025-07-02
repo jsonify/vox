@@ -1,7 +1,7 @@
 import Foundation
 import ArgumentParser
 
-struct TranscriptionResult {
+struct TranscriptionResult: Codable {
     let text: String
     let language: String
     let confidence: Double
@@ -12,7 +12,7 @@ struct TranscriptionResult {
     let audioFormat: AudioFormat
 }
 
-struct TranscriptionSegment {
+struct TranscriptionSegment: Codable {
     let text: String
     let startTime: TimeInterval
     let endTime: TimeInterval
@@ -20,13 +20,13 @@ struct TranscriptionSegment {
     let speakerID: String?
 }
 
-enum TranscriptionEngine: String, CaseIterable {
+enum TranscriptionEngine: String, CaseIterable, Codable {
     case speechAnalyzer = "apple-speechanalyzer"
     case openaiWhisper = "openai-whisper"
     case revai = "rev-ai"
 }
 
-struct AudioFormat {
+struct AudioFormat: Codable {
     let codec: String
     let sampleRate: Int
     let channels: Int
@@ -66,16 +66,16 @@ struct AudioFormat {
     
     var description: String {
         let sizeStr = fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "unknown"
-        let bitRateStr = bitRate.map { "\($0/1000) kbps" } ?? "unknown"
+        let bitRateStr = bitRate.map { "\($0 / 1000) kbps" } ?? "unknown"
         return "\(codec.uppercased()) - \(sampleRate)Hz, \(channels)ch, \(bitRateStr), \(String(format: "%.1f", duration))s, \(sizeStr)"
     }
 }
 
-enum AudioQuality: String, CaseIterable {
-    case low = "low"
-    case medium = "medium" 
-    case high = "high"
-    case lossless = "lossless"
+enum AudioQuality: String, CaseIterable, Codable {
+    case low
+    case medium
+    case high
+    case lossless
     
     static func determine(from sampleRate: Int, bitRate: Int?, channels: Int) -> AudioQuality {
         guard let bitRate = bitRate else { return .medium }
@@ -94,7 +94,6 @@ enum AudioQuality: String, CaseIterable {
     }
 }
 
-
 struct AudioFile {
     let path: String
     let format: AudioFormat
@@ -112,6 +111,7 @@ enum VoxError: Error, LocalizedError {
     case incompatibleAudioProperties(String)
     case temporaryFileCreationFailed(String)
     case temporaryFileCleanupFailed(String)
+    case processingFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -135,6 +135,8 @@ enum VoxError: Error, LocalizedError {
             return "Failed to create temporary file: \(reason)"
         case .temporaryFileCleanupFailed(let reason):
             return "Failed to cleanup temporary file: \(reason)"
+        case .processingFailed(let reason):
+            return "Processing failed: \(reason)"
         }
     }
     
@@ -156,6 +158,8 @@ enum VoxError: Error, LocalizedError {
             return "API"
         case .temporaryFileCreationFailed, .temporaryFileCleanupFailed:
             return "TempFileManager"
+        case .processingFailed:
+            return "Processor"
         }
     }
 }

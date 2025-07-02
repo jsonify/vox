@@ -264,6 +264,120 @@ final class SpeechTranscriberTests: XCTestCase {
         }
     }
     
+    // MARK: - Language Validation Tests
+    
+    func testLanguageCodeValidation() {
+        // Test exact match
+        XCTAssertEqual(SpeechTranscriber.validateLanguageCode("en-US"), "en-US")
+        
+        // Test case insensitive match
+        XCTAssertEqual(SpeechTranscriber.validateLanguageCode("en-us"), "en-US")
+        
+        // Test invalid language code
+        XCTAssertNil(SpeechTranscriber.validateLanguageCode("invalid-code"))
+        
+        // Test language-only matching (e.g., "en" -> "en-US")
+        let validatedLanguage = SpeechTranscriber.validateLanguageCode("en")
+        XCTAssertNotNil(validatedLanguage)
+        XCTAssertTrue(validatedLanguage?.hasPrefix("en-") ?? false)
+    }
+    
+    func testCommonLanguages() {
+        let commonLanguages = SpeechTranscriber.commonLanguages()
+        
+        XCTAssertFalse(commonLanguages.isEmpty, "Should have common languages")
+        XCTAssertNotNil(commonLanguages["en-US"], "Should include English US")
+        XCTAssertNotNil(commonLanguages["es-ES"], "Should include Spanish")
+        XCTAssertNotNil(commonLanguages["fr-FR"], "Should include French")
+        
+        // Check that descriptions are meaningful
+        XCTAssertTrue(commonLanguages["en-US"]?.contains("English") ?? false)
+        XCTAssertTrue(commonLanguages["es-ES"]?.contains("Spanish") ?? false)
+    }
+    
+    func testLanguageDetectionWithValidation() async throws {
+        let locale = Locale(identifier: "en-US")
+        
+        guard SpeechTranscriber.isAvailable(for: locale) else {
+            throw XCTSkip("Speech recognition not available for testing")
+        }
+        
+        let speechTranscriber = try SpeechTranscriber(locale: locale)
+        
+        // Create a mock audio file for testing validation logic
+        let mockAudioFormat = AudioFormat(
+            codec: "m4a",
+            sampleRate: 44100,
+            channels: 1,
+            bitRate: 128000,
+            duration: 5.0
+        )
+        
+        let mockAudioFile = AudioFile(
+            path: "/fake/audio.m4a",
+            format: mockAudioFormat,
+            temporaryPath: nil
+        )
+        
+        // Test with mixed valid/invalid language codes
+        let mixedLanguages = ["invalid-lang", "en-US", "another-invalid", "es"]
+        
+        do {
+            _ = try await speechTranscriber.transcribeWithLanguageDetection(
+                audioFile: mockAudioFile,
+                preferredLanguages: mixedLanguages
+            )
+            XCTFail("Should have failed with invalid file")
+        } catch VoxError.invalidInputFile {
+            // Expected - this validates the flow reaches the transcription attempt
+            // The language validation logic should have filtered out invalid codes
+            XCTAssertTrue(true)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+    
+    func testLanguageDetectionWithAllInvalidLanguages() async throws {
+        let locale = Locale(identifier: "en-US")
+        
+        guard SpeechTranscriber.isAvailable(for: locale) else {
+            throw XCTSkip("Speech recognition not available for testing")
+        }
+        
+        let speechTranscriber = try SpeechTranscriber(locale: locale)
+        
+        // Create a mock audio file
+        let mockAudioFormat = AudioFormat(
+            codec: "m4a",
+            sampleRate: 44100,
+            channels: 1,
+            bitRate: 128000,
+            duration: 5.0
+        )
+        
+        let mockAudioFile = AudioFile(
+            path: "/fake/audio.m4a",
+            format: mockAudioFormat,
+            temporaryPath: nil
+        )
+        
+        // Test with all invalid language codes
+        let invalidLanguages = ["invalid-lang", "another-invalid", "fake-code"]
+        
+        do {
+            _ = try await speechTranscriber.transcribeWithLanguageDetection(
+                audioFile: mockAudioFile,
+                preferredLanguages: invalidLanguages
+            )
+            XCTFail("Should have failed with invalid file")
+        } catch VoxError.invalidInputFile {
+            // Expected - should fall back to en-US after validation
+            XCTAssertTrue(true)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+    
     // MARK: - Memory and Performance Tests
     
     func testSpeechTranscriberMemoryCleanup() throws {
