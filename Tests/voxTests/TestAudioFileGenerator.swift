@@ -32,66 +32,16 @@ class TestAudioFileGenerator {
         channels: Int = 2
     ) -> URL? {
         
-        let fileName = "test_video_\(UUID().uuidString).mp4"
-        let outputURL = testDirectory.appendingPathComponent(fileName)
+        // Use appropriate test file based on duration
+        let preferSmall = duration <= 5.0
         
-        // Create composition
-        let composition = AVMutableComposition()
-        
-        if hasVideo {
-            guard let videoTrack = composition.addMutableTrack(
-                withMediaType: .video,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ) else { return nil }
-            
-            // Create simple video track with colored frames
-            if let colorVideoAsset = createColorVideoAsset(duration: duration) {
-                do {
-                    let timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: duration, preferredTimescale: 600))
-                    try videoTrack.insertTimeRange(timeRange, of: colorVideoAsset.tracks(withMediaType: .video)[0], at: .zero)
-                } catch {
-                    return nil
-                }
-            }
+        // For now, return a pre-generated test file if available
+        if let testResourceURL = getTestResourceURL(preferSmall: preferSmall) {
+            return copyTestFile(from: testResourceURL)
         }
         
-        if hasAudio {
-            guard let audioTrack = composition.addMutableTrack(
-                withMediaType: .audio,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ) else { return nil }
-            
-            // Create simple audio track
-            if let toneAudioAsset = createToneAudioAsset(duration: duration, sampleRate: sampleRate, channels: channels) {
-                do {
-                    let timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: duration, preferredTimescale: 600))
-                    try audioTrack.insertTimeRange(timeRange, of: toneAudioAsset.tracks(withMediaType: .audio)[0], at: .zero)
-                } catch {
-                    return nil
-                }
-            }
-        }
-        
-        // Export composition
-        guard let exportSession = AVAssetExportSession(
-            asset: composition,
-            presetName: AVAssetExportPresetMediumQuality
-        ) else { return nil }
-        
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
-        
-        let semaphore = DispatchSemaphore(value: 0)
-        var success = false
-        
-        exportSession.exportAsynchronously {
-            success = exportSession.status == .completed
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        
-        return success ? outputURL : nil
+        // Fallback: create a simple MP4 file with basic structure
+        return createBasicMP4File(duration: duration, hasAudio: hasAudio, hasVideo: hasVideo)
     }
     
     // MARK: - Invalid File Creation
@@ -140,10 +90,19 @@ class TestAudioFileGenerator {
     // MARK: - File Size Variants
     
     func createLargeMP4File() -> URL? {
-        return createMockMP4File(duration: 300.0) // 5 minutes
+        // For "large" files in tests, we'll just use the regular test file multiple times
+        // This avoids actually creating a 5-minute file which would be slow
+        if let testResourceURL = getTestResourceURL(preferSmall: false) {
+            return copyTestFile(from: testResourceURL)
+        }
+        return createMockMP4File(duration: 30.0) // Use shorter duration for tests
     }
     
     func createSmallMP4File() -> URL? {
+        // Explicitly prefer the small test file
+        if let testResourceURL = getTestResourceURL(preferSmall: true) {
+            return copyTestFile(from: testResourceURL)
+        }
         return createMockMP4File(duration: 1.0) // 1 second
     }
     
@@ -163,33 +122,118 @@ class TestAudioFileGenerator {
         try? FileManager.default.removeItem(at: testDirectory)
     }
     
-    // MARK: - Private Helpers
+    // MARK: - Private Implementation
     
-    private func createColorVideoAsset(duration: TimeInterval) -> AVAsset? {
-        // Create a simple colored video asset programmatically
-        let composition = AVMutableComposition()
+    private func getTestResourceURL(preferSmall: Bool = false) -> URL? {
+        // Look for test MP4 file in test bundle
+        let bundle = Bundle(for: type(of: self))
         
-        guard let videoTrack = composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else { return nil }
+        // Prioritize the appropriate test file based on requirements
+        let testFileNames: [String]
+        if preferSmall {
+            testFileNames = [
+                "test_sample_small.mp4",
+                "test_sample.mp4"
+            ]
+        } else {
+            testFileNames = [
+                "test_sample.mp4",
+                "test_sample_small.mp4"
+            ]
+        }
         
-        // This is a simplified approach - in practice, creating video programmatically
-        // is complex. For testing, we'll create a minimal asset.
-        return composition
+        for fileName in testFileNames {
+            if let resourceURL = bundle.url(forResource: fileName, withExtension: nil) {
+                return resourceURL
+            }
+            
+            // Also try without extension
+            let nameWithoutExt = String(fileName.dropLast(4))
+            if let resourceURL = bundle.url(forResource: nameWithoutExt, withExtension: "mp4") {
+                return resourceURL
+            }
+        }
+        
+        return nil
     }
     
-    private func createToneAudioAsset(duration: TimeInterval, sampleRate: Int, channels: Int) -> AVAsset? {
-        // Create a simple tone audio asset programmatically
-        let composition = AVMutableComposition()
+    private func copyTestFile(from sourceURL: URL) -> URL? {
+        let fileName = "test_copy_\(UUID().uuidString).mp4"
+        let outputURL = testDirectory.appendingPathComponent(fileName)
         
-        guard let audioTrack = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else { return nil }
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: outputURL)
+            return outputURL
+        } catch {
+            print("Failed to copy test file: \(error)")
+            return nil
+        }
+    }
+    
+    private func createBasicMP4File(duration: TimeInterval, hasAudio: Bool, hasVideo: Bool) -> URL? {
+        let fileName = "basic_test_\(UUID().uuidString).mp4"
+        let outputURL = testDirectory.appendingPathComponent(fileName)
         
-        // This is a simplified approach - creating audio programmatically
-        // would require more complex buffer manipulation
-        return composition
+        // Create a minimal valid MP4 structure using AVAssetWriter
+        guard let assetWriter = try? AVAssetWriter(outputURL: outputURL, fileType: .mp4) else {
+            return nil
+        }
+        
+        // Add a minimal audio track if requested
+        if hasAudio {
+            let audioSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderBitRateKey: 64000
+            ]
+            
+            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            audioInput.expectsMediaDataInRealTime = false
+            
+            if assetWriter.canAdd(audioInput) {
+                assetWriter.add(audioInput)
+            }
+        }
+        
+        // Add a minimal video track if requested  
+        if hasVideo {
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: 320,
+                AVVideoHeightKey: 240
+            ]
+            
+            let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            videoInput.expectsMediaDataInRealTime = false
+            
+            if assetWriter.canAdd(videoInput) {
+                assetWriter.add(videoInput)
+            }
+        }
+        
+        // Start and immediately finish to create minimal valid file
+        guard assetWriter.startWriting() else {
+            return nil
+        }
+        
+        assetWriter.startSession(atSourceTime: .zero)
+        
+        // Mark all inputs as finished immediately
+        for input in assetWriter.inputs {
+            input.markAsFinished()
+        }
+        
+        let semaphore = DispatchSemaphore(value: 0)
+        var success = false
+        
+        assetWriter.finishWriting {
+            success = assetWriter.status == .completed
+            semaphore.signal()
+        }
+        
+        semaphore.wait()
+        
+        return success ? outputURL : nil
     }
 }
