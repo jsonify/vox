@@ -71,7 +71,7 @@ class TempFileManager {
             
             if failedCount > 0 {
                 logger.warn("Failed to cleanup \(failedCount) temporary files", component: "TempFileManager")
-            } else if filesToCleanup.count > 0 {
+            } else if !filesToCleanup.isEmpty {
                 logger.info("Successfully cleaned up \(filesToCleanup.count) temporary files", component: "TempFileManager")
             }
         }

@@ -113,7 +113,7 @@ final class TranscriptionTests: XCTestCase {
         )
         
         XCTAssertEqual(result.text, "")
-        XCTAssertEqual(result.segments.count, 0)
+        XCTAssertTrue(result.segments.isEmpty)
         XCTAssertEqual(result.confidence, 0.0)
     }
     
