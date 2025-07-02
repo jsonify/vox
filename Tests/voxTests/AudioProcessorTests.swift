@@ -1,22 +1,27 @@
 import XCTest
 import Foundation
+import AVFoundation
 @testable import vox
 
 final class AudioProcessorTests: XCTestCase {
     
     var audioProcessor: AudioProcessor!
     var tempDirectory: URL!
+    var testFileGenerator: TestAudioFileGenerator!
     
     override func setUp() {
         super.setUp()
         audioProcessor = AudioProcessor()
         tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("vox_tests_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        testFileGenerator = TestAudioFileGenerator.shared
     }
     
     override func tearDown() {
         audioProcessor = nil
         try? FileManager.default.removeItem(at: tempDirectory)
+        testFileGenerator?.cleanup()
+        testFileGenerator = nil
         super.tearDown()
     }
     
@@ -325,6 +330,193 @@ final class AudioProcessorTests: XCTestCase {
         
         // Cleanup all created files
         _ = TempFileManager.shared.cleanupFiles(at: tempURLs)
+    }
+    
+    // MARK: - AVFoundation Processing Tests
+    
+    func testSuccessfulAudioExtractionFromValidMP4() {
+        guard let testVideoURL = testFileGenerator.createMockMP4File(duration: 5.0) else {
+            XCTFail("Failed to create test MP4 file")
+            return
+        }
+        
+        let expectation = XCTestExpectation(description: "Audio extraction completion")
+        var progressReports: [ProgressReport] = []
+        
+        audioProcessor.extractAudio(
+            from: testVideoURL.path,
+            progressCallback: { progress in
+                progressReports.append(progress)
+                XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0)
+                XCTAssertLessThanOrEqual(progress.currentProgress, 1.0)
+            }
+        ) { result in
+            switch result {
+            case .success(let audioFile):
+                XCTAssertEqual(audioFile.path, testVideoURL.path)
+                XCTAssertNotNil(audioFile.temporaryPath)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: audioFile.temporaryPath!))
+                XCTAssertEqual(audioFile.format.codec, "m4a")
+                XCTAssertGreaterThan(audioFile.format.duration, 0)
+                
+                // Verify progress was reported
+                XCTAssertFalse(progressReports.isEmpty)
+                XCTAssertEqual(progressReports.last?.currentProgress, 1.0)
+                
+            case .failure(let error):
+                XCTFail("Audio extraction should succeed: \(error)")
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 30.0)
+    }
+    
+    func testAudioExtractionWithDifferentFormats() {
+        let testCases = [
+            ("high_quality", { self.testFileGenerator.createHighQualityMP4File() }),
+            ("low_quality", { self.testFileGenerator.createLowQualityMP4File() }),
+            ("small_file", { self.testFileGenerator.createSmallMP4File() })
+        ]
+        
+        for (name, createFile) in testCases {
+            guard let testVideoURL = createFile() else {
+                XCTFail("Failed to create \(name) test file")
+                continue
+            }
+            
+            let expectation = XCTestExpectation(description: "Audio extraction for \(name)")
+            
+            audioProcessor.extractAudio(from: testVideoURL.path) { result in
+                switch result {
+                case .success(let audioFile):
+                    XCTAssertEqual(audioFile.format.codec, "m4a", "Failed for \(name)")
+                    XCTAssertGreaterThan(audioFile.format.duration, 0, "Failed for \(name)")
+                    XCTAssertTrue(audioFile.format.isValid, "Audio format should be valid for \(name)")
+                    
+                case .failure(let error):
+                    XCTFail("Audio extraction should succeed for \(name): \(error)")
+                }
+                expectation.fulfill()
+            }
+            
+            wait(for: [expectation], timeout: 30.0)
+        }
+    }
+    
+    func testProgressReportingAccuracy() {
+        guard let testVideoURL = testFileGenerator.createMockMP4File(duration: 10.0) else {
+            XCTFail("Failed to create test MP4 file")
+            return
+        }
+        
+        let expectation = XCTestExpectation(description: "Progress reporting")
+        var progressReports: [ProgressReport] = []
+        let startTime = Date()
+        
+        audioProcessor.extractAudio(
+            from: testVideoURL.path,
+            progressCallback: { progress in
+                progressReports.append(progress)
+                
+                // Validate progress properties
+                XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0)
+                XCTAssertLessThanOrEqual(progress.currentProgress, 1.0)
+                XCTAssertNotNil(progress.currentStatus)
+                XCTAssertNotNil(progress.currentPhase)
+                XCTAssertEqual(progress.startTime.timeIntervalSince1970,
+                              startTime.timeIntervalSince1970,
+                              accuracy: 1.0)
+            }
+        ) { result in
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 30.0)
+        
+        // Validate progress sequence
+        XCTAssertFalse(progressReports.isEmpty)
+        
+        // Check that progress is generally increasing
+        for i in 1..<progressReports.count {
+            XCTAssertGreaterThanOrEqual(
+                progressReports[i].currentProgress,
+                progressReports[i-1].currentProgress,
+                "Progress should not decrease"
+            )
+        }
+        
+        // Verify all expected phases are present
+        let phases = Set(progressReports.map { $0.currentPhase })
+        XCTAssertTrue(phases.contains(.initializing))
+        XCTAssertTrue(phases.contains(.extracting))
+        XCTAssertTrue(phases.contains(.complete))
+    }
+    
+    func testAudioFormatValidation() {
+        guard let testVideoURL = testFileGenerator.createMockMP4File() else {
+            XCTFail("Failed to create test MP4 file")
+            return
+        }
+        
+        let expectation = XCTestExpectation(description: "Format validation")
+        
+        audioProcessor.extractAudio(from: testVideoURL.path) { result in
+            switch result {
+            case .success(let audioFile):
+                let format = audioFile.format
+                
+                // Validate basic format properties
+                XCTAssertFalse(format.codec.isEmpty)
+                XCTAssertGreaterThan(format.sampleRate, 0)
+                XCTAssertGreaterThan(format.channels, 0)
+                XCTAssertGreaterThan(format.duration, 0)
+                
+                // Validate format compatibility
+                XCTAssertTrue(format.isValid)
+                XCTAssertNil(format.validationError)
+                
+                // Check reasonable values
+                XCTAssertLessThanOrEqual(format.channels, 8) // Reasonable channel count
+                XCTAssertGreaterThan(format.sampleRate, 8000) // Minimum acceptable sample rate
+                XCTAssertLessThan(format.sampleRate, 192000) // Maximum reasonable sample rate
+                
+            case .failure(let error):
+                XCTFail("Audio extraction should succeed: \(error)")
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 30.0)
+    }
+    
+    func testTemporaryFileCleanup() {
+        guard let testVideoURL = testFileGenerator.createMockMP4File() else {
+            XCTFail("Failed to create test MP4 file")
+            return
+        }
+        
+        let expectation = XCTestExpectation(description: "Temporary file cleanup")
+        var tempFilePath: String?
+        
+        audioProcessor.extractAudio(from: testVideoURL.path) { result in
+            switch result {
+            case .success(let audioFile):
+                tempFilePath = audioFile.temporaryPath
+                XCTAssertNotNil(tempFilePath)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: tempFilePath!))
+                
+                // Test cleanup
+                self.audioProcessor.cleanupTemporaryFiles(for: audioFile)
+                XCTAssertFalse(FileManager.default.fileExists(atPath: tempFilePath!))
+                
+            case .failure(let error):
+                XCTFail("Audio extraction should succeed: \(error)")
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 30.0)
     }
 }
 
