@@ -267,7 +267,7 @@ final class OptimizedPerformanceTests: XCTestCase {
     
     // MARK: - Performance Comparison Tests
     
-    func testOptimizedVsStandardPerformance() throws {
+    func testOptimizedVsStandardPerformance() async throws {
         guard let testAudioFile = createTestAudioFile() else {
             throw XCTSkip("Unable to create test audio file")
         }
@@ -277,44 +277,64 @@ final class OptimizedPerformanceTests: XCTestCase {
         // Test standard transcription
         benchmark.startBenchmark("Standard_Comparison")
         
-        let standardTranscriber = SpeechTranscriber()
-        let standardExpectation = XCTestExpectation(description: "Standard transcription")
-        
-        standardTranscriber.transcribeAudio(from: testAudioFile) { _ in
-            // Progress
-        } completion: { result in
-            let standardResult = self.benchmark.endBenchmark("Standard_Comparison", audioDuration: testAudioFile.format.duration)
+        do {
+            let standardTranscriber = try SpeechTranscriber()
             
-            // Test optimized transcription
-            self.benchmark.startBenchmark("Optimized_Comparison")
-            
-            let optimizedEngine = OptimizedTranscriptionEngine()
-            let optimizedExpectation = XCTestExpectation(description: "Optimized transcription")
-            
-            optimizedEngine.transcribeAudio(from: testAudioFile) { _ in
-                // Progress
-            } completion: { result in
-                let optimizedResult = self.benchmark.endBenchmark("Optimized_Comparison", audioDuration: testAudioFile.format.duration)
-                
-                // Compare results
-                Logger.shared.info("Performance Comparison:", component: "OptimizedPerformanceTests")
-                Logger.shared.info("Standard: \(String(format: "%.2f", standardResult.processingTime))s", component: "OptimizedPerformanceTests")
-                Logger.shared.info("Optimized: \(String(format: "%.2f", optimizedResult.processingTime))s", component: "OptimizedPerformanceTests")
-                
-                let improvement = (standardResult.processingTime - optimizedResult.processingTime) / standardResult.processingTime
-                Logger.shared.info("Improvement: \(String(format: "%.1f", improvement * 100))%", component: "OptimizedPerformanceTests")
-                
-                // Optimized should be at least as good as standard
-                XCTAssertLessThanOrEqual(optimizedResult.processingTime, standardResult.processingTime * 1.1, "Optimized should not be significantly slower")
-                
-                optimizedExpectation.fulfill()
+            // Use the correct async method
+            let _ = try await standardTranscriber.transcribe(audioFile: testAudioFile) { progress in
+                // Progress updates from standard transcriber
+                Logger.shared.debug("Standard progress: \(progress.formattedProgress)", component: "OptimizedPerformanceTests")
             }
             
-            self.wait(for: [optimizedExpectation], timeout: 30.0)
-            standardExpectation.fulfill()
+            let standardResult = benchmark.endBenchmark("Standard_Comparison", audioDuration: testAudioFile.format.duration)
+            
+            // Test optimized transcription
+            benchmark.startBenchmark("Optimized_Comparison")
+            
+            let optimizedEngine = OptimizedTranscriptionEngine()
+            
+            // Use completion-based API with async wrapper
+            let optimizedResult = try await withCheckedThrowingContinuation { continuation in
+                optimizedEngine.transcribeAudio(from: testAudioFile) { progress in
+                    // Progress updates from optimized engine
+                    Logger.shared.debug("Optimized progress: \(String(format: "%.1f", progress.currentProgress * 100))%", component: "OptimizedPerformanceTests")
+                } completion: { result in
+                    continuation.resume(with: result)
+                }
+            }
+            
+            let optimizedBenchmarkResult = benchmark.endBenchmark("Optimized_Comparison", audioDuration: testAudioFile.format.duration)
+            
+            // Compare results
+            Logger.shared.info("Performance Comparison:", component: "OptimizedPerformanceTests")
+            Logger.shared.info("Standard: \(String(format: "%.2f", standardResult.processingTime))s", component: "OptimizedPerformanceTests")
+            Logger.shared.info("Optimized: \(String(format: "%.2f", optimizedBenchmarkResult.processingTime))s", component: "OptimizedPerformanceTests")
+            
+            let improvement = (standardResult.processingTime - optimizedBenchmarkResult.processingTime) / standardResult.processingTime
+            Logger.shared.info("Improvement: \(String(format: "%.1f", improvement * 100))%", component: "OptimizedPerformanceTests")
+            
+            // Verify both transcriptions succeeded
+            XCTAssertFalse(optimizedResult.text.isEmpty, "Optimized transcription should produce text")
+            XCTAssertGreaterThan(optimizedResult.confidence, 0.0, "Optimized transcription should have confidence")
+            
+            // Optimized should be at least as good as standard
+            XCTAssertLessThanOrEqual(optimizedBenchmarkResult.processingTime, standardResult.processingTime * 1.1, "Optimized should not be significantly slower")
+            
+            // Log detailed comparison
+            Logger.shared.info("=== Detailed Comparison ===", component: "OptimizedPerformanceTests")
+            Logger.shared.info("Standard Result:", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Processing Time: \(String(format: "%.2f", standardResult.processingTime))s", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Memory Peak: \(String(format: "%.1f", standardResult.memoryUsage.peakMB))MB", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Efficiency Score: \(String(format: "%.1f", standardResult.efficiency.overallScore * 100))%", component: "OptimizedPerformanceTests")
+            
+            Logger.shared.info("Optimized Result:", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Processing Time: \(String(format: "%.2f", optimizedBenchmarkResult.processingTime))s", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Memory Peak: \(String(format: "%.1f", optimizedBenchmarkResult.memoryUsage.peakMB))MB", component: "OptimizedPerformanceTests")
+            Logger.shared.info("  Efficiency Score: \(String(format: "%.1f", optimizedBenchmarkResult.efficiency.overallScore * 100))%", component: "OptimizedPerformanceTests")
+            
+        } catch {
+            XCTFail("Performance comparison failed: \(error)")
         }
-        
-        wait(for: [standardExpectation], timeout: 60.0)
     }
     
     // MARK: - Thermal Management Tests
