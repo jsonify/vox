@@ -134,26 +134,21 @@ final class TranscriptionTests: XCTestCase {
     // MARK: - Enhanced Timing Features Tests
     
     func testTranscriptionSegmentWithWordTimings() {
-        let wordTimings = [
-            WordTiming(word: "Hello", startTime: 0.0, endTime: 0.5, confidence: 0.9),
-            WordTiming(word: "world", startTime: 0.6, endTime: 1.2, confidence: 0.85)
-        ]
+        let wordTiming = WordTiming(word: "Hello", startTime: 0.0, endTime: 0.5, confidence: 0.9)
         
         let segment = TranscriptionSegment(
-            text: "Hello world",
+            text: "Hello",
             startTime: 0.0,
-            endTime: 1.2,
-            confidence: 0.875,
+            endTime: 0.5,
+            confidence: 0.9,
             speakerID: "Speaker1",
-            words: wordTimings,
+            words: wordTiming,
             segmentType: .speech
         )
         
-        XCTAssertEqual(segment.words?.count, 2)
-        XCTAssertEqual(segment.words?[0].word, "Hello")
-        XCTAssertEqual(segment.words?[0].duration ?? 0.0, 0.5, accuracy: 0.001)
-        XCTAssertEqual(segment.words?[1].word, "world")
-        XCTAssertEqual(segment.words?[1].duration ?? 0.0, 0.6, accuracy: 0.001)
+        XCTAssertNotNil(segment.words)
+        XCTAssertEqual(segment.words?.word, "Hello")
+        XCTAssertEqual(segment.words?.duration ?? 0.0, 0.5, accuracy: 0.001)
         XCTAssertEqual(segment.segmentType, .speech)
     }
     
