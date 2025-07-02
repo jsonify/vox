@@ -174,3 +174,110 @@ enum FallbackAPI: String, CaseIterable, ExpressibleByArgument {
     case openai
     case revai
 }
+
+// MARK: - Progress Reporting
+
+protocol ProgressReporting {
+    var currentProgress: Double { get }
+    var estimatedTimeRemaining: TimeInterval? { get }
+    var currentStatus: String { get }
+    var isComplete: Bool { get }
+    var processingSpeed: Double? { get }
+}
+
+struct ProgressReport: ProgressReporting {
+    let currentProgress: Double
+    let estimatedTimeRemaining: TimeInterval?
+    let currentStatus: String
+    let isComplete: Bool
+    let processingSpeed: Double?
+    let startTime: Date
+    let elapsedTime: TimeInterval
+    let currentPhase: ProcessingPhase
+    
+    init(progress: Double, 
+         status: String, 
+         phase: ProcessingPhase,
+         startTime: Date,
+         processingSpeed: Double? = nil) {
+        self.currentProgress = max(0.0, min(1.0, progress))
+        self.currentStatus = status
+        self.currentPhase = phase
+        self.startTime = startTime
+        self.elapsedTime = Date().timeIntervalSince(startTime)
+        self.processingSpeed = processingSpeed
+        self.isComplete = progress >= 1.0
+        
+        if let speed = processingSpeed, speed > 0, progress > 0, progress < 1.0 {
+            let remainingWork = 1.0 - progress
+            self.estimatedTimeRemaining = remainingWork / speed
+        } else {
+            self.estimatedTimeRemaining = nil
+        }
+    }
+    
+    var formattedProgress: String {
+        return String(format: "%.1f%%", currentProgress * 100)
+    }
+    
+    var formattedTimeRemaining: String {
+        guard let timeRemaining = estimatedTimeRemaining else { return "calculating..." }
+        
+        if timeRemaining < 60 {
+            return String(format: "%.0fs", timeRemaining)
+        } else if timeRemaining < 3600 {
+            let minutes = Int(timeRemaining / 60)
+            let seconds = Int(timeRemaining.truncatingRemainder(dividingBy: 60))
+            return String(format: "%dm %ds", minutes, seconds)
+        } else {
+            let hours = Int(timeRemaining / 3600)
+            let minutes = Int((timeRemaining.truncatingRemainder(dividingBy: 3600)) / 60)
+            return String(format: "%dh %dm", hours, minutes)
+        }
+    }
+    
+    var formattedElapsedTime: String {
+        if elapsedTime < 60 {
+            return String(format: "%.1fs", elapsedTime)
+        } else if elapsedTime < 3600 {
+            let minutes = Int(elapsedTime / 60)
+            let seconds = Int(elapsedTime.truncatingRemainder(dividingBy: 60))
+            return String(format: "%dm %ds", minutes, seconds)
+        } else {
+            let hours = Int(elapsedTime / 3600)
+            let minutes = Int((elapsedTime.truncatingRemainder(dividingBy: 3600)) / 60)
+            return String(format: "%dh %dm", hours, minutes)
+        }
+    }
+}
+
+enum ProcessingPhase: String, CaseIterable {
+    case initializing = "Initializing"
+    case analyzing = "Analyzing input"
+    case extracting = "Extracting audio"
+    case converting = "Converting format"
+    case validating = "Validating output"
+    case finalizing = "Finalizing"
+    case complete = "Complete"
+    
+    var statusMessage: String {
+        switch self {
+        case .initializing:
+            return "Initializing audio extraction..."
+        case .analyzing:
+            return "Analyzing input file properties..."
+        case .extracting:
+            return "Extracting audio tracks..."
+        case .converting:
+            return "Converting audio format..."
+        case .validating:
+            return "Validating audio properties..."
+        case .finalizing:
+            return "Finalizing extraction..."
+        case .complete:
+            return "Audio extraction complete"
+        }
+    }
+}
+
+typealias ProgressCallback = (ProgressReport) -> Void

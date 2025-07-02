@@ -3,18 +3,23 @@ import AVFoundation
 
 class AudioProcessor {
     
-    typealias ProgressCallback = (Double) -> Void
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
     
     private let logger = Logger.shared
     private let ffmpegProcessor = FFmpegProcessor()
     private let tempFileManager = TempFileManager.shared
+    private var processingStartTime: Date?
     
     func extractAudio(from inputPath: String, 
                      progressCallback: ProgressCallback? = nil,
                      completion: @escaping CompletionCallback) {
         
+        processingStartTime = Date()
+        
         logger.info("Starting audio extraction from: \(inputPath)", component: "AudioProcessor")
+        
+        // Report initialization phase
+        reportProgress(0.0, phase: .initializing, callback: progressCallback)
         
         guard FileManager.default.fileExists(atPath: inputPath) else {
             let error = VoxError.invalidInputFile("File does not exist: \(inputPath)")
@@ -22,6 +27,9 @@ class AudioProcessor {
             completion(.failure(error))
             return
         }
+        
+        // Report analyzing phase
+        reportProgress(0.1, phase: .analyzing, callback: progressCallback)
         
         guard isValidMP4File(path: inputPath) else {
             let error = VoxError.unsupportedFormat("Not a valid MP4 file: \(inputPath)")
@@ -39,16 +47,26 @@ class AudioProcessor {
             return
         }
         
+        // Report extracting phase
+        reportProgress(0.2, phase: .extracting, callback: progressCallback)
+        
         extractAudioUsingAVFoundation(from: inputURL, 
                                     to: tempOutputURL, 
                                     progressCallback: progressCallback) { [weak self] result in
             switch result {
             case .success(let audioFormat):
+                // Report finalizing phase
+                self?.reportProgress(0.95, phase: .finalizing, callback: progressCallback)
+                
                 let audioFile = AudioFile(
                     path: inputPath,
                     format: audioFormat,
                     temporaryPath: tempOutputURL.path
                 )
+                
+                // Report completion
+                self?.reportProgress(1.0, phase: .complete, callback: progressCallback)
+                
                 self?.logger.info("Audio extraction completed successfully", component: "AudioProcessor")
                 completion(.success(audioFile))
                 
@@ -93,9 +111,15 @@ class AudioProcessor {
             exportSession.audioMix = createAudioMix(for: audioTrack)
         }
         
-        let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            let progress = Double(exportSession.progress)
-            progressCallback?(progress)
+        var lastProgress: Double = 0.2
+        let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            let exportProgress = Double(exportSession.progress)
+            let adjustedProgress = 0.2 + (exportProgress * 0.7)
+            
+            if adjustedProgress > lastProgress {
+                lastProgress = adjustedProgress
+                self?.reportProgress(adjustedProgress, phase: .extracting, callback: progressCallback)
+            }
         }
         
         exportSession.exportAsynchronously { [weak self] in
@@ -104,6 +128,7 @@ class AudioProcessor {
             DispatchQueue.main.async {
                 switch exportSession.status {
                 case .completed:
+                    self?.reportProgress(0.9, phase: .validating, callback: progressCallback)
                     self?.logger.info("AVFoundation export completed", component: "AudioProcessor")
                     
                     if let audioFormat = self?.extractAudioFormat(from: asset, outputPath: outputURL.path) {
@@ -261,5 +286,22 @@ class AudioProcessor {
             let tempURL = URL(fileURLWithPath: tempPath)
             _ = tempFileManager.cleanupFile(at: tempURL)
         }
+    }
+    
+    private func reportProgress(_ progress: Double, phase: ProcessingPhase, callback: ProgressCallback?) {
+        guard let startTime = processingStartTime else { return }
+        
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let processingSpeed = elapsedTime > 0 ? progress / elapsedTime : nil
+        
+        let progressReport = ProgressReport(
+            progress: progress,
+            status: phase.statusMessage,
+            phase: phase,
+            startTime: startTime,
+            processingSpeed: processingSpeed
+        )
+        
+        callback?(progressReport)
     }
 }

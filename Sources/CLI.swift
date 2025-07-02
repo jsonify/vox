@@ -91,10 +91,8 @@ struct Vox: ParsableCommand {
         print("Extracting audio from: \(inputFile)")
         
         audioProcessor.extractAudio(from: inputFile, 
-                                  progressCallback: { progress in
-                                      if self.verbose {
-                                          print("Progress: \(Int(progress * 100))%")
-                                      }
+                                  progressCallback: { progressReport in
+                                      self.displayProgress(progressReport)
                                   }) { result in
             switch result {
             case .success(let audioFile):
@@ -130,5 +128,43 @@ struct Vox: ParsableCommand {
         }
         
         print("Audio processing completed successfully!")
+    }
+    
+    private func displayProgress(_ progress: ProgressReport) {
+        if verbose {
+            // Detailed progress in verbose mode
+            let timeInfo = if progress.estimatedTimeRemaining != nil {
+                " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
+            } else {
+                " (elapsed: \(progress.formattedElapsedTime))"
+            }
+            
+            let speedInfo = if let speed = progress.processingSpeed {
+                " [\(String(format: "%.2f", speed * 100))/s]"
+            } else {
+                ""
+            }
+            
+            print("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)")
+        } else {
+            // Simple progress bar in normal mode
+            if progress.currentProgress > 0 {
+                let barWidth = 30
+                let filled = Int(progress.currentProgress * Double(barWidth))
+                let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
+                
+                let timeInfo = if progress.estimatedTimeRemaining != nil {
+                    " ETA: \(progress.formattedTimeRemaining)"
+                } else {
+                    ""
+                }
+                
+                print("\r[\(bar)] \(progress.formattedProgress) - \(progress.currentPhase.rawValue)\(timeInfo)", terminator: "")
+                
+                if progress.isComplete {
+                    print() // New line after completion
+                }
+            }
+        }
     }
 }
