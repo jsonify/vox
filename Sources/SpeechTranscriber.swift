@@ -224,21 +224,24 @@ class SpeechTranscriber {
         return .speech
     }
     
-    private func extractWordTimings(from segment: SFTranscriptionSegment) -> [WordTiming]? {
+    private func extractWordTimings(from segment: SFTranscriptionSegment) -> WordTiming? {
         // Apple's SFTranscriptionSegment represents word-level segments
         // Each segment typically contains one word with timing information
         let word = segment.substring.trimmingCharacters(in: .whitespacesAndNewlines)
         
         guard !word.isEmpty else { return nil }
         
-        let wordTiming = WordTiming(
+        Logger.shared.debug("Processing segment: '\(word)' - This should contain exactly one word", component: "SpeechTranscriber")
+        if word.split(separator: " ").count > 1 {
+            Logger.shared.warn("Unexpected multi-word segment found: '\(word)'", component: "SpeechTranscriber")
+        }
+        
+        return WordTiming(
             word: word,
             startTime: segment.timestamp,
             endTime: segment.timestamp + segment.duration,
             confidence: Double(segment.confidence)
         )
-        
-        return [wordTiming]
     }
     
     private func detectSpeakerChange(at index: Int, in segments: [SFTranscriptionSegment]) -> String? {

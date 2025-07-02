@@ -35,16 +35,16 @@ struct TranscriptionSegment: Codable {
     let endTime: TimeInterval
     let confidence: Double
     let speakerID: String?
-    let words: [WordTiming]?
+    let words: WordTiming?  // Updated to single WordTiming since each segment represents one word
     let segmentType: SegmentType
     let pauseDuration: TimeInterval?
     
-    init(text: String, 
-         startTime: TimeInterval, 
-         endTime: TimeInterval, 
-         confidence: Double, 
+    init(text: String,
+         startTime: TimeInterval,
+         endTime: TimeInterval,
+         confidence: Double,
          speakerID: String? = nil,
-         words: [WordTiming]? = nil,
+         words: WordTiming? = nil,
          segmentType: SegmentType = .speech,
          pauseDuration: TimeInterval? = nil) {
         self.text = text
