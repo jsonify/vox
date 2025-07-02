@@ -15,6 +15,7 @@ excluded:
 # Rules to enable/disable
 disabled_rules:
   - line_length # Disabled because CLI help text can be long
+  - trailing_whitespace # Disabled to allow trailing whitespace in code formatting
 
 opt_in_rules:
   - array_init

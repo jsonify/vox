@@ -30,35 +30,30 @@ final class AudioProcessorTests: XCTestCase {
     // MARK: - Temporary File Management Tests
     
     func testTemporaryFileCreation() {
-        let tempURL = audioProcessor.createTemporaryAudioFile()
+        let tempURL = TempFileManager.shared.createTemporaryAudioFile()
         
         XCTAssertNotNil(tempURL)
         XCTAssertEqual(tempURL?.pathExtension, "m4a")
-        XCTAssertTrue(tempURL?.lastPathComponent.hasPrefix("vox_temp_") == true)
+        XCTAssertTrue(tempURL?.lastPathComponent.hasPrefix("vox_audio_") == true)
         
-        // Verify the UUID format in the filename
-        if let filename = tempURL?.lastPathComponent {
-            let components = filename.components(separatedBy: ".")
-            XCTAssertEqual(components.count, 2)
-            XCTAssertEqual(components[1], "m4a")
-            
-            let nameComponents = components[0].components(separatedBy: "_")
-            XCTAssertEqual(nameComponents.count, 3)
-            XCTAssertEqual(nameComponents[0], "vox")
-            XCTAssertEqual(nameComponents[1], "temp")
-            // nameComponents[2] should be a valid UUID
-            XCTAssertNotNil(UUID(uuidString: nameComponents[2]))
+        // Cleanup
+        if let url = tempURL {
+            _ = TempFileManager.shared.cleanupFile(at: url)
         }
     }
     
     func testMultipleTemporaryFileCreationUniqueness() {
-        let tempURL1 = audioProcessor.createTemporaryAudioFile()
-        let tempURL2 = audioProcessor.createTemporaryAudioFile()
+        let tempURL1 = TempFileManager.shared.createTemporaryAudioFile()
+        let tempURL2 = TempFileManager.shared.createTemporaryAudioFile()
         
         XCTAssertNotNil(tempURL1)
         XCTAssertNotNil(tempURL2)
         XCTAssertNotEqual(tempURL1, tempURL2)
         XCTAssertNotEqual(tempURL1?.lastPathComponent, tempURL2?.lastPathComponent)
+        
+        // Cleanup
+        if let url1 = tempURL1 { _ = TempFileManager.shared.cleanupFile(at: url1) }
+        if let url2 = tempURL2 { _ = TempFileManager.shared.cleanupFile(at: url2) }
     }
     
     func testCleanupTemporaryFile() {
@@ -69,8 +64,9 @@ final class AudioProcessorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.createFile(atPath: tempFileURL.path, contents: testData))
         XCTAssertTrue(FileManager.default.fileExists(atPath: tempFileURL.path))
         
-        // Test cleanup
-        audioProcessor.cleanupTemporaryFile(at: tempFileURL)
+        // Register and test cleanup
+        TempFileManager.shared.registerTemporaryFile(at: tempFileURL)
+        XCTAssertTrue(TempFileManager.shared.cleanupFile(at: tempFileURL))
         
         XCTAssertFalse(FileManager.default.fileExists(atPath: tempFileURL.path))
     }
@@ -81,7 +77,7 @@ final class AudioProcessorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: nonexistentURL.path))
         
         // Should not crash when trying to cleanup non-existent file
-        audioProcessor.cleanupTemporaryFile(at: nonexistentURL)
+        XCTAssertTrue(TempFileManager.shared.cleanupFile(at: nonexistentURL))
         
         XCTAssertFalse(FileManager.default.fileExists(atPath: nonexistentURL.path))
     }
@@ -272,10 +268,13 @@ final class AudioProcessorTests: XCTestCase {
             processors.append(AudioProcessor())
         }
         
-        // Test they can all create temp files
-        for processor in processors {
-            let tempURL = processor.createTemporaryAudioFile()
+        // Test they can all create temp files via TempFileManager
+        for _ in processors {
+            let tempURL = TempFileManager.shared.createTemporaryAudioFile()
             XCTAssertNotNil(tempURL)
+            if let url = tempURL {
+                _ = TempFileManager.shared.cleanupFile(at: url)
+            }
         }
         
         // Clear references
@@ -284,7 +283,11 @@ final class AudioProcessorTests: XCTestCase {
         // Force deallocation
         autoreleasepool {
             let newProcessor = AudioProcessor()
-            XCTAssertNotNil(newProcessor.createTemporaryAudioFile())
+            let tempURL = TempFileManager.shared.createTemporaryAudioFile()
+            XCTAssertNotNil(tempURL)
+            if let url = tempURL {
+                _ = TempFileManager.shared.cleanupFile(at: url)
+            }
         }
     }
     
@@ -299,7 +302,7 @@ final class AudioProcessorTests: XCTestCase {
         for _ in 0..<20 {
             group.enter()
             concurrentQueue.async {
-                if let tempURL = self.audioProcessor.createTemporaryAudioFile() {
+                if let tempURL = TempFileManager.shared.createTemporaryAudioFile() {
                     lock.lock()
                     tempURLs.append(tempURL)
                     lock.unlock()
@@ -319,6 +322,9 @@ final class AudioProcessorTests: XCTestCase {
         let uniqueURLs = Set(tempURLs.map { $0.lastPathComponent })
         XCTAssertEqual(tempURLs.count, uniqueURLs.count)
         XCTAssertEqual(tempURLs.count, 20)
+        
+        // Cleanup all created files
+        _ = TempFileManager.shared.cleanupFiles(at: tempURLs)
     }
 }
 

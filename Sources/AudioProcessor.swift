@@ -8,6 +8,7 @@ class AudioProcessor {
     
     private let logger = Logger.shared
     private let ffmpegProcessor = FFmpegProcessor()
+    private let tempFileManager = TempFileManager.shared
     
     func extractAudio(from inputPath: String, 
                      progressCallback: ProgressCallback? = nil,
@@ -31,7 +32,7 @@ class AudioProcessor {
         
         let inputURL = URL(fileURLWithPath: inputPath)
         
-        guard let tempOutputURL = createTemporaryAudioFile() else {
+        guard let tempOutputURL = tempFileManager.createTemporaryAudioFile() else {
             let error = VoxError.audioExtractionFailed("Failed to create temporary file")
             logger.error(error.localizedDescription, component: "AudioProcessor")
             completion(.failure(error))
@@ -52,7 +53,7 @@ class AudioProcessor {
                 completion(.success(audioFile))
                 
             case .failure(let error):
-                self?.cleanupTemporaryFile(at: tempOutputURL)
+                _ = self?.tempFileManager.cleanupFile(at: tempOutputURL)
                 self?.logger.warn("AVFoundation extraction failed, attempting ffmpeg fallback: \(error.localizedDescription)", component: "AudioProcessor")
                 
                 // Try ffmpeg fallback
@@ -171,11 +172,6 @@ class AudioProcessor {
         return hasVideoTrack && hasAudioTrack
     }
     
-    internal func createTemporaryAudioFile() -> URL? {
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "vox_temp_\(UUID().uuidString).m4a"
-        return tempDir.appendingPathComponent(fileName)
-    }
     
     private func createAudioMix(for audioTrack: AVAssetTrack) -> AVAudioMix {
         let audioMix = AVMutableAudioMix()
@@ -260,19 +256,10 @@ class AudioProcessor {
         return nil
     }
     
-    func cleanupTemporaryFile(at url: URL) {
-        do {
-            try FileManager.default.removeItem(at: url)
-            logger.debug("Cleaned up temporary file: \(url.path)", component: "AudioProcessor")
-        } catch {
-            logger.warn("Failed to cleanup temporary file: \(error.localizedDescription)", component: "AudioProcessor")
-        }
-    }
-    
     func cleanupTemporaryFiles(for audioFile: AudioFile) {
         if let tempPath = audioFile.temporaryPath {
             let tempURL = URL(fileURLWithPath: tempPath)
-            cleanupTemporaryFile(at: tempURL)
+            _ = tempFileManager.cleanupFile(at: tempURL)
         }
     }
 }
