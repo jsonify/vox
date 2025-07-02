@@ -271,13 +271,15 @@ final class FFmpegProcessorTests: XCTestCase {
                 case .success:
                     XCTFail("FFmpeg should fail with invalid file: \(invalidFile.lastPathComponent)")
                 case .failure(let error):
-                    XCTAssertTrue(error is VoxError, "Should return VoxError")
-                    // Verify error contains relevant information
-                    XCTAssertTrue(
-                        error.localizedDescription.contains("extraction failed") ||
-                        error.localizedDescription.contains("FFmpeg"),
-                        "Error should mention extraction failure or FFmpeg"
-                    )
+                    // Verify it's an audio extraction failure with proper message
+                    if case .audioExtractionFailed(let message) = error {
+                        XCTAssertTrue(
+                            message.contains("extraction failed") || message.contains("FFmpeg"),
+                            "Error message should mention extraction failure or FFmpeg"
+                        )
+                    } else {
+                        XCTFail("Expected audioExtractionFailed error, got \(error)")
+                    }
                 }
                 expectation.fulfill()
             }
