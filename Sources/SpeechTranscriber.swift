@@ -4,7 +4,6 @@ import AVFoundation
 
 @available(macOS 10.15, *)
 class SpeechTranscriber {
-    
     private let speechRecognizer: SFSpeechRecognizer
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -39,17 +38,23 @@ class SpeechTranscriber {
         }
         
         let audioURL = URL(fileURLWithPath: audioFile.path)
-        
         progressCallback?(ProgressReport(progress: 0.2, status: "Loading audio file", phase: .analyzing, startTime: startTime))
         
-        // Create recognition request
+        let request = createRecognitionRequest(for: audioURL)
+        progressCallback?(ProgressReport(progress: 0.4, status: "Processing speech recognition", phase: .extracting, startTime: startTime))
+        
+        return try await performSpeechRecognition(request: request, audioFile: audioFile, startTime: startTime, progressCallback: progressCallback)
+    }
+    
+    private func createRecognitionRequest(for audioURL: URL) -> SFSpeechURLRecognitionRequest {
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.requiresOnDeviceRecognition = true // Force local processing
-        
-        progressCallback?(ProgressReport(progress: 0.4, status: "Processing speech recognition", phase: .extracting, startTime: startTime))
-        
+        return request
+    }
+    
+    private func performSpeechRecognition(request: SFSpeechURLRecognitionRequest, audioFile: AudioFile, startTime: Date, progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
         return try await withCheckedThrowingContinuation { continuation in
             var segments: [TranscriptionSegment] = []
             var finalTranscriptionText = ""
@@ -65,53 +70,75 @@ class SpeechTranscriber {
                 }
                 
                 if let result = result {
-                    finalTranscriptionText = result.bestTranscription.formattedString
-                    
-                    // Calculate average confidence
-                    let confidences = result.bestTranscription.segments.compactMap { segment in
-                        segment.confidence > 0 ? Double(segment.confidence) : nil
-                    }
-                    confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
-                    
-                    // Convert SFTranscriptionSegment to TranscriptionSegment
-                    segments = result.bestTranscription.segments.map { segment in
-                        TranscriptionSegment(
-                            text: segment.substring,
-                            startTime: segment.timestamp,
-                            endTime: segment.timestamp + segment.duration,
-                            confidence: Double(segment.confidence),
-                            speakerID: nil // Apple Speech framework doesn't provide speaker ID
-                        )
-                    }
-                    
-                    // Update progress
-                    let progress = result.isFinal ? 1.0 : 0.8
-                    progressCallback?(ProgressReport(
-                        progress: progress,
-                        status: result.isFinal ? "Transcription complete" : "Processing...",
-                        phase: result.isFinal ? .complete : .extracting,
-                        startTime: startTime
-                    ))
-                    
-                    if result.isFinal {
-                        let processingTime = Date().timeIntervalSince(startTime)
-                        
-                        let transcriptionResult = TranscriptionResult(
-                            text: finalTranscriptionText,
-                            language: self.speechRecognizer.locale.identifier,
-                            confidence: confidence,
-                            duration: audioFile.format.duration,
-                            segments: segments,
-                            engine: .speechAnalyzer,
-                            processingTime: processingTime,
-                            audioFormat: audioFile.format
-                        )
-                        
-                        Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s", component: "SpeechTranscriber")
-                        continuation.resume(returning: transcriptionResult)
-                    }
+                    self.processRecognitionResult(
+                        result,
+                        audioFile: audioFile,
+                        startTime: startTime,
+                        progressCallback: progressCallback,
+                        segments: &segments,
+                        finalText: &finalTranscriptionText,
+                        confidence: &confidence,
+                        continuation: continuation
+                    )
                 }
             }
+        }
+    }
+    
+    private func processRecognitionResult(
+        _ result: SFSpeechRecognitionResult,
+        audioFile: AudioFile,
+        startTime: Date,
+        progressCallback: ProgressCallback?,
+        segments: inout [TranscriptionSegment],
+        finalText: inout String,
+        confidence: inout Double,
+        continuation: CheckedContinuation<TranscriptionResult, Error>
+    ) {
+        finalText = result.bestTranscription.formattedString
+        
+        // Calculate average confidence
+        let confidences = result.bestTranscription.segments.compactMap { segment in
+            segment.confidence > 0 ? Double(segment.confidence) : nil
+        }
+        confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
+        
+        // Convert SFTranscriptionSegment to TranscriptionSegment
+        segments = result.bestTranscription.segments.map { segment in
+            TranscriptionSegment(
+                text: segment.substring,
+                startTime: segment.timestamp,
+                endTime: segment.timestamp + segment.duration,
+                confidence: Double(segment.confidence),
+                speakerID: nil // Apple Speech framework doesn't provide speaker ID
+            )
+        }
+        
+        // Update progress
+        let progress = result.isFinal ? 1.0 : 0.8
+        progressCallback?(ProgressReport(
+            progress: progress,
+            status: result.isFinal ? "Transcription complete" : "Processing...",
+            phase: result.isFinal ? .complete : .extracting,
+            startTime: startTime
+        ))
+        
+        if result.isFinal {
+            let processingTime = Date().timeIntervalSince(startTime)
+            
+            let transcriptionResult = TranscriptionResult(
+                text: finalText,
+                language: self.speechRecognizer.locale.identifier,
+                confidence: confidence,
+                duration: audioFile.format.duration,
+                segments: segments,
+                engine: .speechAnalyzer,
+                processingTime: processingTime,
+                audioFormat: audioFile.format
+            )
+            
+            Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s", component: "SpeechTranscriber")
+            continuation.resume(returning: transcriptionResult)
         }
     }
     
@@ -167,34 +194,122 @@ class SpeechTranscriber {
 // MARK: - Extensions
 
 extension SpeechTranscriber {
-    
-    /// Transcribe with automatic language detection
-    func transcribeWithLanguageDetection(audioFile: AudioFile, preferredLanguages: [String] = ["en-US"], progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
+    /// Validate and normalize language code
+    static func validateLanguageCode(_ languageCode: String) -> String? {
+        let supportedLocales = Self.supportedLocales()
+        let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
         
-        // Try preferred languages in order
-        for languageCode in preferredLanguages {
+        // Try exact match first
+        if supportedIdentifiers.contains(languageCode) {
+            return languageCode
+        }
+        
+        // Try language-only match (e.g., "en" -> "en-US")
+        let languageOnly = String(languageCode.prefix(2))
+        if let match = supportedIdentifiers.first(where: { $0.hasPrefix(languageOnly + "-") }) {
+            Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
+            return match
+        }
+        
+        // Try case-insensitive match
+        if let match = supportedIdentifiers.first(where: { $0.lowercased() == languageCode.lowercased() }) {
+            Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
+            return match
+        }
+        
+        Logger.shared.warn("Language code '\(languageCode)' is not supported", component: "SpeechTranscriber")
+        return nil
+    }
+    
+    /// Get list of common language codes for easier user reference
+    static func commonLanguages() -> [String: String] {
+        return [
+            "en-US": "English (United States)",
+            "en-GB": "English (United Kingdom)",
+            "es-ES": "Spanish (Spain)", 
+            "es-MX": "Spanish (Mexico)",
+            "fr-FR": "French (France)",
+            "de-DE": "German (Germany)",
+            "it-IT": "Italian (Italy)",
+            "pt-BR": "Portuguese (Brazil)",
+            "ja-JP": "Japanese (Japan)",
+            "ko-KR": "Korean (South Korea)",
+            "zh-CN": "Chinese (Simplified)",
+            "zh-TW": "Chinese (Traditional)",
+            "ru-RU": "Russian (Russia)",
+            "ar-SA": "Arabic (Saudi Arabia)"
+        ]
+    }
+    
+    /// Transcribe with automatic language detection and validation
+    func transcribeWithLanguageDetection(audioFile: AudioFile, preferredLanguages: [String] = ["en-US"], progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
+        // Validate and normalize all preferred languages
+        let validatedLanguages = preferredLanguages.compactMap { Self.validateLanguageCode($0) }
+        
+        if validatedLanguages.isEmpty {
+            Logger.shared.warn("No valid languages provided, falling back to en-US", component: "SpeechTranscriber")
+            let fallbackLanguages = ["en-US"]
+            return try await attemptTranscriptionWithLanguages(audioFile: audioFile, languages: fallbackLanguages, progressCallback: progressCallback)
+        }
+        
+        Logger.shared.info("Validated languages: \(validatedLanguages.joined(separator: ", "))", component: "SpeechTranscriber")
+        return try await attemptTranscriptionWithLanguages(audioFile: audioFile, languages: validatedLanguages, progressCallback: progressCallback)
+    }
+    
+    /// Attempt transcription with a list of validated languages
+    private func attemptTranscriptionWithLanguages(audioFile: AudioFile, languages: [String], progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
+        var lastError: Error?
+        var bestResult: TranscriptionResult?
+        let confidenceThreshold: Double = 0.3
+        
+        // Try each language in order
+        for (index, languageCode) in languages.enumerated() {
             let locale = Locale(identifier: languageCode)
             
-            if Self.isAvailable(for: locale) {
-                Logger.shared.info("Attempting transcription with language: \(languageCode)", component: "SpeechTranscriber")
+            guard Self.isAvailable(for: locale) else {
+                Logger.shared.warn("Speech recognition not available for \(languageCode)", component: "SpeechTranscriber")
+                continue
+            }
+            
+            Logger.shared.info("Attempting transcription with language: \(languageCode) (\(index + 1)/\(languages.count))", component: "SpeechTranscriber")
+            
+            do {
+                let speechTranscriber = try SpeechTranscriber(locale: locale)
+                let result = try await speechTranscriber.transcribe(audioFile: audioFile, progressCallback: progressCallback)
                 
-                do {
-                    let speechTranscriber = try SpeechTranscriber(locale: locale)
-                    let result = try await speechTranscriber.transcribe(audioFile: audioFile, progressCallback: progressCallback)
-                    
-                    // If confidence is reasonable, return result
-                    if result.confidence > 0.3 {
-                        return result
-                    }
-                } catch {
-                    Logger.shared.warn("Failed transcription with \(languageCode): \(error.localizedDescription)", component: "SpeechTranscriber")
-                    continue
+                Logger.shared.info("Transcription confidence for \(languageCode): \(String(format: "%.1f%%", result.confidence * 100))", component: "SpeechTranscriber")
+                
+                // If confidence is above threshold, return immediately
+                if result.confidence >= confidenceThreshold {
+                    Logger.shared.info("High confidence result achieved with \(languageCode)", component: "SpeechTranscriber")
+                    return result
                 }
+                
+                // Keep the best result so far
+                if bestResult == nil || result.confidence > (bestResult?.confidence ?? 0.0) {
+                    bestResult = result
+                }
+                
+            } catch {
+                Logger.shared.warn("Failed transcription with \(languageCode): \(error.localizedDescription)", component: "SpeechTranscriber")
+                lastError = error
+                continue
             }
         }
         
-        // Fallback to default locale
-        Logger.shared.info("Falling back to default locale transcription", component: "SpeechTranscriber")
-        return try await transcribe(audioFile: audioFile, progressCallback: progressCallback)
+        // Return the best result we got, even if confidence is low
+        if let result = bestResult {
+            let confidence = result.confidence * 100
+            if confidence < confidenceThreshold * 100 {
+                Logger.shared.warn("Low confidence transcription result: \(String(format: "%.1f%%", confidence))", component: "SpeechTranscriber")
+            }
+            return result
+        }
+        // If we got here, all languages failed
+        if let error = lastError {
+            throw error
+        } else {
+            throw VoxError.transcriptionFailed("No supported languages available for transcription")
+        }
     }
 }
