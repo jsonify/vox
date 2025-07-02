@@ -149,11 +149,11 @@ final class FFmpegProcessorTests: XCTestCase {
             try? FileManager.default.removeItem(at: testInputFile)
         }
         
-        var progressCalled = false
+        // var progressCalled = false
         let expectation = XCTestExpectation(description: "Progress callback test")
         
         processor.extractAudio(from: testInputFile.path, progressCallback: { progress in
-            progressCalled = true
+            // progressCalled = true
             XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0, "Progress should be >= 0")
             XCTAssertLessThanOrEqual(progress.currentProgress, 1.0, "Progress should be <= 1")
         }) { result in
