@@ -299,7 +299,7 @@ class FFmpegProcessor {
         let elapsedTime = Date().timeIntervalSince(startTime)
         let processingSpeed = elapsedTime > 0 ? progress / elapsedTime : nil
         
-        let progressReport = ProgressReport(
+        let progressReport = TranscriptionProgress(
             progress: progress,
             status: phase.statusMessage,
             phase: phase,

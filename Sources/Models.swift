@@ -18,7 +18,7 @@ struct TimingThresholds {
     static let definiteSpeakerChangeThreshold: TimeInterval = 3.0
 }
 
-struct TranscriptionResult: Codable {
+public struct TranscriptionResult: Codable {
     let text: String
     let language: String
     let confidence: Double
@@ -104,7 +104,7 @@ enum TranscriptionEngine: String, CaseIterable, Codable {
     case revai = "rev-ai"
 }
 
-struct AudioFormat: Codable {
+public struct AudioFormat: Codable {
     let codec: String
     let sampleRate: Int
     let channels: Int
@@ -172,13 +172,23 @@ enum AudioQuality: String, CaseIterable, Codable {
     }
 }
 
-struct AudioFile {
-    let path: String
-    let format: AudioFormat
-    let temporaryPath: String?
+public struct AudioFile {
+    public let path: String
+    public let format: AudioFormat
+    public let temporaryPath: String?
+    
+    public var url: URL {
+        return URL(fileURLWithPath: path)
+    }
+    
+    public init(path: String, format: AudioFormat, temporaryPath: String? = nil) {
+        self.path = path
+        self.format = format
+        self.temporaryPath = temporaryPath
+    }
 }
 
-enum VoxError: Error, LocalizedError {
+public enum VoxError: Error, LocalizedError {
     case invalidInputFile(String)
     case audioExtractionFailed(String)
     case transcriptionFailed(String)
@@ -187,11 +197,14 @@ enum VoxError: Error, LocalizedError {
     case unsupportedFormat(String)
     case audioFormatValidationFailed(String)
     case incompatibleAudioProperties(String)
+    case transcriptionInProgress
+    case speechRecognitionUnavailable
+    case invalidAudioFile
     case temporaryFileCreationFailed(String)
     case temporaryFileCleanupFailed(String)
     case processingFailed(String)
     
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidInputFile(let path):
             return "Invalid input file: \(path)"
@@ -215,6 +228,12 @@ enum VoxError: Error, LocalizedError {
             return "Failed to cleanup temporary file: \(reason)"
         case .processingFailed(let reason):
             return "Processing failed: \(reason)"
+        case .transcriptionInProgress:
+            return "A transcription is already in progress"
+        case .speechRecognitionUnavailable:
+            return "Speech recognition is not available"
+        case .invalidAudioFile:
+            return "Invalid audio file"
         }
     }
     
@@ -238,6 +257,8 @@ enum VoxError: Error, LocalizedError {
             return "TempFileManager"
         case .processingFailed:
             return "Processor"
+        case .transcriptionInProgress, .speechRecognitionUnavailable, .invalidAudioFile:
+            return "Transcription"
         }
     }
 }
@@ -267,24 +288,40 @@ protocol ProgressReporting {
     var processingSpeed: Double? { get }
 }
 
-struct ProgressReport: ProgressReporting {
-    let currentProgress: Double
-    let estimatedTimeRemaining: TimeInterval?
-    let currentStatus: String
-    let isComplete: Bool
-    let processingSpeed: Double?
-    let startTime: Date
-    let elapsedTime: TimeInterval
-    let currentPhase: ProcessingPhase
+public struct TranscriptionProgress: ProgressReporting {
+    public let currentProgress: Double
+    public let estimatedTimeRemaining: TimeInterval?
+    public let currentStatus: String
+    public let isComplete: Bool
+    public let processingSpeed: Double?
+    public let startTime: Date
+    public let elapsedTime: TimeInterval
+    public let currentPhase: ProcessingPhase
     
-    init(progress: Double, 
-         status: String, 
-         phase: ProcessingPhase,
-         startTime: Date,
-         processingSpeed: Double? = nil) {
+    // Additional properties for enhanced progress reporting
+    public let stage: ProcessingPhase
+    public let currentSegment: Int?
+    public let totalSegments: Int?
+    public let confidence: Double?
+    public let memoryUsage: MemoryUsage?
+    public let thermalState: ProcessInfo.ThermalState?
+    public let message: String?
+    
+    public init(progress: Double, 
+                status: String, 
+                phase: ProcessingPhase,
+                startTime: Date,
+                processingSpeed: Double? = nil,
+                currentSegment: Int? = nil,
+                totalSegments: Int? = nil,
+                confidence: Double? = nil,
+                memoryUsage: MemoryUsage? = nil,
+                thermalState: ProcessInfo.ThermalState? = nil,
+                message: String? = nil) {
         self.currentProgress = max(0.0, min(1.0, progress))
         self.currentStatus = status
         self.currentPhase = phase
+        self.stage = phase
         self.startTime = startTime
         self.elapsedTime = Date().timeIntervalSince(startTime)
         self.processingSpeed = processingSpeed
@@ -296,6 +333,14 @@ struct ProgressReport: ProgressReporting {
         } else {
             self.estimatedTimeRemaining = nil
         }
+        
+        // Set additional properties
+        self.currentSegment = currentSegment
+        self.totalSegments = totalSegments
+        self.confidence = confidence
+        self.memoryUsage = memoryUsage
+        self.thermalState = thermalState
+        self.message = message
     }
     
     var formattedProgress: String {
@@ -333,7 +378,7 @@ struct ProgressReport: ProgressReporting {
     }
 }
 
-enum ProcessingPhase: String, CaseIterable {
+public enum ProcessingPhase: String, CaseIterable {
     case initializing = "Initializing"
     case analyzing = "Analyzing input"
     case extracting = "Extracting audio"
@@ -362,7 +407,7 @@ enum ProcessingPhase: String, CaseIterable {
     }
 }
 
-typealias ProgressCallback = (ProgressReport) -> Void
+public typealias ProgressCallback = (TranscriptionProgress) -> Void
 
 // MARK: - Enhanced Progress Reporting
 
@@ -374,7 +419,7 @@ protocol TranscriptionProgressReporting {
     var processingStats: ProcessingStats { get }
 }
 
-struct MemoryUsage {
+public struct MemoryUsage {
     let currentBytes: UInt64
     let peakBytes: UInt64
     let availableBytes: UInt64
@@ -485,7 +530,7 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
         )
     }
     
-    func generateDetailedProgressReport() -> ProgressReport {
+    func generateDetailedProgressReport() -> TranscriptionProgress {
         let progress = totalSegments > 0 ? Double(currentSegmentIndex) / Double(totalSegments) : 0.0
         
         let status: String
@@ -495,7 +540,7 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
             status = "Processing audio segment \(currentSegmentIndex + 1)/\(totalSegments)"
         }
         
-        return ProgressReport(
+        return TranscriptionProgress(
             progress: progress,
             status: status,
             phase: .extracting,

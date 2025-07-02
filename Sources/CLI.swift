@@ -223,7 +223,7 @@ struct Vox: ParsableCommand {
         }
     }
     
-    @Sendable private static func displayProgressReport(_ progress: ProgressReport, verbose: Bool) {
+    @Sendable private static func displayProgressReport(_ progress: TranscriptionProgress, verbose: Bool) {
         if verbose {
             // Detailed progress in verbose mode with enhanced information
             let timeInfo = if progress.estimatedTimeRemaining != nil {
@@ -450,7 +450,7 @@ struct Vox: ParsableCommand {
         return String(data: data, encoding: .utf8) ?? ""
     }
     
-    private func displayProgress(_ progress: ProgressReport) {
+    private func displayProgress(_ progress: TranscriptionProgress) {
         if verbose {
             // Detailed progress in verbose mode with enhanced information
             let timeInfo = if progress.estimatedTimeRemaining != nil {
