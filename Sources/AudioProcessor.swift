@@ -105,7 +105,23 @@ class AudioProcessor {
                 case .completed:
                     self?.logger.info("AVFoundation export completed", component: "AudioProcessor")
                     
-                    if let audioFormat = self?.extractAudioFormat(from: asset) {
+                    if let audioFormat = self?.extractAudioFormat(from: asset, outputPath: outputURL.path) {
+                        // Check if the format validation failed
+                        if !audioFormat.isValid {
+                            let validationError = audioFormat.validationError ?? "Unknown validation error"
+                            let error = VoxError.audioFormatValidationFailed(validationError)
+                            self?.logger.error(error.localizedDescription, component: "AudioProcessor")
+                            completion(.failure(error))
+                            return
+                        }
+                        
+                        // Check compatibility for transcription
+                        if !audioFormat.isCompatible {
+                            let error = VoxError.incompatibleAudioProperties("Audio format not compatible with transcription engines: \(audioFormat.description)")
+                            self?.logger.warn(error.localizedDescription, component: "AudioProcessor")
+                            // Don't fail completely, but log the warning
+                        }
+                        
                         completion(.success(audioFormat))
                     } else {
                         let error = VoxError.audioExtractionFailed("Failed to extract audio format information")
@@ -171,7 +187,7 @@ class AudioProcessor {
         return audioMix
     }
     
-    private func extractAudioFormat(from asset: AVAsset) -> AudioFormat? {
+    private func extractAudioFormat(from asset: AVAsset, outputPath: String? = nil) -> AudioFormat? {
         guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
             return nil
         }
@@ -194,14 +210,54 @@ class AudioProcessor {
         let channels = Int(basicDescription.pointee.mChannelsPerFrame)
         let bitRate = Int(audioTrack.estimatedDataRate)
         let duration = CMTimeGetSeconds(asset.duration)
+        let codec = "m4a"
+        
+        // Calculate file size if possible
+        let fileSize = calculateFileSize(for: asset, outputPath: outputPath)
+        
+        // Validate the audio format
+        let validation = AudioFormatValidator.validate(
+            codec: codec,
+            sampleRate: sampleRate,
+            channels: channels,
+            bitRate: bitRate > 0 ? bitRate : nil
+        )
         
         return AudioFormat(
-            codec: "m4a",
+            codec: codec,
             sampleRate: sampleRate,
             channels: channels,
             bitRate: bitRate > 0 ? bitRate : nil,
-            duration: duration
+            duration: duration,
+            fileSize: fileSize,
+            isValid: validation.isValid,
+            validationError: validation.error
         )
+    }
+    
+    private func calculateFileSize(for asset: AVAsset, outputPath: String?) -> UInt64? {
+        // Try to get file size from output path first
+        if let outputPath = outputPath {
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: outputPath)
+                return attributes[.size] as? UInt64
+            } catch {
+                logger.debug("Could not get file size from output path: \(error)", component: "AudioProcessor")
+            }
+        }
+        
+        // Estimate file size based on bitrate and duration if available
+        guard let audioTrack = asset.tracks(withMediaType: .audio).first else { return nil }
+        
+        let bitRate = audioTrack.estimatedDataRate
+        let duration = CMTimeGetSeconds(asset.duration)
+        
+        if bitRate > 0 && duration > 0 {
+            // Estimate: (bitrate in bits/sec * duration in seconds) / 8 = bytes
+            return UInt64((Double(bitRate) * duration) / 8.0)
+        }
+        
+        return nil
     }
     
     func cleanupTemporaryFile(at url: URL) {

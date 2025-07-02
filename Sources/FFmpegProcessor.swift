@@ -332,33 +332,55 @@ class FFmpegProcessor {
         
         let audioPattern = #"Audio: (\w+).*?(\d+) Hz.*?(\w+).*?(\d+) kb/s"#
         
-        guard let regex = try? NSRegularExpression(pattern: audioPattern),
-              let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) else {
-            // Fallback with basic info
-            return AudioFormat(
-                codec: "aac",
-                sampleRate: 44100,
-                channels: 2,
-                bitRate: nil,
-                duration: getDuration(from: output)
-            )
+        var codec = "aac"
+        var sampleRate = 44100
+        var channels = 2
+        var bitRate: Int? = nil
+        
+        if let regex = try? NSRegularExpression(pattern: audioPattern),
+           let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) {
+            codec = String(output[Range(match.range(at: 1), in: output)!])
+            sampleRate = Int(String(output[Range(match.range(at: 2), in: output)!])) ?? 44100
+            let channelInfo = String(output[Range(match.range(at: 3), in: output)!])
+            let bitRateKbps = Int(String(output[Range(match.range(at: 4), in: output)!])) ?? 128
+            
+            channels = channelInfo.contains("stereo") ? 2 : 1
+            bitRate = bitRateKbps * 1000 // Convert kb/s to b/s
         }
         
-        let codec = String(output[Range(match.range(at: 1), in: output)!])
-        let sampleRate = Int(String(output[Range(match.range(at: 2), in: output)!])) ?? 44100
-        let channelInfo = String(output[Range(match.range(at: 3), in: output)!])
-        let bitRate = Int(String(output[Range(match.range(at: 4), in: output)!])) ?? 128
-        
-        let channels = channelInfo.contains("stereo") ? 2 : 1
         let duration = getDuration(from: output)
+        
+        // Get actual file size
+        let fileSize = getFileSize(for: filePath)
+        
+        // Validate the audio format
+        let validation = AudioFormatValidator.validate(
+            codec: codec,
+            sampleRate: sampleRate,
+            channels: channels,
+            bitRate: bitRate
+        )
         
         return AudioFormat(
             codec: codec,
             sampleRate: sampleRate,
             channels: channels,
-            bitRate: bitRate * 1000, // Convert kb/s to b/s
-            duration: duration
+            bitRate: bitRate,
+            duration: duration,
+            fileSize: fileSize,
+            isValid: validation.isValid,
+            validationError: validation.error
         )
+    }
+    
+    private func getFileSize(for filePath: String) -> UInt64? {
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: filePath)
+            return attributes[.size] as? UInt64
+        } catch {
+            logger.debug("Could not get file size for \(filePath): \(error)", component: "FFmpegProcessor")
+            return nil
+        }
     }
     
     private func getDuration(from output: String) -> TimeInterval {
