@@ -42,6 +42,9 @@ struct Vox: ParsableCommand {
         version: "1.0.0"
     )
     
+    // Shared memory monitor instance
+    private static let memoryMonitor = MemoryMonitor()
+    
     @Argument(help: "Input MP4 video file path")
     var inputFile: String
     
@@ -241,8 +244,7 @@ struct Vox: ParsableCommand {
             
             // Show memory usage if available during transcription
             if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
-                let memoryMonitor = MemoryMonitor()
-                let memoryUsage = memoryMonitor.getCurrentUsage()
+                let memoryUsage = Self.memoryMonitor.getCurrentUsage()
                 print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
             }
         } else {
@@ -469,8 +471,7 @@ struct Vox: ParsableCommand {
             
             // Show memory usage if available (implementation would need to be added)
             if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
-                let memoryMonitor = MemoryMonitor()
-                let memoryUsage = memoryMonitor.getCurrentUsage()
+                let memoryUsage = Self.memoryMonitor.getCurrentUsage()
                 print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
             }
         } else {
