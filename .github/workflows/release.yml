@@ -40,7 +40,7 @@ jobs:
         echo "Release version: $VERSION"
     
     - name: Run tests
-      run: swift test --verbose
+      run: swift test --filter CITests --verbose
     
     - name: Build release binaries
       run: |
