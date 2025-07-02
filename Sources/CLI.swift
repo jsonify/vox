@@ -150,48 +150,7 @@ struct Vox: ParsableCommand {
         
         Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "CLI")
         
-        let semaphore = DispatchSemaphore(value: 0)
-        var taskResult: Result<TranscriptionResult, Error>?
-        
-        Task {
-            let result: Result<TranscriptionResult, Error>
-            do {
-                if forceCloud {
-                    // swiftlint:disable:next todo
-                    // FIXME: Implement cloud transcription
-                    Logger.shared.warn("Cloud transcription not yet implemented", component: "CLI")
-                    throw VoxError.transcriptionFailed("Cloud transcription not yet implemented")
-                } else {
-                    // Use native transcription with language detection
-                    let speechTranscriber = try SpeechTranscriber()
-                    let transcriptionResult = try await speechTranscriber.transcribeWithLanguageDetection(
-                        audioFile: audioFile,
-                        preferredLanguages: preferredLanguages,
-                        progressCallback: { progressReport in
-                            self.displayProgress(progressReport)
-                        })
-                    result = .success(transcriptionResult)
-                }
-            } catch {
-                result = .failure(error)
-            }
-            taskResult = result
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        
-        guard let taskResult = taskResult else {
-            throw VoxError.transcriptionFailed("Transcription task did not complete")
-        }
-        
-        let transcriptionResult: TranscriptionResult
-        switch taskResult {
-        case .success(let result):
-            transcriptionResult = result
-        case .failure(let error):
-            throw error
-        }
+        let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
         
         displayTranscriptionResult(transcriptionResult)
         
@@ -199,6 +158,60 @@ struct Vox: ParsableCommand {
         if let outputPath = output {
             try saveTranscriptionResult(transcriptionResult, to: outputPath)
         }
+    }
+    
+    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
+        let forceCloudCapture = forceCloud
+        return try runAsyncAndWait { @Sendable in
+            if forceCloudCapture {
+                // swiftlint:disable:next todo
+                // FIXME: Implement cloud transcription
+                Logger.shared.warn("Cloud transcription not yet implemented", component: "CLI")
+                throw VoxError.transcriptionFailed("Cloud transcription not yet implemented")
+            } else {
+                // Use native transcription with language detection
+                let speechTranscriber = try SpeechTranscriber()
+                return try await speechTranscriber.transcribeWithLanguageDetection(
+                    audioFile: audioFile,
+                    preferredLanguages: preferredLanguages,
+                    progressCallback: nil // Remove self reference for Sendable
+                )
+            }
+        }
+    }
+    
+    private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
+        let queue = DispatchQueue(label: "vox.transcription.sync", qos: .userInitiated)
+        let group = DispatchGroup()
+        var taskResult: T?
+        var taskError: Error?
+        
+        group.enter()
+        Task {
+            do {
+                let value = try await operation()
+                queue.sync {
+                    taskResult = value
+                }
+            } catch {
+                queue.sync {
+                    taskError = error
+                }
+            }
+            group.leave()
+        }
+        
+        group.wait()
+        
+        if let error = taskError {
+            throw error
+        }
+        
+        guard let result = taskResult else {
+            throw VoxError.processingFailed("Async operation did not complete")
+        }
+        
+        return result
     }
     
     private func buildLanguagePreferences() -> [String] {
