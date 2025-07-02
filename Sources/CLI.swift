@@ -1,6 +1,40 @@
 import ArgumentParser
 import Foundation
 
+// Thread-safe result container for async operations
+final class ResultBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: T?
+    private var error: Error?
+    
+    func setValue(_ value: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.result = value
+    }
+    
+    func setError(_ error: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.error = error
+    }
+    
+    func getResult() throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        if let error = error {
+            throw error
+        }
+        
+        guard let result = result else {
+            throw VoxError.processingFailed("Async operation did not complete")
+        }
+        
+        return result
+    }
+}
+
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
@@ -181,37 +215,22 @@ struct Vox: ParsableCommand {
     }
     
     private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
-        let queue = DispatchQueue(label: "vox.transcription.sync", qos: .userInitiated)
-        let group = DispatchGroup()
-        var taskResult: T?
-        var taskError: Error?
+        let semaphore = DispatchSemaphore(value: 0)
+        let resultBox = ResultBox<T>()
         
-        group.enter()
         Task {
             do {
                 let value = try await operation()
-                queue.sync {
-                    taskResult = value
-                }
+                resultBox.setValue(value)
             } catch {
-                queue.sync {
-                    taskError = error
-                }
+                resultBox.setError(error)
             }
-            group.leave()
+            semaphore.signal()
         }
         
-        group.wait()
+        semaphore.wait()
         
-        if let error = taskError {
-            throw error
-        }
-        
-        guard let result = taskResult else {
-            throw VoxError.processingFailed("Async operation did not complete")
-        }
-        
-        return result
+        return try resultBox.getResult()
     }
     
     private func buildLanguagePreferences() -> [String] {
