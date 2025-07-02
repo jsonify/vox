@@ -191,8 +191,13 @@ final class AudioProcessorTests: XCTestCase {
             case .success:
                 XCTFail("Should not succeed with invalid MP4 content")
             case .failure(let error):
-                // Should fail during validation or audio extraction
-                XCTAssertTrue(error is VoxError)
+                switch error {
+                case .unsupportedFormat, .audioExtractionFailed:
+                    // Expected error cases for invalid MP4 content
+                    break
+                default:
+                    XCTFail("Expected unsupportedFormat or audioExtractionFailed error for invalid MP4 content, got \(error)")
+                }
             }
             expectation.fulfill()
         }

@@ -198,8 +198,13 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with video-only MP4 file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
-                // Should fail during validation or extraction
+                switch error {
+                case .audioExtractionFailed, .unsupportedFormat:
+                    // Expected error cases for video-only MP4 files
+                    break
+                default:
+                    XCTFail("Expected audioExtractionFailed or unsupportedFormat error for video-only MP4 file, got \(error)")
+                }
             }
             expectation.fulfill()
         }
