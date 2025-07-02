@@ -60,7 +60,11 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with empty path")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
+                if case .invalidInputFile = error {
+                    // Expected error case
+                } else {
+                    XCTFail("Expected invalidInputFile error for empty path, got \(error)")
+                }
             }
             expectation.fulfill()
         }
@@ -77,7 +81,11 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with directory path")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
+                if case .invalidInputFile = error {
+                    // Expected error case
+                } else {
+                    XCTFail("Expected invalidInputFile error for directory path, got \(error)")
+                }
             }
             expectation.fulfill()
         }
@@ -120,13 +128,13 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with invalid MP4 content")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
                 // Should be either unsupportedFormat or audioExtractionFailed
                 switch error {
                 case .unsupportedFormat, .audioExtractionFailed:
-                    break // Expected
+                    // Expected error cases
+                    break
                 default:
-                    XCTFail("Unexpected error type: \(error)")
+                    XCTFail("Expected unsupportedFormat or audioExtractionFailed error, got \(error)")
                 }
             }
             expectation.fulfill()
@@ -144,7 +152,11 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with empty MP4 file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
+                if case .audioExtractionFailed = error {
+                    // Expected error case
+                } else {
+                    XCTFail("Expected audioExtractionFailed error for empty MP4 file, got \(error)")
+                }
             }
             expectation.fulfill()
         }
@@ -161,7 +173,11 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with corrupted MP4 file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
+                if case .audioExtractionFailed = error {
+                    // Expected error case
+                } else {
+                    XCTFail("Expected audioExtractionFailed error for corrupted MP4 file, got \(error)")
+                }
             }
             expectation.fulfill()
         }
@@ -182,8 +198,13 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with video-only MP4 file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
-                // Should fail during validation or extraction
+                switch error {
+                case .audioExtractionFailed, .unsupportedFormat:
+                    // Expected error cases for video-only MP4 files
+                    break
+                default:
+                    XCTFail("Expected audioExtractionFailed or unsupportedFormat error for video-only MP4 file, got \(error)")
+                }
             }
             expectation.fulfill()
         }
@@ -206,12 +227,14 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .success:
                 XCTFail("Should fail with invalid MP4 or missing ffmpeg")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError)
-                // Error should mention ffmpeg or extraction failure
-                XCTAssertTrue(
-                    error.localizedDescription.contains("ffmpeg") ||
-                    error.localizedDescription.contains("extraction failed")
-                )
+                if case .audioExtractionFailed(let message) = error {
+                    XCTAssertTrue(
+                        message.contains("ffmpeg") || message.contains("extraction failed"),
+                        "Error message should mention ffmpeg or extraction failure"
+                    )
+                } else {
+                    XCTFail("Expected audioExtractionFailed error for ffmpeg unavailable, got \(error)")
+                }
             }
             expectation.fulfill()
         }

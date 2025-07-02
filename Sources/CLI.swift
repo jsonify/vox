@@ -297,6 +297,17 @@ struct Vox: ParsableCommand {
         print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") // swiftlint:disable:this no_print
         print("  - Engine: \(result.engine.rawValue)") // swiftlint:disable:this no_print
         
+        // Add comprehensive quality assessment
+        let confidenceManager = ConfidenceManager()
+        let qualityAssessment = confidenceManager.assessQuality(result: result)
+        let qualityReport = confidenceManager.generateQualityReport(assessment: qualityAssessment)
+        print("\n\(qualityReport)") // swiftlint:disable:this no_print
+        
+        // Show fallback recommendation if applicable
+        if qualityAssessment.shouldUseFallback && !forceCloud {
+            print("\n💡 Try running with --fallback-api openai for better accuracy") // swiftlint:disable:this no_print
+        }
+        
         if timestamps && !result.segments.isEmpty {
             print("\n--- Transcript with timestamps ---") // swiftlint:disable:this no_print
             for segment in result.segments {
