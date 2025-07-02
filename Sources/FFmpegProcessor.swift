@@ -6,74 +6,14 @@ class FFmpegProcessor {
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
     
     private let logger = Logger.shared
-    private static let ffmpegPath = "/opt/homebrew/bin/ffmpeg" // Common homebrew path
-    private static let alternativePaths = [
-        "/usr/local/bin/ffmpeg",
-        "/usr/bin/ffmpeg",
-        "/opt/local/bin/ffmpeg"
-    ]
-    
     /// Check if ffmpeg is available on the system
     static func isFFmpegAvailable() -> Bool {
-        // First check common installation paths
-        let allPaths = [ffmpegPath] + alternativePaths
-        
-        for path in allPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return true
-            }
-        }
-        
-        // Fallback: try to execute ffmpeg from PATH
-        let process = Process()
-        process.launchPath = "/usr/bin/which"
-        process.arguments = ["ffmpeg"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
+        return FFmpegUtilities.isFFmpegAvailable()
     }
     
     /// Find the ffmpeg executable path
     private static func findFFmpegPath() -> String? {
-        let allPaths = [ffmpegPath] + alternativePaths
-        
-        for path in allPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-        
-        // Try to find in PATH
-        let process = Process()
-        process.launchPath = "/usr/bin/which"
-        process.arguments = ["ffmpeg"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            if process.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !output.isEmpty {
-                    return output
-                }
-            }
-        } catch {
-            // Fall through to return nil
-        }
-        
-        return nil
+        return FFmpegUtilities.findFFmpegPath()
     }
     
     func extractAudio(from inputPath: String,
@@ -290,101 +230,15 @@ class FFmpegProcessor {
     // MARK: - Parsing Helpers
     
     private func parseDuration(from output: String) -> TimeInterval {
-        // Look for duration pattern: Duration: 00:01:23.45
-        let durationPattern = #"Duration: (\d{2}):(\d{2}):(\d{2})\.(\d{2})"#
-        
-        guard let regex = try? NSRegularExpression(pattern: durationPattern),
-              let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) else {
-            return 0
-        }
-        
-        let hours = Double(String(output[Range(match.range(at: 1), in: output)!])) ?? 0
-        let minutes = Double(String(output[Range(match.range(at: 2), in: output)!])) ?? 0
-        let seconds = Double(String(output[Range(match.range(at: 3), in: output)!])) ?? 0
-        let centiseconds = Double(String(output[Range(match.range(at: 4), in: output)!])) ?? 0
-        
-        return hours * 3600 + minutes * 60 + seconds + centiseconds / 100
+        return FFmpegAudioFormatParser.parseDuration(from: output)
     }
     
     private func parseProgress(from output: String, totalDuration: TimeInterval) -> Double? {
-        guard totalDuration > 0 else { return nil }
-        
-        // Look for time pattern: time=00:01:23.45
-        let timePattern = #"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})"#
-        
-        guard let regex = try? NSRegularExpression(pattern: timePattern),
-              let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) else {
-            return nil
-        }
-        
-        let hours = Double(String(output[Range(match.range(at: 1), in: output)!])) ?? 0
-        let minutes = Double(String(output[Range(match.range(at: 2), in: output)!])) ?? 0
-        let seconds = Double(String(output[Range(match.range(at: 3), in: output)!])) ?? 0
-        let centiseconds = Double(String(output[Range(match.range(at: 4), in: output)!])) ?? 0
-        
-        let currentTime = hours * 3600 + minutes * 60 + seconds + centiseconds / 100
-        return min(currentTime / totalDuration, 1.0)
+        return FFmpegAudioFormatParser.parseProgress(from: output, totalDuration: totalDuration)
     }
     
     private func parseAudioFormat(from output: String, filePath: String) -> AudioFormat? {
-        // Parse audio stream info from ffmpeg output
-        // Example: Stream #0:1(und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, stereo, fltp, 128 kb/s
-        
-        let audioPattern = #"Audio: (\w+).*?(\d+) Hz.*?(\w+).*?(\d+) kb/s"#
-        
-        var codec = "aac"
-        var sampleRate = 44100
-        var channels = 2
-        var bitRate: Int? = nil
-        
-        if let regex = try? NSRegularExpression(pattern: audioPattern),
-           let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) {
-            codec = String(output[Range(match.range(at: 1), in: output)!])
-            sampleRate = Int(String(output[Range(match.range(at: 2), in: output)!])) ?? 44100
-            let channelInfo = String(output[Range(match.range(at: 3), in: output)!])
-            let bitRateKbps = Int(String(output[Range(match.range(at: 4), in: output)!])) ?? 128
-            
-            channels = channelInfo.contains("stereo") ? 2 : 1
-            bitRate = bitRateKbps * 1000 // Convert kb/s to b/s
-        }
-        
-        let duration = getDuration(from: output)
-        
-        // Get actual file size
-        let fileSize = getFileSize(for: filePath)
-        
-        // Validate the audio format
-        let validation = AudioFormatValidator.validate(
-            codec: codec,
-            sampleRate: sampleRate,
-            channels: channels,
-            bitRate: bitRate
-        )
-        
-        return AudioFormat(
-            codec: codec,
-            sampleRate: sampleRate,
-            channels: channels,
-            bitRate: bitRate,
-            duration: duration,
-            fileSize: fileSize,
-            isValid: validation.isValid,
-            validationError: validation.error
-        )
-    }
-    
-    private func getFileSize(for filePath: String) -> UInt64? {
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: filePath)
-            return attributes[.size] as? UInt64
-        } catch {
-            logger.debug("Could not get file size for \(filePath): \(error)", component: "FFmpegProcessor")
-            return nil
-        }
-    }
-    
-    private func getDuration(from output: String) -> TimeInterval {
-        return parseDuration(from: output)
+        return FFmpegAudioFormatParser.parseAudioFormat(from: output, filePath: filePath)
     }
     
     // MARK: - File Management
