@@ -277,9 +277,13 @@ final class SpeechTranscriberTests: XCTestCase {
         weak var weakTranscriber: SpeechTranscriber?
         
         autoreleasepool {
-            let transcriber = try! SpeechTranscriber(locale: locale)
-            weakTranscriber = transcriber
-            XCTAssertNotNil(weakTranscriber)
+            do {
+                let transcriber = try SpeechTranscriber(locale: locale)
+                weakTranscriber = transcriber
+                XCTAssertNotNil(weakTranscriber)
+            } catch {
+                XCTFail("Failed to create SpeechTranscriber: \(error)")
+            }
         }
         
         // Give ARC time to clean up
