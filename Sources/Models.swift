@@ -1,6 +1,23 @@
 import Foundation
 import ArgumentParser
 
+// MARK: - Timing Constants
+
+/// Timing thresholds for audio segment analysis and boundary detection
+struct TimingThresholds {
+    /// Threshold for detecting significant silence gaps that might indicate speaker changes
+    static let significantPauseThreshold: TimeInterval = 1.0
+    
+    /// Minimum pause duration to consider a speaker change (typically indicates turn-taking)
+    static let speakerChangeThreshold: TimeInterval = 2.0
+    
+    /// Minimum pause duration combined with sentence ending to indicate paragraph boundary
+    static let paragraphBoundaryThreshold: TimeInterval = 1.5
+    
+    /// Threshold for detecting definitive speaker changes based on longer pauses
+    static let definiteSpeakerChangeThreshold: TimeInterval = 3.0
+}
+
 struct TranscriptionResult: Codable {
     let text: String
     let language: String
@@ -18,16 +35,16 @@ struct TranscriptionSegment: Codable {
     let endTime: TimeInterval
     let confidence: Double
     let speakerID: String?
-    let words: [WordTiming]?
+    let words: WordTiming?  // Updated to single WordTiming since each segment represents one word
     let segmentType: SegmentType
     let pauseDuration: TimeInterval?
     
-    init(text: String, 
-         startTime: TimeInterval, 
-         endTime: TimeInterval, 
-         confidence: Double, 
+    init(text: String,
+         startTime: TimeInterval,
+         endTime: TimeInterval,
+         confidence: Double,
          speakerID: String? = nil,
-         words: [WordTiming]? = nil,
+         words: WordTiming? = nil,
          segmentType: SegmentType = .speech,
          pauseDuration: TimeInterval? = nil) {
         self.text = text
@@ -57,7 +74,7 @@ struct TranscriptionSegment: Codable {
     }
     
     var hasSilenceGap: Bool {
-        return segmentType == .silence || (pauseDuration ?? 0) > 1.0
+        return segmentType == .silence || (pauseDuration ?? 0) > TimingThresholds.significantPauseThreshold
     }
 }
 

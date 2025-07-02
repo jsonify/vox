@@ -126,34 +126,29 @@ final class TranscriptionTests: XCTestCase {
             speakerID: nil
         )
         
-        XCTAssertEqual(segment.startTime, segment.endTime)
-        XCTAssertEqual(segment.startTime, 5.0)
-        XCTAssertEqual(segment.duration, 0.0)
+        XCTAssertEqual(segment.startTime, segment.endTime, accuracy: 0.001)
+        XCTAssertEqual(segment.startTime, 5.0, accuracy: 0.001)
+        XCTAssertEqual(segment.duration, 0.0, accuracy: 0.001)
     }
     
     // MARK: - Enhanced Timing Features Tests
     
     func testTranscriptionSegmentWithWordTimings() {
-        let wordTimings = [
-            WordTiming(word: "Hello", startTime: 0.0, endTime: 0.5, confidence: 0.9),
-            WordTiming(word: "world", startTime: 0.6, endTime: 1.2, confidence: 0.85)
-        ]
+        let wordTiming = WordTiming(word: "Hello", startTime: 0.0, endTime: 0.5, confidence: 0.9)
         
         let segment = TranscriptionSegment(
-            text: "Hello world",
+            text: "Hello",
             startTime: 0.0,
-            endTime: 1.2,
-            confidence: 0.875,
+            endTime: 0.5,
+            confidence: 0.9,
             speakerID: "Speaker1",
-            words: wordTimings,
+            words: wordTiming,
             segmentType: .speech
         )
         
-        XCTAssertEqual(segment.words?.count, 2)
-        XCTAssertEqual(segment.words?[0].word, "Hello")
-        XCTAssertEqual(segment.words?[0].duration, 0.5)
-        XCTAssertEqual(segment.words?[1].word, "world")
-        XCTAssertEqual(segment.words?[1].duration, 0.6)
+        XCTAssertNotNil(segment.words)
+        XCTAssertEqual(segment.words?.word, "Hello")
+        XCTAssertEqual(segment.words?.duration ?? 0.0, 0.5, accuracy: 0.001)
         XCTAssertEqual(segment.segmentType, .speech)
     }
     
@@ -183,7 +178,7 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertTrue(segment.hasSpeakerChange)
         XCTAssertEqual(segment.speakerID, "Speaker2")
-        XCTAssertEqual(segment.pauseDuration, 2.5)
+        XCTAssertEqual(segment.pauseDuration ?? 0.0, 2.5, accuracy: 0.001)
     }
     
     func testTranscriptionSegmentWithSilenceGap() {
@@ -212,6 +207,7 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertTrue(segment.isParagraphBoundary)
         XCTAssertTrue(segment.isSentenceBoundary) // Should also be sentence boundary
+        XCTAssertEqual(segment.pauseDuration ?? 0.0, 1.8, accuracy: 0.001)
     }
     
     // MARK: - WordTiming Tests
@@ -225,10 +221,10 @@ final class TranscriptionTests: XCTestCase {
         )
         
         XCTAssertEqual(wordTiming.word, "example")
-        XCTAssertEqual(wordTiming.startTime, 1.0)
-        XCTAssertEqual(wordTiming.endTime, 1.7)
-        XCTAssertEqual(wordTiming.duration, 0.7)
-        XCTAssertEqual(wordTiming.confidence, 0.92)
+        XCTAssertEqual(wordTiming.startTime, 1.0, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.endTime, 1.7, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.duration, 0.7, accuracy: 0.001)
+        XCTAssertEqual(wordTiming.confidence, 0.92, accuracy: 0.001)
     }
     
     // MARK: - SegmentType Tests
