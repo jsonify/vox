@@ -445,4 +445,112 @@ final class ModelsTests: XCTestCase {
         let nilBitRateScore = AudioFormatValidator.calculateQualityScore(sampleRate: 44100, bitRate: nil, channels: 2)
         XCTAssertEqual(nilBitRateScore, 0.5)
     }
+    
+    // MARK: - Enhanced Audio Format Tests
+    
+    func testAudioFormatTranscriptionCompatibility() {
+        // Test transcription-ready formats
+        XCTAssertTrue(AudioFormatValidator.isTranscriptionCompatible(codec: "aac"))
+        XCTAssertTrue(AudioFormatValidator.isTranscriptionCompatible(codec: "m4a"))
+        XCTAssertTrue(AudioFormatValidator.isTranscriptionCompatible(codec: "wav"))
+        XCTAssertTrue(AudioFormatValidator.isTranscriptionCompatible(codec: "mp3"))
+        
+        // Test non-transcription-ready formats  
+        XCTAssertFalse(AudioFormatValidator.isTranscriptionCompatible(codec: "opus"))
+        XCTAssertFalse(AudioFormatValidator.isTranscriptionCompatible(codec: "vorbis"))
+        XCTAssertFalse(AudioFormatValidator.isTranscriptionCompatible(codec: "unknown"))
+    }
+    
+    func testAudioFormatIsTranscriptionReady() {
+        // Valid and transcription-compatible format
+        let readyFormat = AudioFormat(
+            codec: "aac",
+            sampleRate: 44100,
+            channels: 2,
+            bitRate: 128000,
+            duration: 60.0
+        )
+        XCTAssertTrue(readyFormat.isTranscriptionReady)
+        
+        // Valid but not transcription-compatible format
+        let notReadyFormat = AudioFormat(
+            codec: "opus", 
+            sampleRate: 48000,
+            channels: 2,
+            bitRate: 128000,
+            duration: 60.0,
+            isValid: true
+        )
+        XCTAssertFalse(notReadyFormat.isTranscriptionReady)
+        
+        // Invalid format
+        let invalidFormat = AudioFormat(
+            codec: "aac",
+            sampleRate: 44100,
+            channels: 2,
+            bitRate: 128000,
+            duration: 60.0,
+            isValid: false
+        )
+        XCTAssertFalse(invalidFormat.isTranscriptionReady)
+    }
+    
+    func testOptimalTranscriptionEngineDetection() {
+        // High quality format -> Apple SpeechAnalyzer
+        let highQualityFormat = AudioFormat(
+            codec: "aac",
+            sampleRate: 48000,
+            channels: 2,
+            bitRate: 256000,
+            duration: 120.0
+        )
+        let highQualityResult = AudioFormatValidator.detectOptimalTranscriptionSettings(for: highQualityFormat)
+        XCTAssertEqual(highQualityResult.recommendedEngine, "apple-speechanalyzer")
+        XCTAssertEqual(highQualityResult.confidence, 0.95)
+        
+        // Medium quality format -> OpenAI Whisper
+        let mediumQualityFormat = AudioFormat(
+            codec: "m4a",
+            sampleRate: 22050,
+            channels: 1,
+            bitRate: 64000,
+            duration: 90.0
+        )
+        let mediumQualityResult = AudioFormatValidator.detectOptimalTranscriptionSettings(for: mediumQualityFormat)
+        XCTAssertEqual(mediumQualityResult.recommendedEngine, "openai-whisper")
+        XCTAssertEqual(mediumQualityResult.confidence, 0.85)
+        
+        // Low quality format -> Rev.ai
+        let lowQualityFormat = AudioFormat(
+            codec: "mp3",
+            sampleRate: 16000,
+            channels: 1,
+            bitRate: 32000,
+            duration: 60.0
+        )
+        let lowQualityResult = AudioFormatValidator.detectOptimalTranscriptionSettings(for: lowQualityFormat)
+        XCTAssertEqual(lowQualityResult.recommendedEngine, "rev-ai")
+        XCTAssertEqual(lowQualityResult.confidence, 0.75)
+        
+        // Non-transcription-ready format
+        let incompatibleFormat = AudioFormat(
+            codec: "opus",
+            sampleRate: 48000,
+            channels: 2,
+            bitRate: 128000,
+            duration: 60.0
+        )
+        let incompatibleResult = AudioFormatValidator.detectOptimalTranscriptionSettings(for: incompatibleFormat)
+        XCTAssertEqual(incompatibleResult.recommendedEngine, "none")
+        XCTAssertEqual(incompatibleResult.confidence, 0.0)
+    }
+    
+    func testEnhancedCodecSupport() {
+        // Test newly added codecs
+        XCTAssertTrue(AudioFormatValidator.isSupported(codec: "opus", sampleRate: 48000, channels: 2))
+        XCTAssertTrue(AudioFormatValidator.isSupported(codec: "vorbis", sampleRate: 44100, channels: 2))
+        
+        // Test additional sample rate
+        XCTAssertTrue(AudioFormatValidator.isSupported(codec: "aac", sampleRate: 32000, channels: 2))
+    }
 }

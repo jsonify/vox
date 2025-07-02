@@ -60,6 +60,10 @@ struct AudioFormat {
         return AudioFormatValidator.isSupported(codec: codec, sampleRate: sampleRate, channels: channels)
     }
     
+    var isTranscriptionReady: Bool {
+        return isValid && AudioFormatValidator.isTranscriptionCompatible(codec: codec)
+    }
+    
     var description: String {
         let sizeStr = fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "unknown"
         let bitRateStr = bitRate.map { "\($0/1000) kbps" } ?? "unknown"
@@ -91,14 +95,30 @@ enum AudioQuality: String, CaseIterable {
 }
 
 struct AudioFormatValidator {
-    private static let supportedCodecs: Set<String> = ["aac", "m4a", "mp4", "wav", "flac", "mp3"]
-    private static let supportedSampleRates: Set<Int> = [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000]
+    private static let supportedCodecs: Set<String> = ["aac", "m4a", "mp4", "wav", "flac", "mp3", "opus", "vorbis"]
+    private static let supportedSampleRates: Set<Int> = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000]
     private static let supportedChannelCounts: Set<Int> = [1, 2, 4, 6, 8]
+    
+    // Enhanced codec compatibility matrix
+    private static let codecTranscriptionCompatibility: [String: Bool] = [
+        "aac": true,
+        "m4a": true, 
+        "mp4": true,
+        "wav": true,
+        "flac": true,
+        "mp3": true,
+        "opus": false,  // Not widely supported by transcription services
+        "vorbis": false // Limited support
+    ]
     
     static func isSupported(codec: String, sampleRate: Int, channels: Int) -> Bool {
         return supportedCodecs.contains(codec.lowercased()) &&
                supportedSampleRates.contains(sampleRate) &&
                supportedChannelCounts.contains(channels)
+    }
+    
+    static func isTranscriptionCompatible(codec: String) -> Bool {
+        return codecTranscriptionCompatibility[codec.lowercased()] ?? false
     }
     
     static func validate(codec: String, sampleRate: Int, channels: Int, bitRate: Int?) -> (isValid: Bool, error: String?) {
@@ -133,6 +153,23 @@ struct AudioFormatValidator {
         let channelBonus = channels > 2 ? 0.1 : 0.0
         
         return min(1.0, normalizedSampleRate * 0.4 + normalizedBitRate * 0.5 + channelBonus)
+    }
+    
+    static func detectOptimalTranscriptionSettings(for format: AudioFormat) -> (recommendedEngine: String, confidence: Double) {
+        guard format.isTranscriptionReady else {
+            return ("none", 0.0)
+        }
+        
+        // Determine best transcription engine based on audio characteristics
+        let qualityScore = calculateQualityScore(sampleRate: format.sampleRate, bitRate: format.bitRate, channels: format.channels)
+        
+        if format.sampleRate >= 44100 && qualityScore > 0.7 {
+            return ("apple-speechanalyzer", 0.95)
+        } else if format.sampleRate >= 16000 && qualityScore > 0.3 {
+            return ("openai-whisper", 0.85)
+        } else {
+            return ("rev-ai", 0.75)
+        }
     }
 }
 
