@@ -107,17 +107,44 @@ class SpeechTranscriber {
         // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
         segments = createEnhancedSegments(from: result.bestTranscription.segments)
         
-        // Update progress
-        let progress = result.isFinal ? 1.0 : 0.8
+        // Enhanced progress reporting with segment-level details
+        let currentSegmentCount = result.bestTranscription.segments.count
+        let estimatedTotalSegments = estimateSegmentCount(for: audioFile.format.duration)
+        let audioProcessed = calculateAudioProcessed(from: result.bestTranscription.segments)
+        
+        // Create detailed progress report
+        let progress = result.isFinal ? 1.0 : min(0.95, Double(currentSegmentCount) / Double(estimatedTotalSegments))
+        
+        let status: String
+        if result.isFinal {
+            status = "Transcription complete - \(currentSegmentCount) segments processed"
+        } else if let lastSegment = result.bestTranscription.segments.last {
+            let segmentText = String(lastSegment.substring.prefix(30))
+            status = "Processing segment \(currentSegmentCount)/~\(estimatedTotalSegments): \"\(segmentText)\(lastSegment.substring.count > 30 ? "..." : "")\""
+        } else {
+            status = "Processing audio segments..."
+        }
+        
+        // Calculate processing speed (audio seconds per real-time second)
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let processingSpeed = elapsedTime > 0 ? audioProcessed / elapsedTime : nil
+        
         progressCallback?(ProgressReport(
             progress: progress,
-            status: result.isFinal ? "Transcription complete" : "Processing...",
+            status: status,
             phase: result.isFinal ? .complete : .extracting,
-            startTime: startTime
+            startTime: startTime,
+            processingSpeed: processingSpeed
         ))
+        
+        // Log detailed progress for verbose mode
+        if !result.isFinal {
+            Logger.shared.debug("Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed", component: "SpeechTranscriber")
+        }
         
         if result.isFinal {
             let processingTime = Date().timeIntervalSince(startTime)
+            let realTimeRatio = audioFile.format.duration > 0 ? processingTime / audioFile.format.duration : 0
             
             let transcriptionResult = TranscriptionResult(
                 text: finalText,
@@ -130,9 +157,22 @@ class SpeechTranscriber {
                 audioFormat: audioFile.format
             )
             
-            Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s", component: "SpeechTranscriber")
+            Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)", component: "SpeechTranscriber")
             continuation.resume(returning: transcriptionResult)
         }
+    }
+    
+    private func estimateSegmentCount(for duration: TimeInterval) -> Int {
+        // Rough estimate: Apple's Speech framework typically creates segments for individual words
+        // Average speaking rate is ~150 words per minute
+        let estimatedWordsPerMinute: Double = 150
+        let estimatedWords = (duration / 60.0) * estimatedWordsPerMinute
+        return max(1, Int(estimatedWords))
+    }
+    
+    private func calculateAudioProcessed(from segments: [SFTranscriptionSegment]) -> TimeInterval {
+        guard let lastSegment = segments.last else { return 0 }
+        return lastSegment.timestamp + lastSegment.duration
     }
     
     /// Check if speech recognition is available for the given locale

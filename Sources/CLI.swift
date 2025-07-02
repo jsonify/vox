@@ -196,6 +196,7 @@ struct Vox: ParsableCommand {
     
     private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
         let forceCloudCapture = forceCloud
+        let verboseCapture = verbose
         return try runAsyncAndWait { @Sendable in
             if forceCloudCapture {
                 // swiftlint:disable:next todo
@@ -208,8 +209,73 @@ struct Vox: ParsableCommand {
                 return try await speechTranscriber.transcribeWithLanguageDetection(
                     audioFile: audioFile,
                     preferredLanguages: preferredLanguages,
-                    progressCallback: nil // Remove self reference for Sendable
+                    progressCallback: { @Sendable progressReport in
+                        // Create thread-safe progress display
+                        DispatchQueue.main.sync {
+                            Self.displayProgressReport(progressReport, verbose: verboseCapture)
+                        }
+                    }
                 )
+            }
+        }
+    }
+    
+    @Sendable private static func displayProgressReport(_ progress: ProgressReport, verbose: Bool) {
+        if verbose {
+            // Detailed progress in verbose mode with enhanced information
+            let timeInfo = if progress.estimatedTimeRemaining != nil {
+                " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
+            } else {
+                " (elapsed: \(progress.formattedElapsedTime))"
+            }
+            
+            let speedInfo = if let speed = progress.processingSpeed {
+                " [\(String(format: "%.1f", speed))x speed]"
+            } else {
+                ""
+            }
+            
+            // Show current status with more context for transcription
+            let statusPrefix = progress.currentPhase == .extracting ? "🎤" : "⚙️"
+            print("\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
+            
+            // Show memory usage if available during transcription
+            if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
+                let memoryMonitor = MemoryMonitor()
+                let memoryUsage = memoryMonitor.getCurrentUsage()
+                print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
+            }
+        } else {
+            // Enhanced progress bar in normal mode
+            if progress.currentProgress > 0 {
+                let barWidth = 40
+                let filled = Int(progress.currentProgress * Double(barWidth))
+                let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
+                
+                let timeInfo = if progress.estimatedTimeRemaining != nil {
+                    " ETA: \(progress.formattedTimeRemaining)"
+                } else {
+                    ""
+                }
+                
+                let speedInfo = if let speed = progress.processingSpeed {
+                    " (\(String(format: "%.1f", speed))x)"
+                } else {
+                    ""
+                }
+                
+                // Different icons for different phases
+                let phaseIcon = switch progress.currentPhase {
+                case .initializing, .analyzing, .validating, .finalizing: "⚙️"
+                case .extracting, .converting: "🎤"
+                case .complete: "✅"
+                }
+                
+                print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
+                
+                if progress.isComplete {
+                    print() // New line after completion // swiftlint:disable:this no_print
+                }
             }
         }
     }
@@ -384,7 +450,7 @@ struct Vox: ParsableCommand {
     
     private func displayProgress(_ progress: ProgressReport) {
         if verbose {
-            // Detailed progress in verbose mode
+            // Detailed progress in verbose mode with enhanced information
             let timeInfo = if progress.estimatedTimeRemaining != nil {
                 " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
             } else {
@@ -392,16 +458,25 @@ struct Vox: ParsableCommand {
             }
             
             let speedInfo = if let speed = progress.processingSpeed {
-                " [\(String(format: "%.2f", speed * 100))/s]"
+                " [\(String(format: "%.1f", speed))x speed]"
             } else {
                 ""
             }
             
-            print("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
+            // Show current status with more context for transcription
+            let statusPrefix = progress.currentPhase == .extracting ? "🎤" : "⚙️"
+            print("\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
+            
+            // Show memory usage if available (implementation would need to be added)
+            if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
+                let memoryMonitor = MemoryMonitor()
+                let memoryUsage = memoryMonitor.getCurrentUsage()
+                print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
+            }
         } else {
-            // Simple progress bar in normal mode
+            // Enhanced progress bar in normal mode
             if progress.currentProgress > 0 {
-                let barWidth = 30
+                let barWidth = 40
                 let filled = Int(progress.currentProgress * Double(barWidth))
                 let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
                 
@@ -411,7 +486,20 @@ struct Vox: ParsableCommand {
                     ""
                 }
                 
-                print("\r[\(bar)] \(progress.formattedProgress) - \(progress.currentPhase.rawValue)\(timeInfo)", terminator: "") // swiftlint:disable:this no_print
+                let speedInfo = if let speed = progress.processingSpeed {
+                    " (\(String(format: "%.1f", speed))x)"
+                } else {
+                    ""
+                }
+                
+                // Different icons for different phases
+                let phaseIcon = switch progress.currentPhase {
+                case .initializing, .analyzing, .validating, .finalizing: "⚙️"
+                case .extracting, .converting: "🎤"
+                case .complete: "✅"
+                }
+                
+                print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
                 
                 if progress.isComplete {
                     print() // New line after completion // swiftlint:disable:this no_print
