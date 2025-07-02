@@ -392,8 +392,20 @@ struct MemoryUsage {
     }
     
     var usagePercentage: Double {
-        let totalMemory = currentBytes + availableBytes
-        return totalMemory > 0 ? Double(currentBytes) / Double(totalMemory) * 100 : 0
+        let totalSystemMemory = ProcessInfo.processInfo.physicalMemory
+        Logger.shared.debug("Memory Usage Calculation:", component: "MemoryMonitor")
+        Logger.shared.debug("- Total System Memory: \(ByteCountFormatter.string(fromByteCount: Int64(totalSystemMemory), countStyle: .memory))", component: "MemoryMonitor")
+        Logger.shared.debug("- Current Usage: \(ByteCountFormatter.string(fromByteCount: Int64(currentBytes), countStyle: .memory))", component: "MemoryMonitor")
+        Logger.shared.debug("- Available: \(ByteCountFormatter.string(fromByteCount: Int64(availableBytes), countStyle: .memory))", component: "MemoryMonitor")
+        
+        guard totalSystemMemory > 0 else {
+            Logger.shared.error("Invalid total system memory", component: "MemoryMonitor")
+            return 0.0
+        }
+        
+        let percentage = (Double(currentBytes) / Double(totalSystemMemory)) * 100.0
+        Logger.shared.debug("- Usage Percentage: \(String(format: "%.1f%%", percentage))", component: "MemoryMonitor")
+        return percentage
     }
 }
 

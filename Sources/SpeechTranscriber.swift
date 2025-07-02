@@ -32,19 +32,42 @@ class SpeechTranscriber {
     /// Transcribe audio file to text with segments
     func transcribe(audioFile: AudioFile, progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
         let startTime = Date()
-        progressCallback?(ProgressReport(progress: 0.0, status: "Starting transcription", phase: .initializing, startTime: startTime))
+        let progressReporter = EnhancedProgressReporter(totalAudioDuration: audioFile.format.duration)
+        
+        // Initial progress report
+        if let callback = progressCallback {
+            callback(progressReporter.generateDetailedProgressReport())
+        }
         
         guard FileManager.default.fileExists(atPath: audioFile.path) else {
             throw VoxError.invalidInputFile(audioFile.path)
         }
         
         let audioURL = URL(fileURLWithPath: audioFile.path)
-        progressCallback?(ProgressReport(progress: 0.2, status: "Loading audio file", phase: .analyzing, startTime: startTime))
+        progressReporter.updateProgress(segmentIndex: 0,
+                                     totalSegments: estimateSegmentCount(for: audioFile.format.duration),
+                                     segmentText: "Loading audio file",
+                                     segmentConfidence: 1.0,
+                                     audioTimeProcessed: 0)
+        if let callback = progressCallback {
+            callback(progressReporter.generateDetailedProgressReport())
+        }
         
         let request = createRecognitionRequest(for: audioURL)
-        progressCallback?(ProgressReport(progress: 0.4, status: "Processing speech recognition", phase: .extracting, startTime: startTime))
+        progressReporter.updateProgress(segmentIndex: 0,
+                                     totalSegments: estimateSegmentCount(for: audioFile.format.duration),
+                                     segmentText: "Initializing speech recognition",
+                                     segmentConfidence: 1.0,
+                                     audioTimeProcessed: 0)
+        if let callback = progressCallback {
+            callback(progressReporter.generateDetailedProgressReport())
+        }
         
-        return try await performSpeechRecognition(request: request, audioFile: audioFile, startTime: startTime, progressCallback: progressCallback)
+        return try await performSpeechRecognition(request: request,
+                                                audioFile: audioFile,
+                                                startTime: startTime,
+                                                progressReporter: progressReporter,
+                                                progressCallback: progressCallback)
     }
     
     private func createRecognitionRequest(for audioURL: URL) -> SFSpeechURLRecognitionRequest {
@@ -55,7 +78,11 @@ class SpeechTranscriber {
         return request
     }
     
-    private func performSpeechRecognition(request: SFSpeechURLRecognitionRequest, audioFile: AudioFile, startTime: Date, progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
+    private func performSpeechRecognition(request: SFSpeechURLRecognitionRequest,
+                                        audioFile: AudioFile,
+                                        startTime: Date,
+                                        progressReporter: EnhancedProgressReporter,
+                                        progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
         return try await withCheckedThrowingContinuation { continuation in
             var segments: [TranscriptionSegment] = []
             var finalTranscriptionText = ""
@@ -75,6 +102,7 @@ class SpeechTranscriber {
                         result,
                         audioFile: audioFile,
                         startTime: startTime,
+                        progressReporter: progressReporter,
                         progressCallback: progressCallback,
                         segments: &segments,
                         finalText: &finalTranscriptionText,
@@ -90,6 +118,7 @@ class SpeechTranscriber {
         _ result: SFSpeechRecognitionResult,
         audioFile: AudioFile,
         startTime: Date,
+        progressReporter: EnhancedProgressReporter,
         progressCallback: ProgressCallback?,
         segments: inout [TranscriptionSegment],
         finalText: inout String,
@@ -112,33 +141,23 @@ class SpeechTranscriber {
         let estimatedTotalSegments = estimateSegmentCount(for: audioFile.format.duration)
         let audioProcessed = calculateAudioProcessed(from: result.bestTranscription.segments)
         
-        // Create detailed progress report
-        let progress = result.isFinal ? 1.0 : min(0.95, Double(currentSegmentCount) / Double(estimatedTotalSegments))
+        // Update progress with enhanced metrics
+        let lastSegmentText = result.bestTranscription.segments.last?.substring
+        progressReporter.updateProgress(
+            segmentIndex: currentSegmentCount,
+            totalSegments: estimatedTotalSegments,
+            segmentText: lastSegmentText,
+            segmentConfidence: confidence,
+            audioTimeProcessed: audioProcessed
+        )
         
-        let status: String
-        if result.isFinal {
-            status = "Transcription complete - \(currentSegmentCount) segments processed"
-        } else if let lastSegment = result.bestTranscription.segments.last {
-            let segmentText = String(lastSegment.substring.prefix(30))
-            status = "Processing segment \(currentSegmentCount)/~\(estimatedTotalSegments): \"\(segmentText)\(lastSegment.substring.count > 30 ? "..." : "")\""
-        } else {
-            status = "Processing audio segments..."
+        if let callback = progressCallback {
+            callback(progressReporter.generateDetailedProgressReport())
         }
-        
-        // Calculate processing speed (audio seconds per real-time second)
-        let elapsedTime = Date().timeIntervalSince(startTime)
-        let processingSpeed = elapsedTime > 0 ? audioProcessed / elapsedTime : nil
-        
-        progressCallback?(ProgressReport(
-            progress: progress,
-            status: status,
-            phase: result.isFinal ? .complete : .extracting,
-            startTime: startTime,
-            processingSpeed: processingSpeed
-        ))
         
         // Log detailed progress for verbose mode
         if !result.isFinal {
+            let progress = Double(currentSegmentCount) / Double(estimatedTotalSegments)
             Logger.shared.debug("Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed", component: "SpeechTranscriber")
         }
         
