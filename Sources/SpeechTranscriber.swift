@@ -260,7 +260,8 @@ extension SpeechTranscriber {
     private func attemptTranscriptionWithLanguages(audioFile: AudioFile, languages: [String], progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
         var lastError: Error?
         var bestResult: TranscriptionResult?
-        let confidenceThreshold: Double = 0.3
+        let confidenceManager = ConfidenceManager()
+        _ = ConfidenceConfig.default
         
         // Try each language in order
         for (index, languageCode) in languages.enumerated() {
@@ -279,9 +280,18 @@ extension SpeechTranscriber {
                 
                 Logger.shared.info("Transcription confidence for \(languageCode): \(String(format: "%.1f%%", result.confidence * 100))", component: "SpeechTranscriber")
                 
-                // If confidence is above threshold, return immediately
-                if result.confidence >= confidenceThreshold {
-                    Logger.shared.info("High confidence result achieved with \(languageCode)", component: "SpeechTranscriber")
+                // Use ConfidenceManager to assess quality
+                let qualityAssessment = confidenceManager.assessQuality(result: result)
+                
+                // Log quality assessment
+                Logger.shared.info("Quality level: \(qualityAssessment.qualityLevel.rawValue)", component: "SpeechTranscriber")
+                if !qualityAssessment.lowConfidenceSegments.isEmpty {
+                    Logger.shared.warn("Found \(qualityAssessment.lowConfidenceSegments.count) low-confidence segments", component: "SpeechTranscriber")
+                }
+                
+                // If confidence meets quality standards, return immediately
+                if confidenceManager.meetsQualityStandards(result: result) {
+                    Logger.shared.info("High quality result achieved with \(languageCode)", component: "SpeechTranscriber")
                     return result
                 }
                 
@@ -297,12 +307,20 @@ extension SpeechTranscriber {
             }
         }
         
-        // Return the best result we got, even if confidence is low
+        // Return the best result we got, with quality assessment warnings
         if let result = bestResult {
-            let confidence = result.confidence * 100
-            if confidence < confidenceThreshold * 100 {
-                Logger.shared.warn("Low confidence transcription result: \(String(format: "%.1f%%", confidence))", component: "SpeechTranscriber")
+            let qualityAssessment = confidenceManager.assessQuality(result: result)
+            
+            // Log quality warnings
+            for warning in qualityAssessment.warnings {
+                Logger.shared.warn(warning, component: "SpeechTranscriber")
             }
+            
+            // Log fallback recommendation
+            if qualityAssessment.shouldUseFallback {
+                Logger.shared.warn("Transcription quality is low - consider using cloud fallback services", component: "SpeechTranscriber")
+            }
+            
             return result
         }
         // If we got here, all languages failed
