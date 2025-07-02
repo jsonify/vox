@@ -145,8 +145,8 @@ final class FFmpegProcessorTests: XCTestCase {
         
         processor.extractAudio(from: testInputFile.path, progressCallback: { progress in
             progressCalled = true
-            XCTAssertGreaterThanOrEqual(progress, 0.0, "Progress should be >= 0")
-            XCTAssertLessThanOrEqual(progress, 1.0, "Progress should be <= 1")
+            XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0, "Progress should be >= 0")
+            XCTAssertLessThanOrEqual(progress.currentProgress, 1.0, "Progress should be <= 1")
         }) { result in
             // We don't care about success/failure here, just that the callback mechanism works
             expectation.fulfill()
