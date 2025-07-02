@@ -32,6 +32,108 @@ struct AudioFormat {
     let channels: Int
     let bitRate: Int?
     let duration: TimeInterval
+    let fileSize: UInt64?
+    let isValid: Bool
+    let validationError: String?
+    let quality: AudioQuality
+    
+    init(codec: String, 
+         sampleRate: Int, 
+         channels: Int, 
+         bitRate: Int?, 
+         duration: TimeInterval,
+         fileSize: UInt64? = nil,
+         isValid: Bool = true,
+         validationError: String? = nil) {
+        self.codec = codec
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bitRate = bitRate
+        self.duration = duration
+        self.fileSize = fileSize
+        self.isValid = isValid
+        self.validationError = validationError
+        self.quality = AudioQuality.determine(from: sampleRate, bitRate: bitRate, channels: channels)
+    }
+    
+    var isCompatible: Bool {
+        return AudioFormatValidator.isSupported(codec: codec, sampleRate: sampleRate, channels: channels)
+    }
+    
+    var description: String {
+        let sizeStr = fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "unknown"
+        let bitRateStr = bitRate.map { "\($0/1000) kbps" } ?? "unknown"
+        return "\(codec.uppercased()) - \(sampleRate)Hz, \(channels)ch, \(bitRateStr), \(String(format: "%.1f", duration))s, \(sizeStr)"
+    }
+}
+
+enum AudioQuality: String, CaseIterable {
+    case low = "low"
+    case medium = "medium" 
+    case high = "high"
+    case lossless = "lossless"
+    
+    static func determine(from sampleRate: Int, bitRate: Int?, channels: Int) -> AudioQuality {
+        guard let bitRate = bitRate else { return .medium }
+        
+        let effectiveBitRate = bitRate / max(channels, 1)
+        
+        if sampleRate >= 96000 && effectiveBitRate >= 256000 {
+            return .lossless
+        } else if sampleRate >= 44100 && effectiveBitRate >= 128000 {
+            return .high
+        } else if sampleRate >= 22050 && effectiveBitRate >= 64000 {
+            return .medium
+        } else {
+            return .low
+        }
+    }
+}
+
+struct AudioFormatValidator {
+    private static let supportedCodecs: Set<String> = ["aac", "m4a", "mp4", "wav", "flac", "mp3"]
+    private static let supportedSampleRates: Set<Int> = [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000]
+    private static let supportedChannelCounts: Set<Int> = [1, 2, 4, 6, 8]
+    
+    static func isSupported(codec: String, sampleRate: Int, channels: Int) -> Bool {
+        return supportedCodecs.contains(codec.lowercased()) &&
+               supportedSampleRates.contains(sampleRate) &&
+               supportedChannelCounts.contains(channels)
+    }
+    
+    static func validate(codec: String, sampleRate: Int, channels: Int, bitRate: Int?) -> (isValid: Bool, error: String?) {
+        if !supportedCodecs.contains(codec.lowercased()) {
+            return (false, "Unsupported codec: \(codec). Supported codecs: \(supportedCodecs.sorted().joined(separator: ", "))")
+        }
+        
+        if !supportedSampleRates.contains(sampleRate) {
+            return (false, "Unsupported sample rate: \(sampleRate)Hz. Supported rates: \(supportedSampleRates.sorted().map { "\($0)Hz" }.joined(separator: ", "))")
+        }
+        
+        if !supportedChannelCounts.contains(channels) {
+            return (false, "Unsupported channel count: \(channels). Supported counts: \(supportedChannelCounts.sorted().map(String.init).joined(separator: ", "))")
+        }
+        
+        if let bitRate = bitRate, bitRate < 1000 {
+            return (false, "Bitrate too low: \(bitRate) bps. Minimum: 1000 bps")
+        }
+        
+        if let bitRate = bitRate, bitRate > 2000000 {
+            return (false, "Bitrate too high: \(bitRate) bps. Maximum: 2000000 bps")
+        }
+        
+        return (true, nil)
+    }
+    
+    static func calculateQualityScore(sampleRate: Int, bitRate: Int?, channels: Int) -> Double {
+        guard let bitRate = bitRate else { return 0.5 }
+        
+        let normalizedSampleRate = Double(sampleRate) / 192000.0
+        let normalizedBitRate = Double(bitRate) / 1000000.0
+        let channelBonus = channels > 2 ? 0.1 : 0.0
+        
+        return min(1.0, normalizedSampleRate * 0.4 + normalizedBitRate * 0.5 + channelBonus)
+    }
 }
 
 struct AudioFile {
@@ -47,6 +149,8 @@ enum VoxError: Error, LocalizedError {
     case outputWriteFailed(String)
     case apiKeyMissing(String)
     case unsupportedFormat(String)
+    case audioFormatValidationFailed(String)
+    case incompatibleAudioProperties(String)
     
     var errorDescription: String? {
         switch self {
@@ -62,6 +166,10 @@ enum VoxError: Error, LocalizedError {
             return "API key missing for \(service)"
         case .unsupportedFormat(let format):
             return "Unsupported format: \(format)"
+        case .audioFormatValidationFailed(let details):
+            return "Audio format validation failed: \(details)"
+        case .incompatibleAudioProperties(let details):
+            return "Incompatible audio properties: \(details)"
         }
     }
     
@@ -73,7 +181,7 @@ enum VoxError: Error, LocalizedError {
         switch self {
         case .invalidInputFile, .unsupportedFormat:
             return "FileProcessor"
-        case .audioExtractionFailed:
+        case .audioExtractionFailed, .audioFormatValidationFailed, .incompatibleAudioProperties:
             return "AudioProcessor"
         case .transcriptionFailed:
             return "Transcription"
