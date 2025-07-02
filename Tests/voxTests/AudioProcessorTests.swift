@@ -249,7 +249,13 @@ final class AudioProcessorTests: XCTestCase {
                         XCTFail("Should not succeed with invalid path: \(path)")
                     }
                 case .failure(let error):
-                    XCTAssertTrue(error is VoxError)
+                    switch error {
+                    case .invalidInputFile, .unsupportedFormat:
+                        // These are the expected error types for invalid paths
+                        break
+                    default:
+                        XCTFail("Expected invalidInputFile or unsupportedFormat error for invalid path, got \(error)")
+                    }
                 }
                 group.leave()
             }
