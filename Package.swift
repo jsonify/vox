@@ -20,7 +20,10 @@ let package = Package(
         ),
         .testTarget(
             name: "voxTests",
-            dependencies: ["vox"]
+            dependencies: ["vox"],
+            resources: [
+                .copy("Resources")
+            ]
         )
     ]
 )
