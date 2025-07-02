@@ -110,6 +110,8 @@ enum VoxError: Error, LocalizedError {
     case unsupportedFormat(String)
     case audioFormatValidationFailed(String)
     case incompatibleAudioProperties(String)
+    case temporaryFileCreationFailed(String)
+    case temporaryFileCleanupFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -129,6 +131,10 @@ enum VoxError: Error, LocalizedError {
             return "Audio format validation failed: \(details)"
         case .incompatibleAudioProperties(let details):
             return "Incompatible audio properties: \(details)"
+        case .temporaryFileCreationFailed(let reason):
+            return "Failed to create temporary file: \(reason)"
+        case .temporaryFileCleanupFailed(let reason):
+            return "Failed to cleanup temporary file: \(reason)"
         }
     }
     
@@ -148,6 +154,8 @@ enum VoxError: Error, LocalizedError {
             return "OutputWriter"
         case .apiKeyMissing:
             return "API"
+        case .temporaryFileCreationFailed, .temporaryFileCleanupFailed:
+            return "TempFileManager"
         }
     }
 }
