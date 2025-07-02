@@ -2,10 +2,10 @@ import Foundation
 
 class FFmpegProcessor {
     
-    typealias ProgressCallback = (Double) -> Void
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
     
     private let logger = Logger.shared
+    private var processingStartTime: Date?
     /// Check if ffmpeg is available on the system
     static func isFFmpegAvailable() -> Bool {
         return FFmpegUtilities.isFFmpegAvailable()
@@ -20,7 +20,12 @@ class FFmpegProcessor {
                      progressCallback: ProgressCallback? = nil,
                      completion: @escaping CompletionCallback) {
         
+        processingStartTime = Date()
+        
         logger.info("Starting ffmpeg audio extraction from: \(inputPath)", component: "FFmpegProcessor")
+        
+        // Report initialization phase
+        reportProgress(0.0, phase: .initializing, callback: progressCallback)
         
         guard FileManager.default.fileExists(atPath: inputPath) else {
             let error = VoxError.invalidInputFile("File does not exist: \(inputPath)")
@@ -28,6 +33,9 @@ class FFmpegProcessor {
             completion(.failure(error))
             return
         }
+        
+        // Report analyzing phase
+        reportProgress(0.05, phase: .analyzing, callback: progressCallback)
         
         guard Self.isFFmpegAvailable() else {
             let error = VoxError.audioExtractionFailed("ffmpeg is not available on this system")
@@ -50,6 +58,9 @@ class FFmpegProcessor {
             return
         }
         
+        // Report extracting phase
+        reportProgress(0.1, phase: .extracting, callback: progressCallback)
+        
         // Extract audio using ffmpeg
         extractAudioUsingFFmpeg(
             ffmpegPath: ffmpegPath,
@@ -59,11 +70,18 @@ class FFmpegProcessor {
         ) { [weak self] result in
             switch result {
             case .success(let audioFormat):
+                // Report finalizing phase
+                self?.reportProgress(0.95, phase: .finalizing, callback: progressCallback)
+                
                 let audioFile = AudioFile(
                     path: inputPath,
                     format: audioFormat,
                     temporaryPath: tempOutputURL.path
                 )
+                
+                // Report completion
+                self?.reportProgress(1.0, phase: .complete, callback: progressCallback)
+                
                 self?.logger.info("FFmpeg audio extraction completed successfully", component: "FFmpegProcessor")
                 completion(.success(audioFile))
                 
@@ -104,6 +122,7 @@ class FFmpegProcessor {
             
             var duration: TimeInterval = 0
             var progressTimer: Timer?
+            var lastProgress: Double = 0.1
             
             // Parse stderr for progress information
             errorPipe.fileHandleForReading.readabilityHandler = { fileHandle in
@@ -114,10 +133,14 @@ class FFmpegProcessor {
                         duration = self?.parseDuration(from: output) ?? 0
                     }
                     
-                    // Parse progress
-                    if let progress = self?.parseProgress(from: output, totalDuration: duration) {
-                        DispatchQueue.main.async {
-                            progressCallback?(progress)
+                    // Parse progress and map to our range (0.1 to 0.9)
+                    if let rawProgress = self?.parseProgress(from: output, totalDuration: duration) {
+                        let adjustedProgress = 0.1 + (rawProgress * 0.8)
+                        if adjustedProgress > lastProgress {
+                            lastProgress = adjustedProgress
+                            DispatchQueue.main.async {
+                                self?.reportProgress(adjustedProgress, phase: .extracting, callback: progressCallback)
+                            }
                         }
                     }
                 }
@@ -128,13 +151,17 @@ class FFmpegProcessor {
                 
                 // Start a backup progress timer in case progress parsing fails
                 if progressCallback != nil {
+                    let processStartTime = Date()
                     progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
                         if process.isRunning {
                             // Estimated progress based on file processing (fallback)
-                            let elapsed = Date().timeIntervalSince(Date())
-                            let estimatedProgress = min(elapsed / max(duration, 60), 0.9) // Cap at 90%
-                            DispatchQueue.main.async {
-                                progressCallback?(estimatedProgress)
+                            let elapsed = Date().timeIntervalSince(processStartTime)
+                            let estimatedProgress = min(0.1 + (elapsed / max(duration, 60)) * 0.8, 0.9)
+                            if estimatedProgress > lastProgress {
+                                lastProgress = estimatedProgress
+                                DispatchQueue.main.async {
+                                    self?.reportProgress(estimatedProgress, phase: .extracting, callback: progressCallback)
+                                }
                             }
                         }
                     }
@@ -144,9 +171,10 @@ class FFmpegProcessor {
                 progressTimer?.invalidate()
                 
                 DispatchQueue.main.async {
-                    progressCallback?(1.0) // Complete
-                    
                     if process.terminationStatus == 0 {
+                        // Report validating phase
+                        self?.reportProgress(0.9, phase: .validating, callback: progressCallback)
+                        
                         // Extraction successful, now get audio format info
                         self?.getAudioFormat(
                             ffmpegPath: ffmpegPath,
@@ -263,5 +291,22 @@ class FFmpegProcessor {
             let tempURL = URL(fileURLWithPath: tempPath)
             cleanupTemporaryFile(at: tempURL)
         }
+    }
+    
+    private func reportProgress(_ progress: Double, phase: ProcessingPhase, callback: ProgressCallback?) {
+        guard let startTime = processingStartTime else { return }
+        
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let processingSpeed = elapsedTime > 0 ? progress / elapsedTime : nil
+        
+        let progressReport = ProgressReport(
+            progress: progress,
+            status: phase.statusMessage,
+            phase: phase,
+            startTime: startTime,
+            processingSpeed: processingSpeed
+        )
+        
+        callback?(progressReport)
     }
 }

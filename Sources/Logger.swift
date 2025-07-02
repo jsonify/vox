@@ -138,4 +138,66 @@ public extension Logger {
     func logError(_ error: Error, component: String? = nil) {
         self.error("Error: \(error.localizedDescription)", component: component)
     }
+    
+    // MARK: - Progress Logging
+    
+    internal func logProgress(_ progress: ProgressReport, component: String? = nil) {
+        let componentName = component ?? "Progress"
+        
+        if isVerbose {
+            let timeInfo = if progress.estimatedTimeRemaining != nil {
+                " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
+            } else {
+                " (elapsed: \(progress.formattedElapsedTime))"
+            }
+            
+            let speedInfo = if let speed = progress.processingSpeed {
+                " [speed: \(String(format: "%.2f", speed * 100))/s]"
+            } else {
+                ""
+            }
+            
+            debug("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)", component: componentName)
+        } else {
+            debug("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress)", component: componentName)
+        }
+    }
+    
+    internal func logProgressPhase(_ phase: ProcessingPhase, component: String? = nil) {
+        let componentName = component ?? "Progress"
+        info("Phase: \(phase.statusMessage)", component: componentName)
+    }
+    
+    func logProgressUpdate(_ progress: Double, status: String, component: String? = nil) {
+        let componentName = component ?? "Progress"
+        let formattedProgress = String(format: "%.1f%%", progress * 100)
+        debug("Progress: \(formattedProgress) - \(status)", component: componentName)
+    }
+    
+    func logProgressTime(elapsed: TimeInterval, estimated: TimeInterval?, component: String? = nil) {
+        let componentName = component ?? "Progress"
+        
+        let elapsedFormatted = formatTimeInterval(elapsed)
+        
+        if let estimated = estimated {
+            let estimatedFormatted = formatTimeInterval(estimated)
+            debug("Time: elapsed \(elapsedFormatted), ETA \(estimatedFormatted)", component: componentName)
+        } else {
+            debug("Time: elapsed \(elapsedFormatted)", component: componentName)
+        }
+    }
+    
+    private func formatTimeInterval(_ timeInterval: TimeInterval) -> String {
+        if timeInterval < 60 {
+            return String(format: "%.1fs", timeInterval)
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            let seconds = Int(timeInterval.truncatingRemainder(dividingBy: 60))
+            return String(format: "%dm %ds", minutes, seconds)
+        } else {
+            let hours = Int(timeInterval / 3600)
+            let minutes = Int((timeInterval.truncatingRemainder(dividingBy: 3600)) / 60)
+            return String(format: "%dh %dm", hours, minutes)
+        }
+    }
 }

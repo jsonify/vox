@@ -206,8 +206,8 @@ final class AudioProcessorTests: XCTestCase {
             from: nonexistentPath,
             progressCallback: { progress in
                 progressCallbackInvoked = true
-                XCTAssertGreaterThanOrEqual(progress, 0.0)
-                XCTAssertLessThanOrEqual(progress, 1.0)
+                XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0)
+                XCTAssertLessThanOrEqual(progress.currentProgress, 1.0)
             }
         ) { result in
             switch result {
@@ -282,7 +282,7 @@ final class AudioProcessorTests: XCTestCase {
         
         // Force deallocation
         autoreleasepool {
-            let newProcessor = AudioProcessor()
+            let _ = AudioProcessor()
             let tempURL = TempFileManager.shared.createTemporaryAudioFile()
             XCTAssertNotNil(tempURL)
             if let url = tempURL {
