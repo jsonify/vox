@@ -363,3 +363,182 @@ enum ProcessingPhase: String, CaseIterable {
 }
 
 typealias ProgressCallback = (ProgressReport) -> Void
+
+// MARK: - Enhanced Progress Reporting
+
+protocol TranscriptionProgressReporting {
+    var currentSegmentIndex: Int { get }
+    var totalSegments: Int { get }
+    var currentSegmentText: String? { get }
+    var memoryUsage: MemoryUsage { get }
+    var processingStats: ProcessingStats { get }
+}
+
+struct MemoryUsage {
+    let currentBytes: UInt64
+    let peakBytes: UInt64
+    let availableBytes: UInt64
+    
+    var currentMB: Double {
+        return Double(currentBytes) / (1024 * 1024)
+    }
+    
+    var peakMB: Double {
+        return Double(peakBytes) / (1024 * 1024)
+    }
+    
+    var availableMB: Double {
+        return Double(availableBytes) / (1024 * 1024)
+    }
+    
+    var usagePercentage: Double {
+        let totalSystemMemory = ProcessInfo.processInfo.physicalMemory
+        Logger.shared.debug("Memory Usage Calculation:", component: "MemoryMonitor")
+        Logger.shared.debug("- Total System Memory: \(ByteCountFormatter.string(fromByteCount: Int64(totalSystemMemory), countStyle: .memory))", component: "MemoryMonitor")
+        Logger.shared.debug("- Current Usage: \(ByteCountFormatter.string(fromByteCount: Int64(currentBytes), countStyle: .memory))", component: "MemoryMonitor")
+        Logger.shared.debug("- Available: \(ByteCountFormatter.string(fromByteCount: Int64(availableBytes), countStyle: .memory))", component: "MemoryMonitor")
+        
+        guard totalSystemMemory > 0 else {
+            Logger.shared.error("Invalid total system memory", component: "MemoryMonitor")
+            return 0.0
+        }
+        
+        let percentage = (Double(currentBytes) / Double(totalSystemMemory)) * 100.0
+        Logger.shared.debug("- Usage Percentage: \(String(format: "%.1f%%", percentage))", component: "MemoryMonitor")
+        return percentage
+    }
+}
+
+struct ProcessingStats {
+    let segmentsProcessed: Int
+    let wordsProcessed: Int
+    let averageConfidence: Double
+    let processingRate: Double // segments per second
+    let audioProcessed: TimeInterval // seconds of audio processed
+    let audioRemaining: TimeInterval // seconds of audio remaining
+    
+    var estimatedCompletion: TimeInterval? {
+        return processingRate > 0 ? audioRemaining / processingRate : nil
+    }
+    
+    var formattedProcessingRate: String {
+        return String(format: "%.1fx", processingRate)
+    }
+}
+
+class EnhancedProgressReporter: TranscriptionProgressReporting {
+    private(set) var currentSegmentIndex: Int = 0
+    private(set) var totalSegments: Int = 0
+    private(set) var currentSegmentText: String?
+    private(set) var memoryUsage: MemoryUsage
+    private(set) var processingStats: ProcessingStats
+    
+    private let startTime: Date
+    private let totalAudioDuration: TimeInterval
+    private var segmentStartTimes: [Date] = []
+    private var confidenceValues: [Double] = []
+    private let memoryMonitor: MemoryMonitor
+    
+    init(totalAudioDuration: TimeInterval) {
+        self.startTime = Date()
+        self.totalAudioDuration = totalAudioDuration
+        self.memoryMonitor = MemoryMonitor()
+        self.memoryUsage = memoryMonitor.getCurrentUsage()
+        self.processingStats = ProcessingStats(
+            segmentsProcessed: 0,
+            wordsProcessed: 0,
+            averageConfidence: 0.0,
+            processingRate: 0.0,
+            audioProcessed: 0.0,
+            audioRemaining: totalAudioDuration
+        )
+    }
+    
+    func updateProgress(segmentIndex: Int, 
+                       totalSegments: Int, 
+                       segmentText: String?, 
+                       segmentConfidence: Double,
+                       audioTimeProcessed: TimeInterval) {
+        self.currentSegmentIndex = segmentIndex
+        self.totalSegments = totalSegments
+        self.currentSegmentText = segmentText
+        
+        // Update memory usage
+        self.memoryUsage = memoryMonitor.getCurrentUsage()
+        
+        // Track confidence values
+        confidenceValues.append(segmentConfidence)
+        
+        // Calculate processing stats
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let processingRate = elapsedTime > 0 ? audioTimeProcessed / elapsedTime : 0
+        let averageConfidence = confidenceValues.isEmpty ? 0 : confidenceValues.reduce(0, +) / Double(confidenceValues.count)
+        let wordsProcessed = segmentText?.split(separator: " ").count ?? 0
+        
+        self.processingStats = ProcessingStats(
+            segmentsProcessed: segmentIndex + 1,
+            wordsProcessed: self.processingStats.wordsProcessed + wordsProcessed,
+            averageConfidence: averageConfidence,
+            processingRate: processingRate,
+            audioProcessed: audioTimeProcessed,
+            audioRemaining: max(0, totalAudioDuration - audioTimeProcessed)
+        )
+    }
+    
+    func generateDetailedProgressReport() -> ProgressReport {
+        let progress = totalSegments > 0 ? Double(currentSegmentIndex) / Double(totalSegments) : 0.0
+        
+        let status: String
+        if let text = currentSegmentText {
+            status = "Processing: \"\(String(text.prefix(30)))\(text.count > 30 ? "..." : "")\""
+        } else {
+            status = "Processing audio segment \(currentSegmentIndex + 1)/\(totalSegments)"
+        }
+        
+        return ProgressReport(
+            progress: progress,
+            status: status,
+            phase: .extracting,
+            startTime: startTime,
+            processingSpeed: processingStats.processingRate
+        )
+    }
+}
+
+class MemoryMonitor {
+    func getCurrentUsage() -> MemoryUsage {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        
+        let currentBytes = result == KERN_SUCCESS ? UInt64(info.resident_size) : 0
+        
+        // Get system memory info
+        var systemInfo = vm_statistics64()
+        var systemCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+        
+        let systemResult = withUnsafeMutablePointer(to: &systemInfo) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &systemCount)
+            }
+        }
+        
+        let pageSize = UInt64(vm_page_size)
+        let availableBytes = systemResult == KERN_SUCCESS ? 
+            UInt64(systemInfo.free_count + systemInfo.inactive_count) * pageSize : 0
+        
+        // Track peak usage (simplified - in real implementation would need persistent tracking)
+        let peakBytes = currentBytes
+        
+        return MemoryUsage(
+            currentBytes: currentBytes,
+            peakBytes: peakBytes,
+            availableBytes: availableBytes
+        )
+    }
+}
