@@ -103,16 +103,8 @@ class SpeechTranscriber {
         }
         confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
         
-        // Convert SFTranscriptionSegment to TranscriptionSegment
-        segments = result.bestTranscription.segments.map { segment in
-            TranscriptionSegment(
-                text: segment.substring,
-                startTime: segment.timestamp,
-                endTime: segment.timestamp + segment.duration,
-                confidence: Double(segment.confidence),
-                speakerID: nil // Apple Speech framework doesn't provide speaker ID
-            )
-        }
+        // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
+        segments = createEnhancedSegments(from: result.bestTranscription.segments)
         
         // Update progress
         let progress = result.isFinal ? 1.0 : 0.8
@@ -154,6 +146,118 @@ class SpeechTranscriber {
     }
     
     // MARK: - Private Methods
+    
+    private func createEnhancedSegments(from sfSegments: [SFTranscriptionSegment]) -> [TranscriptionSegment] {
+        var enhancedSegments: [TranscriptionSegment] = []
+        var previousEndTime: TimeInterval = 0.0
+        
+        for (index, segment) in sfSegments.enumerated() {
+            let startTime = segment.timestamp
+            let endTime = segment.timestamp + segment.duration
+            let text = segment.substring
+            let confidence = Double(segment.confidence)
+            
+            // Detect pause/silence before this segment
+            let pauseDuration = index > 0 ? startTime - previousEndTime : nil
+            
+            // Determine segment type based on content and timing
+            let segmentType = determineSegmentType(
+                text: text,
+                pauseDuration: pauseDuration,
+                isFirstSegment: index == 0,
+                isLastSegment: index == sfSegments.count - 1,
+                previousText: index > 0 ? sfSegments[index - 1].substring : nil
+            )
+            
+            // Extract word-level timing if available
+            let wordTimings = extractWordTimings(from: segment)
+            
+            // Create enhanced segment
+            let enhancedSegment = TranscriptionSegment(
+                text: text,
+                startTime: startTime,
+                endTime: endTime,
+                confidence: confidence,
+                speakerID: detectSpeakerChange(at: index, in: sfSegments),
+                words: wordTimings,
+                segmentType: segmentType,
+                pauseDuration: pauseDuration
+            )
+            
+            enhancedSegments.append(enhancedSegment)
+            previousEndTime = endTime
+        }
+        
+        return enhancedSegments
+    }
+    
+    private func determineSegmentType(
+        text: String,
+        pauseDuration: TimeInterval?,
+        isFirstSegment: Bool,
+        isLastSegment: Bool,
+        previousText: String?
+    ) -> SegmentType {
+        // Check for silence gaps (pause > 2 seconds typically indicates speaker change or paragraph break)
+        if let pause = pauseDuration, pause > 2.0 {
+            return .speakerChange
+        }
+        
+        // Check for sentence boundaries
+        if text.hasSuffix(".") || text.hasSuffix("!") || text.hasSuffix("?") {
+            return .sentenceBoundary
+        }
+        
+        // Check for paragraph boundaries (long pause + sentence ending)
+        if let pause = pauseDuration, pause > 1.5,
+           let prevText = previousText,
+           (prevText.hasSuffix(".") || prevText.hasSuffix("!") || prevText.hasSuffix("?")) {
+            return .paragraphBoundary
+        }
+        
+        // Check for silence (empty or very short segments with low confidence)
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .silence
+        }
+        
+        return .speech
+    }
+    
+    private func extractWordTimings(from segment: SFTranscriptionSegment) -> [WordTiming]? {
+        // Apple's SFTranscriptionSegment represents word-level segments
+        // Each segment typically contains one word with timing information
+        let word = segment.substring.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !word.isEmpty else { return nil }
+        
+        let wordTiming = WordTiming(
+            word: word,
+            startTime: segment.timestamp,
+            endTime: segment.timestamp + segment.duration,
+            confidence: Double(segment.confidence)
+        )
+        
+        return [wordTiming]
+    }
+    
+    private func detectSpeakerChange(at index: Int, in segments: [SFTranscriptionSegment]) -> String? {
+        // Apple Speech framework doesn't provide speaker diarization
+        // This is a placeholder for future enhancement or integration with other services
+        // For now, we'll detect potential speaker changes based on significant pause patterns
+        
+        guard index > 0 else { return "Speaker1" }
+        
+        let currentSegment = segments[index]
+        let previousSegment = segments[index - 1]
+        let pauseDuration = currentSegment.timestamp - (previousSegment.timestamp + previousSegment.duration)
+        
+        // Simple heuristic: if there's a pause > 3 seconds, assume speaker change
+        if pauseDuration > 3.0 {
+            return "Speaker\((index % 4) + 1)" // Cycle through up to 4 speakers
+        }
+        
+        return "Speaker1" // Default to single speaker
+    }
     
     private func requestSpeechRecognitionPermission() throws {
         let semaphore = DispatchSemaphore(value: 0)

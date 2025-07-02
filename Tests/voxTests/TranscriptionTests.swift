@@ -128,5 +128,128 @@ final class TranscriptionTests: XCTestCase {
         
         XCTAssertEqual(segment.startTime, segment.endTime)
         XCTAssertEqual(segment.startTime, 5.0)
+        XCTAssertEqual(segment.duration, 0.0)
+    }
+    
+    // MARK: - Enhanced Timing Features Tests
+    
+    func testTranscriptionSegmentWithWordTimings() {
+        let wordTimings = [
+            WordTiming(word: "Hello", startTime: 0.0, endTime: 0.5, confidence: 0.9),
+            WordTiming(word: "world", startTime: 0.6, endTime: 1.2, confidence: 0.85)
+        ]
+        
+        let segment = TranscriptionSegment(
+            text: "Hello world",
+            startTime: 0.0,
+            endTime: 1.2,
+            confidence: 0.875,
+            speakerID: "Speaker1",
+            words: wordTimings,
+            segmentType: .speech
+        )
+        
+        XCTAssertEqual(segment.words?.count, 2)
+        XCTAssertEqual(segment.words?[0].word, "Hello")
+        XCTAssertEqual(segment.words?[0].duration, 0.5)
+        XCTAssertEqual(segment.words?[1].word, "world")
+        XCTAssertEqual(segment.words?[1].duration, 0.6)
+        XCTAssertEqual(segment.segmentType, .speech)
+    }
+    
+    func testTranscriptionSegmentWithSentenceBoundary() {
+        let segment = TranscriptionSegment(
+            text: "This is a complete sentence.",
+            startTime: 0.0,
+            endTime: 3.0,
+            confidence: 0.9,
+            segmentType: .sentenceBoundary
+        )
+        
+        XCTAssertTrue(segment.isSentenceBoundary)
+        XCTAssertEqual(segment.segmentType, .sentenceBoundary)
+    }
+    
+    func testTranscriptionSegmentWithSpeakerChange() {
+        let segment = TranscriptionSegment(
+            text: "Now a different person speaks",
+            startTime: 5.0,
+            endTime: 8.0,
+            confidence: 0.8,
+            speakerID: "Speaker2",
+            segmentType: .speakerChange,
+            pauseDuration: 2.5
+        )
+        
+        XCTAssertTrue(segment.hasSpeakerChange)
+        XCTAssertEqual(segment.speakerID, "Speaker2")
+        XCTAssertEqual(segment.pauseDuration, 2.5)
+    }
+    
+    func testTranscriptionSegmentWithSilenceGap() {
+        let segment = TranscriptionSegment(
+            text: "",
+            startTime: 10.0,
+            endTime: 12.0,
+            confidence: 0.0,
+            segmentType: .silence,
+            pauseDuration: 2.0
+        )
+        
+        XCTAssertTrue(segment.hasSilenceGap)
+        XCTAssertEqual(segment.segmentType, .silence)
+    }
+    
+    func testTranscriptionSegmentParagraphBoundary() {
+        let segment = TranscriptionSegment(
+            text: "End of paragraph.",
+            startTime: 15.0,
+            endTime: 18.0,
+            confidence: 0.85,
+            segmentType: .paragraphBoundary,
+            pauseDuration: 1.8
+        )
+        
+        XCTAssertTrue(segment.isParagraphBoundary)
+        XCTAssertTrue(segment.isSentenceBoundary) // Should also be sentence boundary
+    }
+    
+    // MARK: - WordTiming Tests
+    
+    func testWordTimingCreation() {
+        let wordTiming = WordTiming(
+            word: "example",
+            startTime: 1.0,
+            endTime: 1.7,
+            confidence: 0.92
+        )
+        
+        XCTAssertEqual(wordTiming.word, "example")
+        XCTAssertEqual(wordTiming.startTime, 1.0)
+        XCTAssertEqual(wordTiming.endTime, 1.7)
+        XCTAssertEqual(wordTiming.duration, 0.7)
+        XCTAssertEqual(wordTiming.confidence, 0.92)
+    }
+    
+    // MARK: - SegmentType Tests
+    
+    func testSegmentTypeValues() {
+        XCTAssertEqual(SegmentType.speech.rawValue, "speech")
+        XCTAssertEqual(SegmentType.silence.rawValue, "silence")
+        XCTAssertEqual(SegmentType.sentenceBoundary.rawValue, "sentence_boundary")
+        XCTAssertEqual(SegmentType.paragraphBoundary.rawValue, "paragraph_boundary")
+        XCTAssertEqual(SegmentType.speakerChange.rawValue, "speaker_change")
+        XCTAssertEqual(SegmentType.backgroundNoise.rawValue, "background_noise")
+    }
+    
+    func testSegmentTypeAllCases() {
+        let allCases = SegmentType.allCases
+        XCTAssertEqual(allCases.count, 6)
+        XCTAssertTrue(allCases.contains(.speech))
+        XCTAssertTrue(allCases.contains(.silence))
+        XCTAssertTrue(allCases.contains(.sentenceBoundary))
+        XCTAssertTrue(allCases.contains(.paragraphBoundary))
+        XCTAssertTrue(allCases.contains(.speakerChange))
+        XCTAssertTrue(allCases.contains(.backgroundNoise))
     }
 }
