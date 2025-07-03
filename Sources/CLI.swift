@@ -43,6 +43,7 @@ struct Vox: ParsableCommand {
     
     private func configureLogging() {
         Logger.shared.configure(verbose: verbose)
+        
         Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
         Logger.shared.debug("Verbose logging enabled", component: "CLI")
         
