@@ -48,6 +48,25 @@ struct OutputFormatter {
         try content.write(toFile: path, atomically: true, encoding: .utf8)
     }
     
+    /// Format transcription result with custom JSON formatting options
+    func format(_ result: TranscriptionResult, as format: OutputFormat, jsonOptions: JSONFormatter.JSONFormattingOptions) throws -> String {
+        switch format {
+        case .txt:
+            return formatAsEnhancedText(result, options: .default)
+        case .srt:
+            return formatAsSRT(result)
+        case .json:
+            let jsonFormatter = JSONFormatter(options: jsonOptions)
+            return try jsonFormatter.formatAsJSON(result)
+        }
+    }
+    
+    /// Save transcription result with custom JSON formatting options
+    func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, jsonOptions: JSONFormatter.JSONFormattingOptions) throws {
+        let content = try self.format(result, as: format, jsonOptions: jsonOptions)
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+    
     private func formatAsSRT(_ result: TranscriptionResult) -> String {
         var srtContent = ""
         
@@ -73,12 +92,8 @@ struct OutputFormatter {
     }
     
     private func formatAsJSON(_ result: TranscriptionResult) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        encoder.dateEncodingStrategy = .iso8601
-        
-        let data = try encoder.encode(result)
-        return String(data: data, encoding: .utf8) ?? ""
+        let jsonFormatter = JSONFormatter()
+        return try jsonFormatter.formatAsJSON(result)
     }
     
     func formatTime(_ seconds: TimeInterval) -> String {
