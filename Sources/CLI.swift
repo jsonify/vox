@@ -125,7 +125,9 @@ struct Vox: ParsableCommand {
         let audioFile = try extractAudio()
         fputs("DEBUG: extractAudio() completed successfully\n", stderr)
         
+        fputs("DEBUG: About to call transcribeAudio()\n", stderr)
         let transcriptionResult = try transcribeAudio(audioFile)
+        fputs("DEBUG: transcribeAudio() completed successfully\n", stderr)
         displayResults(transcriptionResult)
         saveOutput(transcriptionResult)
         cleanup(audioFile)
@@ -156,12 +158,19 @@ struct Vox: ParsableCommand {
                                     }) { result in
             switch result {
             case .success(let audioFile):
-                Logger.shared.info("Audio extraction completed successfully", component: "CLI")
+                fputs("DEBUG: CLI extractAudio success callback received\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.info("Audio extraction completed successfully", component: "CLI")
+                fputs("DEBUG: About to call displayAudioExtractionSuccess\n", stderr)
                 self.displayAudioExtractionSuccess(audioFile)
+                fputs("DEBUG: displayAudioExtractionSuccess completed\n", stderr)
                 extractedAudioFile = audioFile
+                fputs("DEBUG: extractedAudioFile set, about to signal semaphore\n", stderr)
                 
             case .failure(let error):
-                Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
+                fputs("DEBUG: CLI extractAudio failure callback received\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
                 processingError = error
             }
             
@@ -198,6 +207,7 @@ struct Vox: ParsableCommand {
     }
     
     private func transcribeAudio(_ audioFile: AudioFile) throws -> TranscriptionResult {
+        fputs("DEBUG: In transcribeAudio(), about to create TranscriptionManager\n", stderr)
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
@@ -206,6 +216,7 @@ struct Vox: ParsableCommand {
             apiKey: apiKey,
             includeTimestamps: timestamps
         )
+        fputs("DEBUG: TranscriptionManager created, about to call transcribeAudio\n", stderr)
         
         return try transcriptionManager.transcribeAudio(audioFile: audioFile)
     }

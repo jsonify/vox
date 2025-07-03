@@ -19,14 +19,20 @@ struct TranscriptionManager {
     }
     
     func transcribeAudio(audioFile: AudioFile) throws -> TranscriptionResult {
+        fputs("DEBUG: In TranscriptionManager.transcribeAudio\n", stderr)
         print("Starting transcription...") // swiftlint:disable:this no_print
         
+        fputs("DEBUG: About to build language preferences\n", stderr)
         // Determine preferred languages based on user input and system preferences
         let preferredLanguages = buildLanguagePreferences()
+        fputs("DEBUG: Language preferences built\n", stderr)
         
-        Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "TranscriptionManager")
+        // TEMP DEBUG: Bypass Logger call
+        // Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "TranscriptionManager")
+        fputs("DEBUG: About to call transcribeAudioWithAsyncFunction\n", stderr)
         
         let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
+        fputs("DEBUG: transcribeAudioWithAsyncFunction completed\n", stderr)
         
         return transcriptionResult
     }
@@ -141,17 +147,23 @@ struct TranscriptionManager {
     }
     
     private func buildLanguagePreferences() -> [String] {
+        fputs("DEBUG: In buildLanguagePreferences\n", stderr)
         var languages: [String] = []
         
         // 1. User-specified language (highest priority)
         if let userLanguage = language {
             languages.append(userLanguage)
-            Logger.shared.info("Using user-specified language: \(userLanguage)", component: "TranscriptionManager")
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.info("Using user-specified language: \(userLanguage)", component: "TranscriptionManager")
+            fputs("DEBUG: Using user-specified language: \(userLanguage)\n", stderr)
         }
         
         // 2. System preferred languages
+        fputs("DEBUG: About to call getSystemPreferredLanguages\n", stderr)
         let systemLanguages = getSystemPreferredLanguages()
+        fputs("DEBUG: getSystemPreferredLanguages completed\n", stderr)
         languages.append(contentsOf: systemLanguages)
+        fputs("DEBUG: languages.append completed\n", stderr)
         
         // 3. Default fallback
         if !languages.contains("en-US") {
