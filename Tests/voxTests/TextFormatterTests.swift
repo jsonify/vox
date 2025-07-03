@@ -351,17 +351,25 @@ class TextFormatterTests: XCTestCase {
             lineWidth: 40
         )
         
-        let outputWithOptions = try! formatter.format(result, as: .txt, options: customOptions)
-        
-        // Should include timestamps, speaker IDs, and confidence scores
-        XCTAssertTrue(outputWithOptions.contains("[0.0s]"))
-        XCTAssertTrue(outputWithOptions.contains("Speaker1:"))
-        XCTAssertTrue(outputWithOptions.contains("[confidence: 30.0%]"))
+        do {
+            let outputWithOptions = try formatter.format(result, as: .txt, options: customOptions)
+            
+            // Should include timestamps, speaker IDs, and confidence scores
+            XCTAssertTrue(outputWithOptions.contains("[0.0s]"))
+            XCTAssertTrue(outputWithOptions.contains("Speaker1:"))
+            XCTAssertTrue(outputWithOptions.contains("[confidence: 30.0%]"))
+        } catch {
+            XCTFail("Failed to format with custom options: \(error)")
+        }
         
         // Test backward compatibility - default format should not include confidence scores
-        let defaultOutput = try! formatter.format(result, as: .txt, includeTimestamps: false)
-        XCTAssertFalse(defaultOutput.contains("[confidence:"))
-        XCTAssertTrue(defaultOutput.contains("Speaker1:"))
+        do {
+            let defaultOutput = try formatter.format(result, as: .txt, includeTimestamps: false)
+            XCTAssertFalse(defaultOutput.contains("[confidence:"))
+            XCTAssertTrue(defaultOutput.contains("Speaker1:"))
+        } catch {
+            XCTFail("Failed to format with default options: \(error)")
+        }
     }
     
     func testDetailedTextFormatting() {
