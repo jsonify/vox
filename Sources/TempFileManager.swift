@@ -10,7 +10,9 @@ class TempFileManager {
     private let queue = DispatchQueue(label: "com.vox.tempfilemanager", attributes: .concurrent)
     
     private init() {
-        setupCleanupOnExit()
+        // TEMP FIX: Disable cleanup handlers during static initialization
+        // TODO: Implement lazy cleanup handler setup on first use
+        // setupCleanupOnExit()
     }
     
     deinit {
