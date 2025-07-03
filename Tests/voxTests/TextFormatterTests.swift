@@ -306,6 +306,64 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(detailedOutput.contains("Segments: 0"))
     }
     
+    func testConfigurableOptionsInOutputFormatter() {
+        let segments = [
+            TranscriptionSegment(
+                text: "Hello world",
+                startTime: 0.0,
+                endTime: 1.0,
+                confidence: 0.3, // Low confidence
+                speakerID: "Speaker1",
+                words: nil,
+                segmentType: .speech,
+                pauseDuration: nil
+            )
+        ]
+        
+        let result = TranscriptionResult(
+            text: "Hello world",
+            language: "en-US",
+            confidence: 0.3,
+            duration: 1.0,
+            segments: segments,
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 16000,
+                channels: 1,
+                bitRate: 256000,
+                duration: 3.0
+            )
+        )
+        
+        let formatter = OutputFormatter()
+        
+        // Test with custom options that enable confidence scores and timestamps
+        let customOptions = TextFormattingOptions(
+            includeTimestamps: true,
+            includeSpeakerIDs: true,
+            includeConfidenceScores: true,
+            paragraphBreakThreshold: 2.0,
+            sentenceBreakThreshold: 0.8,
+            timestampFormat: .seconds,
+            confidenceThreshold: 0.5,
+            lineWidth: 40
+        )
+        
+        let outputWithOptions = try! formatter.format(result, as: .txt, options: customOptions)
+        
+        // Should include timestamps, speaker IDs, and confidence scores
+        XCTAssertTrue(outputWithOptions.contains("[0.0s]"))
+        XCTAssertTrue(outputWithOptions.contains("Speaker1:"))
+        XCTAssertTrue(outputWithOptions.contains("[confidence: 30.0%]"))
+        
+        // Test backward compatibility - default format should not include confidence scores
+        let defaultOutput = try! formatter.format(result, as: .txt, includeTimestamps: false)
+        XCTAssertFalse(defaultOutput.contains("[confidence:"))
+        XCTAssertTrue(defaultOutput.contains("Speaker1:"))
+    }
+    
     func testDetailedTextFormatting() {
         let segments = [
             TranscriptionSegment(
