@@ -145,7 +145,7 @@ public extension Logger {
     
     // MARK: - Progress Logging
     
-    internal func logProgress(_ progress: ProgressReport, component: String? = nil) {
+    internal func logProgress(_ progress: TranscriptionProgress, component: String? = nil) {
         let componentName = component ?? "Progress"
         
         if isVerbose {

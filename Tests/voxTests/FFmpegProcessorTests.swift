@@ -181,7 +181,7 @@ final class FFmpegProcessorTests: XCTestCase {
         }
         
         let expectation = XCTestExpectation(description: "FFmpeg audio extraction")
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         
         processor.extractAudio(
             from: testVideoURL.path,
@@ -300,7 +300,7 @@ final class FFmpegProcessorTests: XCTestCase {
         }
         
         let expectation = XCTestExpectation(description: "FFmpeg progress reporting")
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         let startTime = Date()
         
         processor.extractAudio(

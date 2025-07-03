@@ -169,7 +169,7 @@ final class SpeechTranscriberTests: XCTestCase {
             temporaryPath: nil
         )
         
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         
         // Test that progress callback is called
         do {
@@ -222,7 +222,7 @@ final class SpeechTranscriberTests: XCTestCase {
             temporaryPath: nil
         )
         
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         
         do {
             let result = try await speechTranscriber.transcribe(audioFile: audioFile) { progress in
