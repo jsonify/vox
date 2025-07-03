@@ -158,7 +158,10 @@ struct Vox: ParsableCommand {
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
-            language: language
+            language: language,
+            fallbackAPI: fallbackApi,
+            apiKey: apiKey,
+            includeTimestamps: timestamps
         )
         
         return try transcriptionManager.transcribeAudio(audioFile: audioFile)
