@@ -276,7 +276,7 @@ final class JSONFormatterTests: XCTestCase {
         // Should handle empty segments gracefully
         XCTAssertNotNil(parsedData)
         let segments = parsedData?["segments"] as? [[String: Any]]
-        XCTAssertEqual(segments?.count, 0)
+        XCTAssertTrue(segments?.isEmpty == true)
         
         let processingStats = parsedData?["processingStats"] as? [String: Any]
         XCTAssertEqual(processingStats?["totalSegments"] as? Int, 0)

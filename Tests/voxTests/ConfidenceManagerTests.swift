@@ -70,7 +70,7 @@ final class ConfidenceManagerTests: XCTestCase {
         let result = createMockTranscriptionResult(segments: [])
         let assessment = confidenceManager.assessQuality(result: result)
         
-        XCTAssertEqual(assessment.lowConfidenceSegments.count, 0)
+        XCTAssertTrue(assessment.lowConfidenceSegments.isEmpty)
         XCTAssertEqual(assessment.lowConfidencePercentage, 0.0)
     }
     
