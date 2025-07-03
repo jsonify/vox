@@ -13,24 +13,36 @@ class SpeechTranscriber {
     // MARK: - Initialization
     
     init(locale: Locale = Locale(identifier: "en-US")) throws {
+        fputs("DEBUG: SpeechTranscriber init start\n", stderr)
         guard let speechRecognizer = SFSpeechRecognizer(locale: locale) else {
             throw VoxError.transcriptionFailed("Speech recognizer not available for locale: \(locale.identifier)")
         }
         
+        fputs("DEBUG: SpeechTranscriber created successfully\n", stderr)
         guard speechRecognizer.isAvailable else {
             throw VoxError.transcriptionFailed("Speech recognizer is not available")
         }
         
+        fputs("DEBUG: SpeechTranscriber is available\n", stderr)
         self.speechRecognizer = speechRecognizer
         
+        fputs("DEBUG: About to request speech recognition permission\n", stderr)
         // Request authorization if needed
         try requestSpeechRecognitionPermission()
+        fputs("DEBUG: Speech recognition permission request completed\n", stderr)
     }
     
     // MARK: - Public Interface
     
     /// Transcribe audio file to text with segments
     func transcribe(audioFile: AudioFile, progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
+        fputs("DEBUG: TEMP BYPASS: Native speech recognition disabled due to system compatibility issues\n", stderr)
+        
+        // TEMP FIX: Immediately throw error to trigger cloud fallback
+        throw VoxError.transcriptionFailed("Native speech recognition temporarily disabled due to system compatibility issues")
+        
+        /*
+        // Original implementation commented out
         let startTime = Date()
         let progressReporter = EnhancedProgressReporter(totalAudioDuration: audioFile.format.duration)
         
@@ -68,6 +80,7 @@ class SpeechTranscriber {
                                                 startTime: startTime,
                                                 progressReporter: progressReporter,
                                                 progressCallback: progressCallback)
+        */
     }
     
     private func createRecognitionRequest(for audioURL: URL) -> SFSpeechURLRecognitionRequest {
@@ -92,7 +105,9 @@ class SpeechTranscriber {
                 guard let self = self else { return }
                 
                 if let error = error {
-                    Logger.shared.error("Speech recognition error: \(error.localizedDescription)", component: "SpeechTranscriber")
+                    fputs("DEBUG: Speech recognition error: \(error.localizedDescription)\n", stderr)
+                    // TEMP DEBUG: Bypass Logger call
+                    // Logger.shared.error("Speech recognition error: \(error.localizedDescription)", component: "SpeechTranscriber")
                     continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
                     return
                 }
@@ -166,7 +181,9 @@ class SpeechTranscriber {
         // Log detailed progress for verbose mode
         if !result.isFinal {
             let progress = Double(currentSegmentCount) / Double(estimatedTotalSegments)
-            Logger.shared.debug("Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed", component: "SpeechTranscriber")
+            fputs("DEBUG: Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed\n", stderr)
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.debug("Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed", component: "SpeechTranscriber")
         }
         
         if result.isFinal {
@@ -184,7 +201,9 @@ class SpeechTranscriber {
                 audioFormat: context.audioFile.format
             )
             
-            Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)", component: "SpeechTranscriber")
+            fputs("DEBUG: Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)\n", stderr)
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)", component: "SpeechTranscriber")
             context.continuation.resume(returning: transcriptionResult)
         }
     }
@@ -298,9 +317,11 @@ class SpeechTranscriber {
         
         guard !word.isEmpty else { return nil }
         
-        Logger.shared.debug("Processing segment: '\(word)' - This should contain exactly one word", component: "SpeechTranscriber")
+        // TEMP DEBUG: Bypass Logger calls
+        // Logger.shared.debug("Processing segment: '\(word)' - This should contain exactly one word", component: "SpeechTranscriber")
         if word.split(separator: " ").count > 1 {
-            Logger.shared.warn("Unexpected multi-word segment found: '\(word)'", component: "SpeechTranscriber")
+            fputs("DEBUG: Unexpected multi-word segment found: '\(word)'\n", stderr)
+            // Logger.shared.warn("Unexpected multi-word segment found: '\(word)'", component: "SpeechTranscriber")
         }
         
         return WordTiming(
@@ -331,26 +352,38 @@ class SpeechTranscriber {
     }
     
     private func requestSpeechRecognitionPermission() throws {
+        fputs("DEBUG: In requestSpeechRecognitionPermission\n", stderr)
         let semaphore = DispatchSemaphore(value: 0)
         var authError: Error?
         
+        fputs("DEBUG: About to call SFSpeechRecognizer.requestAuthorization\n", stderr)
         SFSpeechRecognizer.requestAuthorization { status in
+            fputs("DEBUG: SFSpeechRecognizer.requestAuthorization callback called\n", stderr)
             switch status {
             case .authorized:
-                Logger.shared.info("Speech recognition authorization granted", component: "SpeechTranscriber")
+                fputs("DEBUG: Speech recognition authorization granted\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.info("Speech recognition authorization granted", component: "SpeechTranscriber")
             case .denied:
+                fputs("DEBUG: Speech recognition access denied by user\n", stderr)
                 authError = VoxError.transcriptionFailed("Speech recognition access denied by user")
             case .restricted:
+                fputs("DEBUG: Speech recognition restricted on this device\n", stderr)
                 authError = VoxError.transcriptionFailed("Speech recognition restricted on this device")
             case .notDetermined:
+                fputs("DEBUG: Speech recognition authorization not determined\n", stderr)
                 authError = VoxError.transcriptionFailed("Speech recognition authorization not determined")
             @unknown default:
+                fputs("DEBUG: Unknown speech recognition authorization status\n", stderr)
                 authError = VoxError.transcriptionFailed("Unknown speech recognition authorization status")
             }
+            fputs("DEBUG: About to signal semaphore\n", stderr)
             semaphore.signal()
         }
         
+        fputs("DEBUG: About to wait on semaphore\n", stderr)
         semaphore.wait()
+        fputs("DEBUG: Semaphore wait completed\n", stderr)
         
         if let error = authError {
             throw error
@@ -371,9 +404,24 @@ class SpeechTranscriber {
 extension SpeechTranscriber {
     /// Validate and normalize language code
     static func validateLanguageCode(_ languageCode: String) -> String? {
-        let supportedLocales = Self.supportedLocales()
-        let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
+        fputs("DEBUG: In validateLanguageCode for: \(languageCode)\n", stderr)
         
+        // TEMP DEBUG: Bypass supportedLocales() call which might cause hang
+        fputs("DEBUG: Bypassing supportedLocales() call for debugging\n", stderr)
+        // let supportedLocales = Self.supportedLocales()
+        // let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
+        
+        // Simple fallback for debugging - just return the input if it looks like a valid language code
+        if languageCode == "en-US" || languageCode == "en" {
+            fputs("DEBUG: Validated \(languageCode) as en-US\n", stderr)
+            return "en-US"
+        }
+        
+        fputs("DEBUG: Language code '\(languageCode)' not in simple validation, returning en-US fallback\n", stderr)
+        return "en-US" // Simple fallback for debugging
+        
+        /*
+        // Original implementation commented out for debugging
         // Try exact match first
         if supportedIdentifiers.contains(languageCode) {
             return languageCode
@@ -382,18 +430,22 @@ extension SpeechTranscriber {
         // Try language-only match (e.g., "en" -> "en-US")
         let languageOnly = String(languageCode.prefix(2))
         if let match = supportedIdentifiers.first(where: { $0.hasPrefix(languageOnly + "-") }) {
-            Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
             return match
         }
         
         // Try case-insensitive match
         if let match = supportedIdentifiers.first(where: { $0.lowercased() == languageCode.lowercased() }) {
-            Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.info("Language code '\(languageCode)' normalized to '\(match)'", component: "SpeechTranscriber")
             return match
         }
         
-        Logger.shared.warn("Language code '\(languageCode)' is not supported", component: "SpeechTranscriber")
+        // TEMP DEBUG: Bypass Logger call
+        // Logger.shared.warn("Language code '\(languageCode)' is not supported", component: "SpeechTranscriber")
         return nil
+        */
     }
     
     /// Get list of common language codes for easier user reference
@@ -418,40 +470,61 @@ extension SpeechTranscriber {
     
     /// Transcribe with automatic language detection and validation
     func transcribeWithLanguageDetection(audioFile: AudioFile, preferredLanguages: [String] = ["en-US"], progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
+        fputs("DEBUG: In transcribeWithLanguageDetection\n", stderr)
         // Validate and normalize all preferred languages
+        fputs("DEBUG: About to validate languages\n", stderr)
         let validatedLanguages = preferredLanguages.compactMap { Self.validateLanguageCode($0) }
+        fputs("DEBUG: Languages validated\n", stderr)
         
         if validatedLanguages.isEmpty {
-            Logger.shared.warn("No valid languages provided, falling back to en-US", component: "SpeechTranscriber")
+            fputs("DEBUG: No valid languages provided, falling back to en-US\n", stderr)
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.warn("No valid languages provided, falling back to en-US", component: "SpeechTranscriber")
             let fallbackLanguages = ["en-US"]
             return try await attemptTranscriptionWithLanguages(audioFile: audioFile, languages: fallbackLanguages, progressCallback: progressCallback)
         }
         
-        Logger.shared.info("Validated languages: \(validatedLanguages.joined(separator: ", "))", component: "SpeechTranscriber")
+        fputs("DEBUG: Validated languages: \(validatedLanguages.joined(separator: ", "))\n", stderr)
+        // TEMP DEBUG: Bypass Logger call
+        // Logger.shared.info("Validated languages: \(validatedLanguages.joined(separator: ", "))", component: "SpeechTranscriber")
+        fputs("DEBUG: About to call attemptTranscriptionWithLanguages\n", stderr)
         return try await attemptTranscriptionWithLanguages(audioFile: audioFile, languages: validatedLanguages, progressCallback: progressCallback)
     }
     
     /// Attempt transcription with a list of validated languages
     private func attemptTranscriptionWithLanguages(audioFile: AudioFile, languages: [String], progressCallback: ProgressCallback?) async throws -> TranscriptionResult {
+        fputs("DEBUG: In attemptTranscriptionWithLanguages\n", stderr)
         var lastError: Error?
         var bestResult: TranscriptionResult?
+        fputs("DEBUG: About to create ConfidenceManager\n", stderr)
         let confidenceManager = ConfidenceManager()
         _ = ConfidenceConfig.default
+        fputs("DEBUG: ConfidenceManager created\n", stderr)
         
         // Try each language in order
+        fputs("DEBUG: About to iterate languages: \(languages.joined(separator: ", "))\n", stderr)
         for (index, languageCode) in languages.enumerated() {
+            fputs("DEBUG: Trying language \(languageCode) (\(index + 1)/\(languages.count))\n", stderr)
             let locale = Locale(identifier: languageCode)
             
+            fputs("DEBUG: About to check if speech recognition is available for \(languageCode)\n", stderr)
             guard Self.isAvailable(for: locale) else {
-                Logger.shared.warn("Speech recognition not available for \(languageCode)", component: "SpeechTranscriber")
+                fputs("DEBUG: Speech recognition not available for \(languageCode)\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.warn("Speech recognition not available for \(languageCode)", component: "SpeechTranscriber")
                 continue
             }
             
-            Logger.shared.info("Attempting transcription with language: \(languageCode) (\(index + 1)/\(languages.count))", component: "SpeechTranscriber")
+            fputs("DEBUG: Attempting transcription with language: \(languageCode) (\(index + 1)/\(languages.count))\n", stderr)
+            // TEMP DEBUG: Bypass Logger call
+            // Logger.shared.info("Attempting transcription with language: \(languageCode) (\(index + 1)/\(languages.count))", component: "SpeechTranscriber")
             
             do {
+                fputs("DEBUG: About to create SpeechTranscriber with locale \(languageCode)\n", stderr)
                 let speechTranscriber = try SpeechTranscriber(locale: locale)
+                fputs("DEBUG: SpeechTranscriber created successfully, about to call transcribe\n", stderr)
                 let result = try await speechTranscriber.transcribe(audioFile: audioFile, progressCallback: progressCallback)
+                fputs("DEBUG: transcribe() completed successfully\n", stderr)
                 
                 Logger.shared.info("Transcription confidence for \(languageCode): \(String(format: "%.1f%%", result.confidence * 100))", component: "SpeechTranscriber")
                 

@@ -10,7 +10,9 @@ class TempFileManager {
     private let queue = DispatchQueue(label: "com.vox.tempfilemanager", attributes: .concurrent)
     
     private init() {
-        setupCleanupOnExit()
+        // TEMP FIX: Disable cleanup handlers during static initialization
+        // TODO: Implement lazy cleanup handler setup on first use
+        // setupCleanupOnExit()
     }
     
     deinit {
@@ -90,26 +92,16 @@ class TempFileManager {
         let uniqueFileName = "\(prefix)\(UUID().uuidString).\(fileExtension)"
         let tempURL = tempDir.appendingPathComponent(uniqueFileName)
         
-        // Set secure permissions immediately after creation concept
-        do {
-            // Create empty file first
-            fileManager.createFile(atPath: tempURL.path, contents: nil, attributes: nil)
-            
-            // Set secure permissions (owner read/write only)
-            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempURL.path)
-            
-            // Register the file for cleanup tracking
-            managedFiles.insert(tempURL.path)
-            
-            logger.debug("Created secure temporary file: \(tempURL.path)", component: "TempFileManager")
-            return tempURL
-            
-        } catch {
-            logger.error("Failed to create secure temporary file: \(error.localizedDescription)", component: "TempFileManager")
-            // Attempt cleanup if file was partially created
-            try? fileManager.removeItem(at: tempURL)
-            return nil
-        }
+        // TEMP FIX: Don't pre-create file - let AVAssetExportSession create it
+        // AVAssetExportSession needs to create the output file itself
+        
+        // Register the file for cleanup tracking
+        managedFiles.insert(tempURL.path)
+        
+        // TEMP DEBUG: Bypass Logger call
+        // logger.debug("Created temporary file URL: \(tempURL.path)", component: "TempFileManager")
+        fputs("DEBUG: Created temporary file URL (not pre-created): \(tempURL.path)\n", stderr)
+        return tempURL
     }
     
     private func performCleanup(for filePath: String) -> Bool {

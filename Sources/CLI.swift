@@ -36,16 +36,47 @@ struct Vox: ParsableCommand {
     var timestamps = false
     
     func run() throws {
+        // TEMP DEBUG: Progressive debug to find crash point
+        fputs("DEBUG: Entered run() method\n", stderr)
+        fflush(stderr)
+        print("DEBUG: Entered run() method")
+        
+        fputs("DEBUG: About to call configureLogging()\n", stderr)
+        print("DEBUG: About to call configureLogging()")
         configureLogging()
+        fputs("DEBUG: configureLogging() completed\n", stderr)
+        print("DEBUG: configureLogging() completed")
+        
+        fputs("DEBUG: About to call displayStartupInfo()\n", stderr)
+        print("DEBUG: About to call displayStartupInfo()")
         displayStartupInfo()
+        fputs("DEBUG: displayStartupInfo() completed\n", stderr)
+        print("DEBUG: displayStartupInfo() completed")
+        
+        fputs("DEBUG: About to call processAudioFile()\n", stderr)
+        print("DEBUG: About to call processAudioFile()")
         try processAudioFile()
+        fputs("DEBUG: processAudioFile() completed\n", stderr)
+        print("DEBUG: processAudioFile() completed")
     }
     
     private func configureLogging() {
+        fputs("DEBUG: In configureLogging(), about to access Logger.shared\n", stderr)
+        print("DEBUG: In configureLogging(), about to access Logger.shared")
         Logger.shared.configure(verbose: verbose)
-        Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
-        Logger.shared.debug("Verbose logging enabled", component: "CLI")
+        fputs("DEBUG: Logger.shared.configure() completed\n", stderr)
+        print("DEBUG: Logger.shared.configure() completed")
         
+        fputs("DEBUG: About to call Logger.shared.info\n", stderr)
+        // TEMP DEBUG: Bypass Logger calls to isolate the issue
+        // Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
+        fputs("DEBUG: Logger.shared.info bypassed\n", stderr)
+        // Logger.shared.debug("Verbose logging enabled", component: "CLI")
+        fputs("DEBUG: Logger.shared.debug bypassed\n", stderr)
+        
+        // TEMP DEBUG: Bypass all Logger calls to isolate the issue
+        fputs("DEBUG: Bypassing all remaining Logger calls in configureLogging\n", stderr)
+        /*
         Logger.shared.info("Input file: \(inputFile)", component: "CLI")
         Logger.shared.info("Output format: \(format)", component: "CLI")
         
@@ -70,6 +101,7 @@ struct Vox: ParsableCommand {
         if timestamps {
             Logger.shared.info("Timestamps enabled", component: "CLI")
         }
+        */
     }
     
     private func displayStartupInfo() {
@@ -89,8 +121,13 @@ struct Vox: ParsableCommand {
     }
     
     private func processAudioFile() throws {
+        fputs("DEBUG: In processAudioFile(), about to call extractAudio()\n", stderr)
         let audioFile = try extractAudio()
+        fputs("DEBUG: extractAudio() completed successfully\n", stderr)
+        
+        fputs("DEBUG: About to call transcribeAudio()\n", stderr)
         let transcriptionResult = try transcribeAudio(audioFile)
+        fputs("DEBUG: transcribeAudio() completed successfully\n", stderr)
         displayResults(transcriptionResult)
         saveOutput(transcriptionResult)
         cleanup(audioFile)
@@ -99,13 +136,21 @@ struct Vox: ParsableCommand {
     }
     
     private func extractAudio() throws -> AudioFile {
+        fputs("DEBUG: In extractAudio(), about to create AudioProcessor\n", stderr)
         let audioProcessor = AudioProcessor()
+        fputs("DEBUG: AudioProcessor created successfully\n", stderr)
+        
+        fputs("DEBUG: About to create ProgressDisplayManager\n", stderr)
         let progressDisplay = ProgressDisplayManager(verbose: verbose)
+        fputs("DEBUG: ProgressDisplayManager created successfully\n", stderr)
+        
         let semaphore = DispatchSemaphore(value: 0)
         var processingError: Error?
         var extractedAudioFile: AudioFile?
         
+        fputs("DEBUG: About to print 'Extracting audio from...'\n", stderr)
         print("Extracting audio from: \(inputFile)") // swiftlint:disable:this no_print
+        fputs("DEBUG: Print completed, about to call audioProcessor.extractAudio\n", stderr)
         
         audioProcessor.extractAudio(from: inputFile,
                                     progressCallback: { progressReport in
@@ -113,12 +158,19 @@ struct Vox: ParsableCommand {
                                     }) { result in
             switch result {
             case .success(let audioFile):
-                Logger.shared.info("Audio extraction completed successfully", component: "CLI")
+                fputs("DEBUG: CLI extractAudio success callback received\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.info("Audio extraction completed successfully", component: "CLI")
+                fputs("DEBUG: About to call displayAudioExtractionSuccess\n", stderr)
                 self.displayAudioExtractionSuccess(audioFile)
+                fputs("DEBUG: displayAudioExtractionSuccess completed\n", stderr)
                 extractedAudioFile = audioFile
+                fputs("DEBUG: extractedAudioFile set, about to signal semaphore\n", stderr)
                 
             case .failure(let error):
-                Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
+                fputs("DEBUG: CLI extractAudio failure callback received\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
                 processingError = error
             }
             
@@ -155,6 +207,7 @@ struct Vox: ParsableCommand {
     }
     
     private func transcribeAudio(_ audioFile: AudioFile) throws -> TranscriptionResult {
+        fputs("DEBUG: In transcribeAudio(), about to create TranscriptionManager\n", stderr)
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
@@ -163,6 +216,7 @@ struct Vox: ParsableCommand {
             apiKey: apiKey,
             includeTimestamps: timestamps
         )
+        fputs("DEBUG: TranscriptionManager created, about to call transcribeAudio\n", stderr)
         
         return try transcriptionManager.transcribeAudio(audioFile: audioFile)
     }
