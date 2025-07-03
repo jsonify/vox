@@ -125,7 +125,7 @@ class JSONFormatter {
     }
     
     private func buildProcessingStats(from result: TranscriptionResult) -> JSONProcessingStats {
-        let processingRate = result.duration > 0 ? result.duration / result.processingTime : 0.0
+        let processingRate = result.processingTime > 0 ? result.duration / result.processingTime : 0.0
         let totalWords = result.segments.reduce(0) { count, segment in
             count + segment.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         }
@@ -136,8 +136,7 @@ class JSONFormatter {
             totalSegments: result.segments.count,
             totalWords: totalWords,
             averageSegmentLength: result.segments.isEmpty ? 0.0 : 
-                result.segments.map { $0.duration }.reduce(0, +) / Double(result.segments.count),
-            processingEfficiency: result.processingTime > 0 ? result.duration / result.processingTime : 0.0
+                result.segments.map { $0.duration }.reduce(0, +) / Double(result.segments.count)
         )
     }
     
@@ -187,8 +186,18 @@ class JSONFormatter {
     
     private func calculateQualityScore(from result: TranscriptionResult) -> Double {
         let confidenceScore = result.confidence * 0.4
-        let audioQualityScore = result.audioFormat.quality == .high ? 0.3 : 
-                               result.audioFormat.quality == .medium ? 0.2 : 0.1
+        let audioQualityScore = {
+            switch result.audioFormat.quality {
+            case .lossless:
+                return 0.3
+            case .high:
+                return 0.3
+            case .medium:
+                return 0.2
+            case .low:
+                return 0.1
+            }
+        }()
         let completenessScore = result.segments.isEmpty ? 0.0 : 0.3
         
         return confidenceScore + audioQualityScore + completenessScore
@@ -255,7 +264,6 @@ struct JSONProcessingStats: Codable {
     let totalSegments: Int
     let totalWords: Int
     let averageSegmentLength: TimeInterval
-    let processingEfficiency: Double
 }
 
 /// Detailed segment information

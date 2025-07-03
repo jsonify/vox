@@ -143,7 +143,7 @@ final class JSONFormatterTests: XCTestCase {
         XCTAssertEqual(processingStats?["totalSegments"] as? Int, 2)
         XCTAssertNotNil(processingStats?["processingRate"])
         XCTAssertNotNil(processingStats?["totalWords"])
-        XCTAssertNotNil(processingStats?["processingEfficiency"])
+        XCTAssertNotNil(processingStats?["averageSegmentLength"])
     }
     
     // MARK: - Segment Details Tests
@@ -363,6 +363,48 @@ final class JSONFormatterTests: XCTestCase {
     }
     
     // MARK: - Quality Score Tests
+    
+    func testLosslessAudioQualityScore() throws {
+        let losslessResult = TranscriptionResult(
+            text: "Lossless audio transcription",
+            language: "en-US",
+            confidence: 0.95,
+            duration: 1.0,
+            segments: [
+                TranscriptionSegment(
+                    text: "Lossless audio transcription",
+                    startTime: 0.0,
+                    endTime: 1.0,
+                    confidence: 0.95,
+                    speakerID: "Speaker1",
+                    words: nil,
+                    segmentType: .speech,
+                    pauseDuration: nil
+                )
+            ],
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 192000,
+                channels: 2,
+                bitRate: 1411000,
+                duration: 1.0
+            )
+        )
+        
+        let formatter = JSONFormatter()
+        let jsonString = try formatter.formatAsJSON(losslessResult)
+        let jsonData = jsonString.data(using: .utf8)!
+        let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        
+        let metadata = parsedData?["metadata"] as? [String: Any]
+        let qualityScore = metadata?["qualityScore"] as? Double
+        
+        XCTAssertNotNil(qualityScore)
+        // Should have high quality score: confidence(0.95 * 0.4) + audio(0.3) + completeness(0.3) = 0.98
+        XCTAssertEqual(qualityScore!, 0.98, accuracy: 0.01)
+    }
     
     func testQualityScoreCalculation() throws {
         let highQualityResult = TranscriptionResult(
