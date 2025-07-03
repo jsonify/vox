@@ -5,7 +5,7 @@ final class ProgressReportingTests: XCTestCase {
     
     func testProgressReportCreation() {
         let startTime = Date()
-        let progressReport = ProgressReport(
+        let progressReport = TranscriptionProgress(
             progress: 0.5,
             status: "Processing...",
             phase: .extracting,
@@ -23,7 +23,7 @@ final class ProgressReportingTests: XCTestCase {
     
     func testProgressReportCompletion() {
         let startTime = Date()
-        let progressReport = ProgressReport(
+        let progressReport = TranscriptionProgress(
             progress: 1.0,
             status: "Complete",
             phase: .complete,
@@ -114,7 +114,7 @@ final class ProgressReportingTests: XCTestCase {
         let startTime = Date().addingTimeInterval(-30) // 30 seconds ago
         
         // Test with time remaining
-        let progressWithETA = ProgressReport(
+        let progressWithETA = TranscriptionProgress(
             progress: 0.6,
             status: "Processing",
             phase: .extracting,
@@ -126,7 +126,7 @@ final class ProgressReportingTests: XCTestCase {
         XCTAssertFalse(progressWithETA.formattedElapsedTime.isEmpty)
         
         // Test without time remaining
-        let progressWithoutETA = ProgressReport(
+        let progressWithoutETA = TranscriptionProgress(
             progress: 0.3,
             status: "Starting",
             phase: .initializing,

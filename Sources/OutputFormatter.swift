@@ -1,0 +1,66 @@
+import Foundation
+
+/// Handles formatting transcription results into different output formats
+struct OutputFormatter {
+    
+    func format(_ result: TranscriptionResult, as format: OutputFormat, includeTimestamps: Bool = false) throws -> String {
+        switch format {
+        case .txt:
+            return result.text
+        case .srt:
+            return formatAsSRT(result)
+        case .json:
+            return try formatAsJSON(result)
+        }
+    }
+    
+    func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat) throws {
+        let content = try self.format(result, as: format)
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+    
+    private func formatAsSRT(_ result: TranscriptionResult) -> String {
+        var srtContent = ""
+        
+        for (index, segment) in result.segments.enumerated() {
+            let startTime = formatSRTTime(segment.startTime)
+            let endTime = formatSRTTime(segment.endTime)
+            
+            srtContent += "\(index + 1)\n"
+            srtContent += "\(startTime) --> \(endTime)\n"
+            srtContent += "\(segment.text)\n\n"
+        }
+        
+        return srtContent
+    }
+    
+    private func formatSRTTime(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        let secs = Int(seconds) % 60
+        let milliseconds = Int((seconds.truncatingRemainder(dividingBy: 1)) * 1000)
+        
+        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, secs, milliseconds)
+    }
+    
+    private func formatAsJSON(_ result: TranscriptionResult) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        encoder.dateEncodingStrategy = .iso8601
+        
+        let data = try encoder.encode(result)
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    
+    func formatTime(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        let secs = Int(seconds) % 60
+        
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%02d:%02d", minutes, secs)
+        }
+    }
+}

@@ -1,49 +1,12 @@
 import ArgumentParser
 import Foundation
 
-// Thread-safe result container for async operations
-final class ResultBox<T>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var result: T?
-    private var error: Error?
-    
-    func setValue(_ value: T) {
-        lock.lock()
-        defer { lock.unlock() }
-        self.result = value
-    }
-    
-    func setError(_ error: Error) {
-        lock.lock()
-        defer { lock.unlock() }
-        self.error = error
-    }
-    
-    func getResult() throws -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        
-        if let error = error {
-            throw error
-        }
-        
-        guard let result = result else {
-            throw VoxError.processingFailed("Async operation did not complete")
-        }
-        
-        return result
-    }
-}
-
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
         abstract: "Audio transcription CLI for MP4 video files",
         version: "1.0.0"
     )
-    
-    // Shared memory monitor instance
-    private static let memoryMonitor = MemoryMonitor()
     
     @Argument(help: "Input MP4 video file path")
     var inputFile: String
@@ -73,8 +36,13 @@ struct Vox: ParsableCommand {
     var timestamps = false
     
     func run() throws {
+        configureLogging()
+        displayStartupInfo()
+        try processAudioFile()
+    }
+    
+    private func configureLogging() {
         Logger.shared.configure(verbose: verbose)
-        
         Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
         Logger.shared.debug("Verbose logging enabled", component: "CLI")
         
@@ -102,8 +70,9 @@ struct Vox: ParsableCommand {
         if timestamps {
             Logger.shared.info("Timestamps enabled", component: "CLI")
         }
-        
-        // User-facing output (not logging)
+    }
+    
+    private func displayStartupInfo() {
         print("Vox CLI - Audio transcription tool") // swiftlint:disable:this no_print
         print("Input file: \(inputFile)") // swiftlint:disable:this no_print
         print("Output format: \(format)") // swiftlint:disable:this no_print
@@ -117,12 +86,21 @@ struct Vox: ParsableCommand {
         } else {
             print("Using native transcription with fallback") // swiftlint:disable:this no_print
         }
-        
-        try processAudioFile()
     }
     
     private func processAudioFile() throws {
+        let audioFile = try extractAudio()
+        let transcriptionResult = try transcribeAudio(audioFile)
+        displayResults(transcriptionResult)
+        saveOutput(transcriptionResult)
+        cleanup(audioFile)
+        
+        print("Audio processing completed successfully!") // swiftlint:disable:this no_print
+    }
+    
+    private func extractAudio() throws -> AudioFile {
         let audioProcessor = AudioProcessor()
+        let progressDisplay = ProgressDisplayManager(verbose: verbose)
         let semaphore = DispatchSemaphore(value: 0)
         var processingError: Error?
         var extractedAudioFile: AudioFile?
@@ -131,25 +109,12 @@ struct Vox: ParsableCommand {
         
         audioProcessor.extractAudio(from: inputFile,
                                     progressCallback: { progressReport in
-                                        self.displayProgress(progressReport)
+                                        progressDisplay.displayProgress(progressReport)
                                     }) { result in
             switch result {
             case .success(let audioFile):
                 Logger.shared.info("Audio extraction completed successfully", component: "CLI")
-                print("✓ Audio extracted successfully") // swiftlint:disable:this no_print
-                print("  - Format: \(audioFile.format.codec)") // swiftlint:disable:this no_print
-                print("  - Sample Rate: \(audioFile.format.sampleRate) Hz") // swiftlint:disable:this no_print
-                print("  - Channels: \(audioFile.format.channels)") // swiftlint:disable:this no_print
-                print("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds") // swiftlint:disable:this no_print
-                
-                if let bitRate = audioFile.format.bitRate {
-                    print("  - Bit Rate: \(bitRate) bps") // swiftlint:disable:this no_print
-                }
-                
-                if let tempPath = audioFile.temporaryPath {
-                    print("  - Temporary file: \(tempPath)") // swiftlint:disable:this no_print
-                }
-                
+                self.displayAudioExtractionSuccess(audioFile)
                 extractedAudioFile = audioFile
                 
             case .failure(let error):
@@ -170,342 +135,55 @@ struct Vox: ParsableCommand {
             throw VoxError.processingFailed("Failed to extract audio file")
         }
         
-        // Start transcription process
-        try transcribeAudio(audioFile: audioFile)
+        return audioFile
+    }
+    
+    private func displayAudioExtractionSuccess(_ audioFile: AudioFile) {
+        print("✓ Audio extracted successfully") // swiftlint:disable:this no_print
+        print("  - Format: \(audioFile.format.codec)") // swiftlint:disable:this no_print
+        print("  - Sample Rate: \(audioFile.format.sampleRate) Hz") // swiftlint:disable:this no_print
+        print("  - Channels: \(audioFile.format.channels)") // swiftlint:disable:this no_print
+        print("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds") // swiftlint:disable:this no_print
         
-        // Cleanup temporary files
+        if let bitRate = audioFile.format.bitRate {
+            print("  - Bit Rate: \(bitRate) bps") // swiftlint:disable:this no_print
+        }
+        
+        if let tempPath = audioFile.temporaryPath {
+            print("  - Temporary file: \(tempPath)") // swiftlint:disable:this no_print
+        }
+    }
+    
+    private func transcribeAudio(_ audioFile: AudioFile) throws -> TranscriptionResult {
+        let transcriptionManager = TranscriptionManager(
+            forceCloud: forceCloud,
+            verbose: verbose,
+            language: language
+        )
+        
+        return try transcriptionManager.transcribeAudio(audioFile: audioFile)
+    }
+    
+    private func displayResults(_ result: TranscriptionResult) {
+        let displayManager = ResultDisplayManager(forceCloud: forceCloud, timestamps: timestamps)
+        displayManager.displayTranscriptionResult(result)
+    }
+    
+    private func saveOutput(_ result: TranscriptionResult) {
+        guard let outputPath = output else { return }
+        
+        do {
+            let formatter = OutputFormatter()
+            try formatter.saveTranscriptionResult(result, to: outputPath, format: format)
+            print("✓ Output saved to: \(outputPath)") // swiftlint:disable:this no_print
+        } catch {
+            Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")
+            print("❌ Failed to save output: \(error.localizedDescription)") // swiftlint:disable:this no_print
+        }
+    }
+    
+    private func cleanup(_ audioFile: AudioFile) {
+        let audioProcessor = AudioProcessor()
         audioProcessor.cleanupTemporaryFiles(for: audioFile)
-        
-        print("Audio processing completed successfully!") // swiftlint:disable:this no_print
-    }
-    
-    private func transcribeAudio(audioFile: AudioFile) throws {
-        print("Starting transcription...") // swiftlint:disable:this no_print
-        
-        // Determine preferred languages based on user input and system preferences
-        let preferredLanguages = buildLanguagePreferences()
-        
-        Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "CLI")
-        
-        let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
-        
-        displayTranscriptionResult(transcriptionResult)
-        
-        // Save output if requested
-        if let outputPath = output {
-            try saveTranscriptionResult(transcriptionResult, to: outputPath)
-        }
-    }
-    
-    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
-        let forceCloudCapture = forceCloud
-        let verboseCapture = verbose
-        return try runAsyncAndWait { @Sendable in
-            if forceCloudCapture {
-                // swiftlint:disable:next todo
-                // FIXME: Implement cloud transcription
-                Logger.shared.warn("Cloud transcription not yet implemented", component: "CLI")
-                throw VoxError.transcriptionFailed("Cloud transcription not yet implemented")
-            } else {
-                // Use native transcription with language detection
-                let speechTranscriber = try SpeechTranscriber()
-                return try await speechTranscriber.transcribeWithLanguageDetection(
-                    audioFile: audioFile,
-                    preferredLanguages: preferredLanguages,
-                    progressCallback: { @Sendable progressReport in
-                        // Create thread-safe progress display
-                        DispatchQueue.main.sync {
-                            Self.displayProgressReport(progressReport, verbose: verboseCapture)
-                        }
-                    }
-                )
-            }
-        }
-    }
-    
-    @Sendable private static func displayProgressReport(_ progress: TranscriptionProgress, verbose: Bool) {
-        if verbose {
-            // Detailed progress in verbose mode with enhanced information
-            let timeInfo = if progress.estimatedTimeRemaining != nil {
-                " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
-            } else {
-                " (elapsed: \(progress.formattedElapsedTime))"
-            }
-            
-            let speedInfo = if let speed = progress.processingSpeed {
-                " [\(String(format: "%.1f", speed))x speed]"
-            } else {
-                ""
-            }
-            
-            // Show current status with more context for transcription
-            let statusPrefix = progress.currentPhase == .extracting ? "🎤" : "⚙️"
-            print("\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
-            
-            // Show memory usage if available during transcription
-            if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
-                let memoryUsage = Self.memoryMonitor.getCurrentUsage()
-                print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
-            }
-        } else {
-            // Enhanced progress bar in normal mode
-            if progress.currentProgress > 0 {
-                let barWidth = 40
-                let filled = Int(progress.currentProgress * Double(barWidth))
-                let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
-                
-                let timeInfo = if progress.estimatedTimeRemaining != nil {
-                    " ETA: \(progress.formattedTimeRemaining)"
-                } else {
-                    ""
-                }
-                
-                let speedInfo = if let speed = progress.processingSpeed {
-                    " (\(String(format: "%.1f", speed))x)"
-                } else {
-                    ""
-                }
-                
-                // Different icons for different phases
-                let phaseIcon = switch progress.currentPhase {
-                case .initializing, .analyzing, .validating, .finalizing: "⚙️"
-                case .extracting, .converting: "🎤"
-                case .complete: "✅"
-                }
-                
-                print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
-                
-                if progress.isComplete {
-                    print() // New line after completion // swiftlint:disable:this no_print
-                }
-            }
-        }
-    }
-    
-    private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
-        let semaphore = DispatchSemaphore(value: 0)
-        let resultBox = ResultBox<T>()
-        
-        Task {
-            do {
-                let value = try await operation()
-                resultBox.setValue(value)
-            } catch {
-                resultBox.setError(error)
-            }
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        
-        return try resultBox.getResult()
-    }
-    
-    private func buildLanguagePreferences() -> [String] {
-        var languages: [String] = []
-        
-        // 1. User-specified language (highest priority)
-        if let userLanguage = language {
-            languages.append(userLanguage)
-            Logger.shared.info("Using user-specified language: \(userLanguage)", component: "CLI")
-        }
-        
-        // 2. System preferred languages
-        let systemLanguages = getSystemPreferredLanguages()
-        languages.append(contentsOf: systemLanguages)
-        
-        // 3. Default fallback
-        if !languages.contains("en-US") {
-            languages.append("en-US")
-        }
-        
-        // Remove duplicates while preserving order
-        var uniqueLanguages: [String] = []
-        var seen = Set<String>()
-        for lang in languages where !seen.contains(lang) {
-            uniqueLanguages.append(lang)
-            seen.insert(lang)
-        }
-        
-        return uniqueLanguages
-    }
-    
-    private func getSystemPreferredLanguages() -> [String] {
-        let preferredLanguages = Locale.preferredLanguages
-        
-        // Convert to proper locale identifiers and filter for supported ones
-        let supportedLocales = SpeechTranscriber.supportedLocales()
-        let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
-        
-        var systemLanguages: [String] = []
-        
-        for langCode in preferredLanguages.prefix(3) { // Limit to top 3 system preferences
-            // Try exact match first
-            if supportedIdentifiers.contains(langCode) {
-                systemLanguages.append(langCode)
-                continue
-            }
-            
-            // Try language-only match (e.g., "en" -> "en-US")
-            let languageOnly = String(langCode.prefix(2))
-            if let match = supportedIdentifiers.first(where: { $0.hasPrefix(languageOnly + "-") }) {
-                systemLanguages.append(match)
-            }
-        }
-        
-        Logger.shared.info("System preferred languages: \(systemLanguages.joined(separator: ", "))", component: "CLI")
-        return systemLanguages
-    }
-    
-    private func displayTranscriptionResult(_ result: TranscriptionResult) {
-        print("\n✓ Transcription completed successfully") // swiftlint:disable:this no_print
-        print("  - Language: \(result.language)") // swiftlint:disable:this no_print
-        print("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))") // swiftlint:disable:this no_print
-        print("  - Duration: \(String(format: "%.2f", result.duration)) seconds") // swiftlint:disable:this no_print
-        print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") // swiftlint:disable:this no_print
-        print("  - Engine: \(result.engine.rawValue)") // swiftlint:disable:this no_print
-        
-        // Add comprehensive quality assessment
-        let confidenceManager = ConfidenceManager()
-        let qualityAssessment = confidenceManager.assessQuality(result: result)
-        let qualityReport = confidenceManager.generateQualityReport(assessment: qualityAssessment)
-        print("\n\(qualityReport)") // swiftlint:disable:this no_print
-        
-        // Show fallback recommendation if applicable
-        if qualityAssessment.shouldUseFallback && !forceCloud {
-            print("\n💡 Try running with --fallback-api openai for better accuracy") // swiftlint:disable:this no_print
-        }
-        
-        if timestamps && !result.segments.isEmpty {
-            print("\n--- Transcript with timestamps ---") // swiftlint:disable:this no_print
-            for segment in result.segments {
-                let startTime = formatTime(segment.startTime)
-                let endTime = formatTime(segment.endTime)
-                print("[\(startTime) - \(endTime)] \(segment.text)") // swiftlint:disable:this no_print
-            }
-        } else {
-            print("\n--- Transcript ---") // swiftlint:disable:this no_print
-            print(result.text) // swiftlint:disable:this no_print
-        }
-    }
-    
-    private func formatTime(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = (Int(seconds) % 3600) / 60
-        let secs = Int(seconds) % 60
-        
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
-        } else {
-            return String(format: "%02d:%02d", minutes, secs)
-        }
-    }
-    
-    private func saveTranscriptionResult(_ result: TranscriptionResult, to path: String) throws {
-        let content: String
-        
-        switch format {
-        case .txt:
-            content = result.text
-        case .srt:
-            content = formatAsSRT(result)
-        case .json:
-            content = try formatAsJSON(result)
-        }
-        
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
-        print("✓ Output saved to: \(path)") // swiftlint:disable:this no_print
-    }
-    
-    private func formatAsSRT(_ result: TranscriptionResult) -> String {
-        var srtContent = ""
-        
-        for (index, segment) in result.segments.enumerated() {
-            let startTime = formatSRTTime(segment.startTime)
-            let endTime = formatSRTTime(segment.endTime)
-            
-            srtContent += "\(index + 1)\n"
-            srtContent += "\(startTime) --> \(endTime)\n"
-            srtContent += "\(segment.text)\n\n"
-        }
-        
-        return srtContent
-    }
-    
-    private func formatSRTTime(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = (Int(seconds) % 3600) / 60
-        let secs = Int(seconds) % 60
-        let milliseconds = Int((seconds.truncatingRemainder(dividingBy: 1)) * 1000)
-        
-        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, secs, milliseconds)
-    }
-    
-    private func formatAsJSON(_ result: TranscriptionResult) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        encoder.dateEncodingStrategy = .iso8601
-        
-        let data = try encoder.encode(result)
-        return String(data: data, encoding: .utf8) ?? ""
-    }
-    
-    private func displayProgress(_ progress: TranscriptionProgress) {
-        if verbose {
-            // Detailed progress in verbose mode with enhanced information
-            let timeInfo = if progress.estimatedTimeRemaining != nil {
-                " (ETA: \(progress.formattedTimeRemaining), elapsed: \(progress.formattedElapsedTime))"
-            } else {
-                " (elapsed: \(progress.formattedElapsedTime))"
-            }
-            
-            let speedInfo = if let speed = progress.processingSpeed {
-                " [\(String(format: "%.1f", speed))x speed]"
-            } else {
-                ""
-            }
-            
-            // Show current status with more context for transcription
-            let statusPrefix = progress.currentPhase == .extracting ? "🎤" : "⚙️"
-            print("\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
-            
-            // Show memory usage if available (implementation would need to be added)
-            if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
-                let memoryUsage = Self.memoryMonitor.getCurrentUsage()
-                print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
-            }
-        } else {
-            // Enhanced progress bar in normal mode
-            if progress.currentProgress > 0 {
-                let barWidth = 40
-                let filled = Int(progress.currentProgress * Double(barWidth))
-                let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
-                
-                let timeInfo = if progress.estimatedTimeRemaining != nil {
-                    " ETA: \(progress.formattedTimeRemaining)"
-                } else {
-                    ""
-                }
-                
-                let speedInfo = if let speed = progress.processingSpeed {
-                    " (\(String(format: "%.1f", speed))x)"
-                } else {
-                    ""
-                }
-                
-                // Different icons for different phases
-                let phaseIcon = switch progress.currentPhase {
-                case .initializing, .analyzing, .validating, .finalizing: "⚙️"
-                case .extracting, .converting: "🎤"
-                case .complete: "✅"
-                }
-                
-                print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
-                
-                if progress.isComplete {
-                    print() // New line after completion // swiftlint:disable:this no_print
-                }
-            }
-        }
     }
 }

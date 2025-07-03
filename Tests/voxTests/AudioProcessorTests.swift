@@ -352,7 +352,7 @@ final class AudioProcessorTests: XCTestCase {
         }
         
         let expectation = XCTestExpectation(description: "Audio extraction completion")
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         
         audioProcessor.extractAudio(
             from: testVideoURL.path,
@@ -422,7 +422,7 @@ final class AudioProcessorTests: XCTestCase {
         }
         
         let expectation = XCTestExpectation(description: "Progress reporting")
-        var progressReports: [ProgressReport] = []
+        var progressReports: [TranscriptionProgress] = []
         let startTime = Date()
         
         audioProcessor.extractAudio(
