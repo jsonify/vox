@@ -6,7 +6,30 @@ struct OutputFormatter {
     func format(_ result: TranscriptionResult, as format: OutputFormat, includeTimestamps: Bool = false) throws -> String {
         switch format {
         case .txt:
-            return result.text
+            // Use enhanced text formatting with basic options for backward compatibility
+            let options = TextFormattingOptions(
+                includeTimestamps: includeTimestamps,
+                includeSpeakerIDs: true,
+                includeConfidenceScores: false,
+                paragraphBreakThreshold: 2.0,
+                sentenceBreakThreshold: 0.8,
+                timestampFormat: .hms,
+                confidenceThreshold: 0.5,
+                lineWidth: 80
+            )
+            return formatAsEnhancedText(result, options: options)
+        case .srt:
+            return formatAsSRT(result)
+        case .json:
+            return try formatAsJSON(result)
+        }
+    }
+    
+    /// Format transcription result with full TextFormatter configuration options
+    func format(_ result: TranscriptionResult, as format: OutputFormat, options: TextFormattingOptions) throws -> String {
+        switch format {
+        case .txt:
+            return formatAsEnhancedText(result, options: options)
         case .srt:
             return formatAsSRT(result)
         case .json:
@@ -16,6 +39,12 @@ struct OutputFormatter {
     
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat) throws {
         let content = try self.format(result, as: format)
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+    
+    /// Save transcription result with full TextFormatter configuration options
+    func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, options: TextFormattingOptions) throws {
+        let content = try self.format(result, as: format, options: options)
         try content.write(toFile: path, atomically: true, encoding: .utf8)
     }
     
