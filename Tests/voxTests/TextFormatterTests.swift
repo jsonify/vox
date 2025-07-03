@@ -218,6 +218,62 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("[confidence: 30.0%]"))
     }
     
+    func testMultipleSpacesHandling() {
+        let segments = [
+            TranscriptionSegment(
+                text: "Hello    world   with    multiple     spaces",
+                startTime: 0.0,
+                endTime: 2.0,
+                confidence: 0.9,
+                speakerID: "Speaker1",
+                words: nil,
+                segmentType: .speech,
+                pauseDuration: nil
+            )
+        ]
+        
+        let result = TranscriptionResult(
+            text: "Hello    world   with    multiple     spaces",
+            language: "en-US",
+            confidence: 0.9,
+            duration: 2.0,
+            segments: segments,
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 16000,
+                channels: 1,
+                bitRate: 256000,
+                duration: 3.0
+            )
+        )
+        
+        let formatter = TextFormatter()
+        let detailedOutput = formatter.formatAsDetailedText(result)
+        
+        // Should correctly count 5 words, not more due to empty strings from multiple spaces
+        XCTAssertTrue(detailedOutput.contains("Total Words: 5"))
+        
+        // Test text wrapping with multiple spaces
+        let options = TextFormattingOptions(
+            includeTimestamps: false,
+            includeSpeakerIDs: false,
+            includeConfidenceScores: false,
+            paragraphBreakThreshold: 2.0,
+            sentenceBreakThreshold: 0.8,
+            timestampFormat: .hms,
+            confidenceThreshold: 0.5,
+            lineWidth: 20
+        )
+        let formatterWithWrapping = TextFormatter(options: options)
+        let wrappedOutput = formatterWithWrapping.formatAsText(result)
+        
+        // Should not have extra spaces in wrapped output
+        XCTAssertFalse(wrappedOutput.contains("  ")) // No double spaces
+        XCTAssertTrue(wrappedOutput.contains("Hello world with"))
+    }
+    
     func testDetailedTextFormatting() {
         let segments = [
             TranscriptionSegment(
