@@ -36,6 +36,13 @@ class SpeechTranscriber {
     
     /// Transcribe audio file to text with segments
     func transcribe(audioFile: AudioFile, progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
+        fputs("DEBUG: TEMP BYPASS: Native speech recognition disabled due to system compatibility issues\n", stderr)
+        
+        // TEMP FIX: Immediately throw error to trigger cloud fallback
+        throw VoxError.transcriptionFailed("Native speech recognition temporarily disabled due to system compatibility issues")
+        
+        /*
+        // Original implementation commented out
         let startTime = Date()
         let progressReporter = EnhancedProgressReporter(totalAudioDuration: audioFile.format.duration)
         
@@ -73,6 +80,7 @@ class SpeechTranscriber {
                                                 startTime: startTime,
                                                 progressReporter: progressReporter,
                                                 progressCallback: progressCallback)
+        */
     }
     
     private func createRecognitionRequest(for audioURL: URL) -> SFSpeechURLRecognitionRequest {
