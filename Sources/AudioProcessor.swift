@@ -2,7 +2,6 @@ import Foundation
 import AVFoundation
 
 class AudioProcessor {
-    
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
     
     private let logger = Logger.shared
@@ -10,10 +9,7 @@ class AudioProcessor {
     private let tempFileManager = TempFileManager.shared
     private var processingStartTime: Date?
     
-    func extractAudio(from inputPath: String, 
-                     progressCallback: ProgressCallback? = nil,
-                     completion: @escaping CompletionCallback) {
-        
+    func extractAudio(from inputPath: String, progressCallback: ProgressCallback? = nil, completion: @escaping CompletionCallback) {
         processingStartTime = Date()
         
         // TEMP DEBUG: Bypass Logger call to prevent hang
@@ -72,9 +68,7 @@ class AudioProcessor {
         fputs("DEBUG: reportProgress (extracting) bypassed\n", stderr)
         
         fputs("DEBUG: About to call extractAudioUsingAVFoundation\n", stderr)
-        extractAudioUsingAVFoundation(from: inputURL, 
-                                    to: tempOutputURL, 
-                                    progressCallback: progressCallback) { [weak self] result in
+        extractAudioUsingAVFoundation(from: inputURL, to: tempOutputURL, progressCallback: progressCallback) { [weak self] result in
             fputs("DEBUG: extractAudioUsingAVFoundation callback called\n", stderr)
             switch result {
             case .success(let audioFormat):
@@ -106,7 +100,7 @@ class AudioProcessor {
                     case .success(let audioFile):
                         self?.logger.info("FFmpeg fallback extraction succeeded", component: "AudioProcessor")
                         completion(.success(audioFile))
-                    case .failure(_):
+                    case .failure:
                         self?.logger.error("Both AVFoundation and ffmpeg extraction failed", component: "AudioProcessor")
                         // Return the original AVFoundation error as it's the primary method
                         completion(.failure(error))
@@ -116,11 +110,7 @@ class AudioProcessor {
         }
     }
     
-    private func extractAudioUsingAVFoundation(from inputURL: URL,
-                                             to outputURL: URL,
-                                             progressCallback: ProgressCallback?,
-                                             completion: @escaping (Result<AudioFormat, VoxError>) -> Void) {
-        
+    private func extractAudioUsingAVFoundation(from inputURL: URL, to outputURL: URL, progressCallback: ProgressCallback?, completion: @escaping (Result<AudioFormat, VoxError>) -> Void) {
         fputs("DEBUG: In extractAudioUsingAVFoundation, about to create AVAsset\n", stderr)
         let asset = AVAsset(url: inputURL)
         fputs("DEBUG: AVAsset created, about to create AVAssetExportSession\n", stderr)
@@ -165,91 +155,99 @@ class AudioProcessor {
         
         fputs("DEBUG: About to call exportSession.exportAsynchronously\n", stderr)
         exportSession.exportAsynchronously { [weak self] in
-            fputs("DEBUG: exportAsynchronously callback called\n", stderr)
-            fputs("DEBUG: Export session status: \(exportSession.status.rawValue)\n", stderr)
-            progressTimer.invalidate()
+            self?.handleExportCompletion(exportSession: exportSession, asset: asset, outputURL: outputURL, progressTimer: progressTimer, completion: completion)
+        }
+    }
+    
+    private func handleExportCompletion(exportSession: AVAssetExportSession, asset: AVAsset, outputURL: URL, progressTimer: Timer, completion: @escaping (Result<AudioFormat, VoxError>) -> Void) {
+        fputs("DEBUG: exportAsynchronously callback called\n", stderr)
+        fputs("DEBUG: Export session status: \(exportSession.status.rawValue)\n", stderr)
+        progressTimer.invalidate()
+        
+        // TEMP DEBUG: Process status directly without DispatchQueue.main.async
+        fputs("DEBUG: Processing export status directly\n", stderr)
+        if exportSession.status == .failed {
+            fputs("DEBUG: Export failed - checking error\n", stderr)
+            let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
+            fputs("DEBUG: Export error: \(errorMsg)\n", stderr)
+            let error = VoxError.audioExtractionFailed("Export failed: \(errorMsg)")
+            fputs("DEBUG: About to call completion(.failure(error)) for failed export\n", stderr)
+            completion(.failure(error))
+            return
+        } else if exportSession.status == .completed {
+            fputs("DEBUG: Export completed successfully - processing result\n", stderr)
             
-            // TEMP DEBUG: Process status directly without DispatchQueue.main.async
-            fputs("DEBUG: Processing export status directly\n", stderr)
-            if exportSession.status == .failed {
-                fputs("DEBUG: Export failed - checking error\n", stderr)
+            fputs("DEBUG: About to extract audio format\n", stderr)
+            if let audioFormat = self.extractAudioFormat(from: asset, outputPath: outputURL.path) {
+                fputs("DEBUG: Audio format extracted successfully\n", stderr)
+                fputs("DEBUG: Calling completion(.success(audioFormat))\n", stderr)
+                completion(.success(audioFormat))
+                return
+            } else {
+                fputs("DEBUG: Failed to extract audio format\n", stderr)
+                let error = VoxError.audioFormatValidationFailed("Failed to extract audio format")
+                completion(.failure(error))
+                return
+            }
+        }
+        
+        handleExportFallback(exportSession: exportSession, asset: asset, outputURL: outputURL, completion: completion)
+    }
+    
+    private func handleExportFallback(exportSession: AVAssetExportSession, asset: AVAsset, outputURL: URL, completion: @escaping (Result<AudioFormat, VoxError>) -> Void) {
+        DispatchQueue.main.async {
+            fputs("DEBUG: In DispatchQueue.main.async, checking export status\n", stderr)
+            switch exportSession.status {
+            case .completed:
+                fputs("DEBUG: Export status is .completed\n", stderr)
+                // TEMP DEBUG: Bypass reportProgress and Logger calls
+                // self?.reportProgress(0.9, phase: .validating, callback: progressCallback)
+                // self?.logger.info("AVFoundation export completed", component: "AudioProcessor")
+                fputs("DEBUG: About to extract audio format\n", stderr)
+                
+                if let audioFormat = self.extractAudioFormat(from: asset, outputPath: outputURL.path) {
+                    // Check if the format validation failed
+                    if !audioFormat.isValid {
+                        let validationError = audioFormat.validationError ?? "Unknown validation error"
+                        let error = VoxError.audioFormatValidationFailed(validationError)
+                        self.logger.error(error.localizedDescription, component: "AudioProcessor")
+                        completion(.failure(error))
+                        return
+                    }
+                    
+                    // Check compatibility for transcription
+                    if !audioFormat.isCompatible {
+                        let error = VoxError.incompatibleAudioProperties("Audio format not compatible with transcription engines: \(audioFormat.description)")
+                        self.logger.warn(error.localizedDescription, component: "AudioProcessor")
+                        // Don't fail completely, but log the warning
+                    }
+                    
+                    completion(.success(audioFormat))
+                } else {
+                    let error = VoxError.audioExtractionFailed("Failed to extract audio format information")
+                    self.logger.error(error.localizedDescription, component: "AudioProcessor")
+                    completion(.failure(error))
+                }
+                
+            case .failed:
+                fputs("DEBUG: Export status is .failed\n", stderr)
                 let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
                 fputs("DEBUG: Export error: \(errorMsg)\n", stderr)
                 let error = VoxError.audioExtractionFailed("Export failed: \(errorMsg)")
-                fputs("DEBUG: About to call completion(.failure(error)) for failed export\n", stderr)
+                // TEMP DEBUG: Bypass Logger call
+                // self?.logger.error(error.localizedDescription, component: "AudioProcessor")
+                fputs("DEBUG: About to call completion(.failure(error))\n", stderr)
                 completion(.failure(error))
-                return
-            } else if exportSession.status == .completed {
-                fputs("DEBUG: Export completed successfully - processing result\n", stderr)
                 
-                fputs("DEBUG: About to extract audio format\n", stderr)
-                if let audioFormat = self?.extractAudioFormat(from: asset, outputPath: outputURL.path) {
-                    fputs("DEBUG: Audio format extracted successfully\n", stderr)
-                    fputs("DEBUG: Calling completion(.success(audioFormat))\n", stderr)
-                    completion(.success(audioFormat))
-                    return
-                } else {
-                    fputs("DEBUG: Failed to extract audio format\n", stderr)
-                    let error = VoxError.audioFormatValidationFailed("Failed to extract audio format")
-                    completion(.failure(error))
-                    return
-                }
-            }
-            
-            DispatchQueue.main.async {
-                fputs("DEBUG: In DispatchQueue.main.async, checking export status\n", stderr)
-                switch exportSession.status {
-                case .completed:
-                    fputs("DEBUG: Export status is .completed\n", stderr)
-                    // TEMP DEBUG: Bypass reportProgress and Logger calls
-                    // self?.reportProgress(0.9, phase: .validating, callback: progressCallback)
-                    // self?.logger.info("AVFoundation export completed", component: "AudioProcessor")
-                    fputs("DEBUG: About to extract audio format\n", stderr)
-                    
-                    if let audioFormat = self?.extractAudioFormat(from: asset, outputPath: outputURL.path) {
-                        // Check if the format validation failed
-                        if !audioFormat.isValid {
-                            let validationError = audioFormat.validationError ?? "Unknown validation error"
-                            let error = VoxError.audioFormatValidationFailed(validationError)
-                            self?.logger.error(error.localizedDescription, component: "AudioProcessor")
-                            completion(.failure(error))
-                            return
-                        }
-                        
-                        // Check compatibility for transcription
-                        if !audioFormat.isCompatible {
-                            let error = VoxError.incompatibleAudioProperties("Audio format not compatible with transcription engines: \(audioFormat.description)")
-                            self?.logger.warn(error.localizedDescription, component: "AudioProcessor")
-                            // Don't fail completely, but log the warning
-                        }
-                        
-                        completion(.success(audioFormat))
-                    } else {
-                        let error = VoxError.audioExtractionFailed("Failed to extract audio format information")
-                        self?.logger.error(error.localizedDescription, component: "AudioProcessor")
-                        completion(.failure(error))
-                    }
-                    
-                case .failed:
-                    fputs("DEBUG: Export status is .failed\n", stderr)
-                    let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
-                    fputs("DEBUG: Export error: \(errorMsg)\n", stderr)
-                    let error = VoxError.audioExtractionFailed("Export failed: \(errorMsg)")
-                    // TEMP DEBUG: Bypass Logger call
-                    // self?.logger.error(error.localizedDescription, component: "AudioProcessor")
-                    fputs("DEBUG: About to call completion(.failure(error))\n", stderr)
-                    completion(.failure(error))
-                    
-                case .cancelled:
-                    let error = VoxError.audioExtractionFailed("Export was cancelled")
-                    self?.logger.error(error.localizedDescription, component: "AudioProcessor")
-                    completion(.failure(error))
-                    
-                default:
-                    let error = VoxError.audioExtractionFailed("Export failed with status: \(exportSession.status.rawValue)")
-                    self?.logger.error(error.localizedDescription, component: "AudioProcessor")
-                    completion(.failure(error))
-                }
+            case .cancelled:
+                let error = VoxError.audioExtractionFailed("Export was cancelled")
+                self.logger.error(error.localizedDescription, component: "AudioProcessor")
+                completion(.failure(error))
+                
+            default:
+                let error = VoxError.audioExtractionFailed("Export failed with status: \(exportSession.status.rawValue)")
+                self.logger.error(error.localizedDescription, component: "AudioProcessor")
+                completion(.failure(error))
             }
         }
     }
@@ -284,7 +282,6 @@ class AudioProcessor {
         fputs("DEBUG: About to return from isValidMP4File\n", stderr)
         return hasVideoTrack && hasAudioTrack
     }
-    
     
     private func createAudioMix(for audioTrack: AVAssetTrack) -> AVAudioMix {
         let audioMix = AVMutableAudioMix()
