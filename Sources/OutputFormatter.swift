@@ -6,7 +6,18 @@ struct OutputFormatter {
     func format(_ result: TranscriptionResult, as format: OutputFormat, includeTimestamps: Bool = false) throws -> String {
         switch format {
         case .txt:
-            return result.text
+            // Use enhanced text formatting with optional timestamps
+            let options = TextFormattingOptions(
+                includeTimestamps: includeTimestamps,
+                includeSpeakerIDs: true,
+                includeConfidenceScores: false,
+                paragraphBreakThreshold: 2.0,
+                sentenceBreakThreshold: 0.8,
+                timestampFormat: .hms,
+                confidenceThreshold: 0.5,
+                lineWidth: 80
+            )
+            return formatAsEnhancedText(result, options: options)
         case .srt:
             return formatAsSRT(result)
         case .json:
