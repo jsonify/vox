@@ -274,6 +274,38 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(wrappedOutput.contains("Hello world with"))
     }
     
+    func testEmptySegmentsHandling() {
+        // Test with empty segments array to verify no division-by-zero crash
+        let result = TranscriptionResult(
+            text: "",
+            language: "en-US",
+            confidence: 0.0,
+            duration: 0.0,
+            segments: [], // Empty segments array
+            engine: .speechAnalyzer,
+            processingTime: 0.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 16000,
+                channels: 1,
+                bitRate: 256000,
+                duration: 0.0
+            )
+        )
+        
+        let formatter = TextFormatter()
+        
+        // Should not crash and should handle empty segments gracefully
+        let basicOutput = formatter.formatAsText(result)
+        XCTAssertEqual(basicOutput, "")
+        
+        let detailedOutput = formatter.formatAsDetailedText(result)
+        XCTAssertTrue(detailedOutput.contains("TRANSCRIPTION REPORT"))
+        XCTAssertTrue(detailedOutput.contains("STATISTICS"))
+        XCTAssertTrue(detailedOutput.contains("No segments available"))
+        XCTAssertTrue(detailedOutput.contains("Segments: 0"))
+    }
+    
     func testDetailedTextFormatting() {
         let segments = [
             TranscriptionSegment(

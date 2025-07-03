@@ -179,6 +179,10 @@ class TextFormatter {
     }
     
     private func formatFooter(_ result: TranscriptionResult) -> String {
+        guard !result.segments.isEmpty else {
+            return "STATISTICS\nNo segments available\n"
+        }
+        
         var footer = "STATISTICS\n"
         footer += "Total Words: \(result.segments.reduce(0) { $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count })\n"
         footer += "Average Confidence: \(String(format: "%.1f", result.segments.map { $0.confidence }.reduce(0, +) / Double(result.segments.count) * 100))%\n"
