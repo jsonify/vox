@@ -17,7 +17,8 @@ struct ResultDisplayManager {
         print("  - Language: \(result.language)") // swiftlint:disable:this no_print
         print("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))") // swiftlint:disable:this no_print
         print("  - Duration: \(String(format: "%.2f", result.duration)) seconds") // swiftlint:disable:this no_print
-        print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") // swiftlint:disable:this no_print
+        print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") 
+        // swiftlint:disable:previous no_print
         print("  - Engine: \(result.engine.rawValue)") // swiftlint:disable:this no_print
 
         // Add comprehensive quality assessment

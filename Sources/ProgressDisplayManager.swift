@@ -68,9 +68,12 @@ struct ProgressDisplayManager {
 
             // Different icons for different phases
             let phaseIcon = switch progress.currentPhase {
-            case .initializing, .analyzing, .validating, .finalizing: "⚙️"
-            case .extracting, .converting: "🎤"
-            case .complete: "✅"
+            case .initializing, .analyzing, .validating, .finalizing:
+                "⚙️"
+            case .extracting, .converting:
+                "🎤"
+            case .complete:
+                "✅"
             }
 
             print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print

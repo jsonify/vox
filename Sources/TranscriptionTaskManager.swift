@@ -40,12 +40,18 @@ final class TranscriptionTaskManager {
         }
 
         guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-            Logger.shared.warn("Speech recognizer not available for locale: \(locale.identifier)", component: "TranscriptionTaskManager")
+            Logger.shared.warn(
+                "Speech recognizer not available for locale: \(locale.identifier)", 
+                component: "TranscriptionTaskManager"
+            )
             return nil
         }
 
         guard recognizer.isAvailable else {
-            Logger.shared.warn("Speech recognizer not currently available for locale: \(locale.identifier)", component: "TranscriptionTaskManager")
+            Logger.shared.warn(
+                "Speech recognizer not currently available for locale: \(locale.identifier)", 
+                component: "TranscriptionTaskManager"
+            )
             return nil
         }
 
@@ -92,13 +98,16 @@ final class TranscriptionTaskManager {
         recognitionTasks.removeAll()
     }
 
-    func buildTranscriptionResult(from segments: [TranscriptionSegment],
-                                  audioFile: AudioFile,
-                                  language: String,
-                                  startTime: Date) -> TranscriptionResult {
+    func buildTranscriptionResult(
+        from segments: [TranscriptionSegment],
+        audioFile: AudioFile,
+        language: String,
+        startTime: Date
+    ) -> TranscriptionResult {
         let sortedSegments = segments.sorted { $0.startTime < $1.startTime }
         let fullText = sortedSegments.map { $0.text }.joined(separator: " ")
-        let averageConfidence = sortedSegments.isEmpty ? 0.0 : sortedSegments.map { $0.confidence }.reduce(0, +) / Double(sortedSegments.count)
+        let averageConfidence = sortedSegments.isEmpty ? 0.0 : 
+            sortedSegments.map { $0.confidence }.reduce(0, +) / Double(sortedSegments.count)
         let processingTime = Date().timeIntervalSince(startTime)
 
         return TranscriptionResult(
@@ -116,18 +125,27 @@ final class TranscriptionTaskManager {
     func validateSegmentFile(_ segmentFile: AudioSegmenter.AudioSegmentFile) -> Bool {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: segmentFile.url.path) else {
-            Logger.shared.error("Segment file does not exist: \(segmentFile.url.path)", component: "TranscriptionTaskManager")
+            Logger.shared.error(
+                "Segment file does not exist: \(segmentFile.url.path)",
+                component: "TranscriptionTaskManager"
+            )
             return false
         }
 
         do {
             let attributes = try fileManager.attributesOfItem(atPath: segmentFile.url.path)
             if let fileSize = attributes[.size] as? UInt64, fileSize == 0 {
-                Logger.shared.error("Segment file is empty: \(segmentFile.url.path)", component: "TranscriptionTaskManager")
+                Logger.shared.error(
+                    "Segment file is empty: \(segmentFile.url.path)",
+                    component: "TranscriptionTaskManager"
+                )
                 return false
             }
         } catch {
-            Logger.shared.error("Failed to check segment file attributes: \(error)", component: "TranscriptionTaskManager")
+            Logger.shared.error(
+                "Failed to check segment file attributes: \(error)",
+                component: "TranscriptionTaskManager"
+            )
             return false
         }
 

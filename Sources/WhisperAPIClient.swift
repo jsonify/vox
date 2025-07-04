@@ -153,7 +153,9 @@ class WhisperAPIClient {
         ))
 
         // Close boundary
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        if let boundaryData = "--\(boundary)--\r\n".data(using: .utf8) {
+            body.append(boundaryData)
+        }
 
         request.httpBody = body
 
@@ -164,19 +166,33 @@ class WhisperAPIClient {
 
     private func createFormField(name: String, value: String, boundary: String) -> Data {
         var field = Data()
-        field.append("--\(boundary)\r\n".data(using: .utf8)!)
-        field.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-        field.append("\(value)\r\n".data(using: .utf8)!)
+        if let boundaryData = "--\(boundary)\r\n".data(using: .utf8) {
+            field.append(boundaryData)
+        }
+        if let contentData = "Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8) {
+            field.append(contentData)
+        }
+        if let valueData = "\(value)\r\n".data(using: .utf8) {
+            field.append(valueData)
+        }
         return field
     }
 
     private func createFileField(name: String, filename: String, data: Data, mimeType: String, boundary: String) -> Data {
         var field = Data()
-        field.append("--\(boundary)\r\n".data(using: .utf8)!)
-        field.append("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        field.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        if let boundaryData = "--\(boundary)\r\n".data(using: .utf8) {
+            field.append(boundaryData)
+        }
+        if let contentDispositionData = "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n".data(using: .utf8) {
+            field.append(contentDispositionData)
+        }
+        if let contentTypeData = "Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8) {
+            field.append(contentTypeData)
+        }
         field.append(data)
-        field.append("\r\n".data(using: .utf8)!)
+        if let endData = "\r\n".data(using: .utf8) {
+            field.append(endData)
+        }
         return field
     }
 
@@ -279,16 +295,18 @@ class WhisperAPIClient {
             segments = parseWordSegments(wordsArray)
         } else {
             // Create a single segment for the entire text
-            segments = [TranscriptionSegment(
-                text: text,
-                startTime: 0,
-                endTime: audioFile.format.duration,
-                confidence: 1.0,
-                speakerID: nil,
-                words: nil,
-                segmentType: .speech,
-                pauseDuration: nil
-            )]
+            segments = [
+                TranscriptionSegment(
+                    text: text,
+                    startTime: 0,
+                    endTime: audioFile.format.duration,
+                    confidence: 1.0,
+                    speakerID: nil,
+                    words: nil,
+                    segmentType: .speech,
+                    pauseDuration: nil
+                )
+            ]
         }
 
         let processingTime = Date().timeIntervalSince(startTime)

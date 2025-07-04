@@ -12,23 +12,29 @@ public final class PlatformOptimizer {
 
         var displayName: String {
             switch self {
-            case .appleSilicon: return "Apple Silicon"
-            case .intel: return "Intel"
-            case .unknown: return "Unknown"
+            case .appleSilicon:
+                return "Apple Silicon"
+            case .intel:
+                return "Intel"
+            case .unknown:
+                return "Unknown"
             }
         }
     }
 
     public enum OptimizationLevel: String, CaseIterable {
-        case maximum = "maximum"
-        case balanced = "balanced"
-        case conservative = "conservative"
+        case maximum
+        case balanced
+        case conservative
 
         var concurrencyMultiplier: Double {
             switch self {
-            case .maximum: return 1.5
-            case .balanced: return 1.0
-            case .conservative: return 0.7
+            case .maximum:
+                return 1.5
+            case .balanced:
+                return 1.0
+            case .conservative:
+                return 0.7
             }
         }
     }
@@ -80,7 +86,11 @@ public final class PlatformOptimizer {
             self.optimizationLevel = .conservative
         }
 
-        Logger.shared.info("Platform: \(architecture.displayName), Cores: \(processorCount), Memory: \(formatMemory(physicalMemory)), Optimization: \(optimizationLevel.rawValue)", component: "PlatformOptimizer")
+        Logger.shared.info(
+            "Platform: \(architecture.displayName), Cores: \(processorCount), Memory: " +
+            "\(formatMemory(physicalMemory)), Optimization: \(optimizationLevel.rawValue)",
+            component: "PlatformOptimizer"
+        )
     }
 
     // MARK: - Audio Processing Optimizations
@@ -291,12 +301,23 @@ public final class PlatformOptimizer {
         Logger.shared.info("Optimization Level: \(optimizationLevel.rawValue)", component: "PlatformOptimizer")
 
         let audioConfig = getAudioProcessingConfig()
-        Logger.shared.info("Audio Config: \(audioConfig.concurrentOperations) ops, \(audioConfig.bufferSize) buffer", component: "PlatformOptimizer")
+        Logger.shared.info(
+            "Audio Config: \(audioConfig.concurrentOperations) ops, \(audioConfig.bufferSize) buffer",
+            component: "PlatformOptimizer"
+        )
 
         let speechConfig = getSpeechRecognitionConfig()
-        Logger.shared.info("Speech Config: \(speechConfig.segmentDuration)s segments, \(speechConfig.progressReportingInterval)s intervals", component: "PlatformOptimizer")
+        Logger.shared.info(
+            "Speech Config: \(speechConfig.segmentDuration)s segments, " +
+            "\(speechConfig.progressReportingInterval)s intervals",
+            component: "PlatformOptimizer"
+        )
 
         let memoryConfig = getMemoryConfig()
-        Logger.shared.info("Memory Config: \(formatMemory(memoryConfig.maxMemoryUsage)) max, \(memoryConfig.bufferPoolSize) pools", component: "PlatformOptimizer")
+        Logger.shared.info(
+            "Memory Config: \(formatMemory(memoryConfig.maxMemoryUsage)) max, " +
+            "\(memoryConfig.bufferPoolSize) pools",
+            component: "PlatformOptimizer"
+        )
     }
 }

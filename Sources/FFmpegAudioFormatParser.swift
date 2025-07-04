@@ -16,13 +16,23 @@ struct FFmpegAudioFormatParser {
 
         if let regex = try? NSRegularExpression(pattern: audioPattern),
            let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)) {
-            codec = String(output[Range(match.range(at: 1), in: output)!])
-            sampleRate = Int(String(output[Range(match.range(at: 2), in: output)!])) ?? 44100
-            let channelInfo = String(output[Range(match.range(at: 3), in: output)!])
-            let bitRateKbps = Int(String(output[Range(match.range(at: 4), in: output)!])) ?? 128
-
-            channels = channelInfo.contains("stereo") ? 2 : 1
-            bitRate = bitRateKbps * 1000 // Convert kb/s to b/s
+            if let codecRange = Range(match.range(at: 1), in: output) {
+                codec = String(output[codecRange])
+            }
+            
+            if let sampleRateRange = Range(match.range(at: 2), in: output) {
+                sampleRate = Int(String(output[sampleRateRange])) ?? 44100
+            }
+            
+            if let channelRange = Range(match.range(at: 3), in: output) {
+                let channelInfo = String(output[channelRange])
+                channels = channelInfo.contains("stereo") ? 2 : 1
+            }
+            
+            if let bitRateRange = Range(match.range(at: 4), in: output) {
+                let bitRateKbps = Int(String(output[bitRateRange])) ?? 128
+                bitRate = bitRateKbps * 1000 // Convert kb/s to b/s
+            }
         }
 
         let duration = parseDuration(from: output)
@@ -61,10 +71,23 @@ struct FFmpegAudioFormatParser {
             return 0.0
         }
 
-        let hours = Double(String(output[Range(match.range(at: 1), in: output)!])) ?? 0
-        let minutes = Double(String(output[Range(match.range(at: 2), in: output)!])) ?? 0
-        let seconds = Double(String(output[Range(match.range(at: 3), in: output)!])) ?? 0
-        let centiseconds = Double(String(output[Range(match.range(at: 4), in: output)!])) ?? 0
+        var hours = 0.0
+        var minutes = 0.0
+        var seconds = 0.0
+        var centiseconds = 0.0
+        
+        if let hoursRange = Range(match.range(at: 1), in: output) {
+            hours = Double(String(output[hoursRange])) ?? 0
+        }
+        if let minutesRange = Range(match.range(at: 2), in: output) {
+            minutes = Double(String(output[minutesRange])) ?? 0
+        }
+        if let secondsRange = Range(match.range(at: 3), in: output) {
+            seconds = Double(String(output[secondsRange])) ?? 0
+        }
+        if let centisecondsRange = Range(match.range(at: 4), in: output) {
+            centiseconds = Double(String(output[centisecondsRange])) ?? 0
+        }
 
         return hours * 3600 + minutes * 60 + seconds + centiseconds / 100
     }
@@ -80,10 +103,23 @@ struct FFmpegAudioFormatParser {
             return nil
         }
 
-        let hours = Double(String(output[Range(match.range(at: 1), in: output)!])) ?? 0
-        let minutes = Double(String(output[Range(match.range(at: 2), in: output)!])) ?? 0
-        let seconds = Double(String(output[Range(match.range(at: 3), in: output)!])) ?? 0
-        let centiseconds = Double(String(output[Range(match.range(at: 4), in: output)!])) ?? 0
+        var hours = 0.0
+        var minutes = 0.0
+        var seconds = 0.0
+        var centiseconds = 0.0
+        
+        if let hoursRange = Range(match.range(at: 1), in: output) {
+            hours = Double(String(output[hoursRange])) ?? 0
+        }
+        if let minutesRange = Range(match.range(at: 2), in: output) {
+            minutes = Double(String(output[minutesRange])) ?? 0
+        }
+        if let secondsRange = Range(match.range(at: 3), in: output) {
+            seconds = Double(String(output[secondsRange])) ?? 0
+        }
+        if let centisecondsRange = Range(match.range(at: 4), in: output) {
+            centiseconds = Double(String(output[centisecondsRange])) ?? 0
+        }
 
         let currentTime = hours * 3600 + minutes * 60 + seconds + centiseconds / 100
         return min(currentTime / totalDuration, 1.0)

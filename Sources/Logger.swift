@@ -9,19 +9,27 @@ public enum LogLevel: Int, CaseIterable, Comparable, Sendable {
 
     var description: String {
         switch self {
-        case .debug: return "DEBUG"
-        case .info: return "INFO"
-        case .warn: return "WARN"
-        case .error: return "ERROR"
+        case .debug:
+            return "DEBUG"
+        case .info:
+            return "INFO"
+        case .warn:
+            return "WARN"
+        case .error:
+            return "ERROR"
         }
     }
 
     var osLogType: OSLogType {
         switch self {
-        case .debug: return .debug
-        case .info: return .info
-        case .warn: return .default
-        case .error: return .error
+        case .debug:
+            return .debug
+        case .info:
+            return .info
+        case .warn:
+            return .default
+        case .error:
+            return .error
         }
     }
 
@@ -163,7 +171,11 @@ public extension Logger {
                 ""
             }
 
-            debug("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)", component: componentName)
+            debug(
+                "[\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - " +
+                "\(progress.currentStatus)\(timeInfo)\(speedInfo)",
+                component: componentName
+            )
         } else {
             debug("[\(progress.currentPhase.rawValue)] \(progress.formattedProgress)", component: componentName)
         }

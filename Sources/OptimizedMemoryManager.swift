@@ -19,7 +19,10 @@ public final class OptimizedMemoryManager {
 
             // Pre-allocate buffers
             for _ in 0..<poolSize {
-                let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: MemoryLayout<UInt8>.alignment)
+                let buffer = UnsafeMutableRawPointer.allocate(
+                    byteCount: bufferSize, 
+                    alignment: MemoryLayout<UInt8>.alignment
+                )
                 availableBuffers.append(buffer)
             }
         }
@@ -93,7 +96,10 @@ public final class OptimizedMemoryManager {
         self.memoryConfig = platformOptimizer.getMemoryConfig()
         setupMemoryPools()
 
-        Logger.shared.info("Initialized OptimizedMemoryManager with \(memoryConfig.bufferPoolSize) pools", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Initialized OptimizedMemoryManager with \(memoryConfig.bufferPoolSize) pools",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     deinit {
@@ -114,7 +120,10 @@ public final class OptimizedMemoryManager {
             )
         }
 
-        Logger.shared.info("Created memory pools for buffer sizes: \(bufferSizes)", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Created memory pools for buffer sizes: \(bufferSizes)",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     public func borrowBuffer(size: Int) -> UnsafeMutableRawPointer? {
@@ -124,8 +133,14 @@ public final class OptimizedMemoryManager {
         guard let poolSize = suitableSize,
               var pool = memoryPools[poolSize] else {
             // Fallback to direct allocation for unusual sizes
-            Logger.shared.warn("No suitable pool for size \(size), using direct allocation", component: "OptimizedMemoryManager")
-            return UnsafeMutableRawPointer.allocate(byteCount: size, alignment: MemoryLayout<UInt8>.alignment)
+            Logger.shared.warn(
+                "No suitable pool for size \(size), using direct allocation",
+                component: "OptimizedMemoryManager"
+            )
+            return UnsafeMutableRawPointer.allocate(
+                byteCount: size,
+                alignment: MemoryLayout<UInt8>.alignment
+            )
         }
 
         let buffer = pool.borrowBuffer()
@@ -273,14 +288,84 @@ public final class OptimizedMemoryManager {
         metricsLock.unlock()
 
         // Check if garbage collection is recommended
-        if currentUsage > UInt64(Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold) {
-            Logger.shared.warn("Memory usage approaching threshold: \(formatMemory(currentUsage))", component: "OptimizedMemoryManager")
+        if currentUsage > UInt64(
+            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+        ) {
+            Logger.shared.warn(
+                "Memory usage approaching threshold: \(formatMemory(currentUsage))",
+                component: "OptimizedMemoryManager"
+            )
             performOptimizedGarbageCollection()
         }
     }
 
-    // MARK: - Garbage Collection
+    // MARK: - Garbage Collection (see extension below)
 
+    // MARK: - Memory Metrics
+
+    public func getMemoryMetrics() -> MemoryMetrics {
+        metricsLock.lock()
+        defer { metricsLock.unlock() }
+
+        let currentUsage = getCurrentMemoryUsage()
+        let poolUtilization = calculatePoolUtilization()
+        let fragmentationRatio = calculateFragmentationRatio()
+        let gcRecommended = currentUsage > UInt64(
+            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+        )
+
+        return MemoryMetrics(
+            currentUsage: currentUsage,
+            peakUsage: peakMemoryUsage,
+            poolUtilization: poolUtilization,
+            fragmentationRatio: fragmentationRatio,
+            gcRecommended: gcRecommended,
+            timestamp: Date()
+        )
+    }
+
+    private func calculatePoolUtilization() -> Double {
+        var totalBuffers = 0
+        var usedBuffers = 0
+
+        for (_, pool) in memoryPools {
+            totalBuffers += pool.poolSize
+            // Would need to access pool internals to calculate actual usage
+            usedBuffers += pool.poolSize / 2 // Simplified estimation
+        }
+
+        return totalBuffers > 0 ? Double(usedBuffers) / Double(totalBuffers) : 0.0
+    }
+
+    private func calculateFragmentationRatio() -> Double {
+        // Simplified fragmentation calculation
+        guard memoryUsageHistory.count >= 2 else { return 0.0 }
+
+        let recent = Array(memoryUsageHistory.suffix(10))
+        let variance = calculateVariance(recent)
+        let mean = recent.reduce(0, +) / UInt64(recent.count)
+
+        return mean > 0 ? Double(variance) / Double(mean) : 0.0
+    }
+
+    private func calculateVariance(_ values: [UInt64]) -> UInt64 {
+        guard values.count > 1 else { return 0 }
+
+        let mean = values.reduce(0, +) / UInt64(values.count)
+        let squaredDiffs = values.map { value in
+            let diff = Int64(value) - Int64(mean)
+            return UInt64(diff * diff)
+        }
+
+        return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
+    }
+
+    // MARK: - Utilities (see extensions below)
+}
+
+// MARK: - Garbage Collection Extension
+
+extension OptimizedMemoryManager {
     public func performOptimizedGarbageCollection() {
         Logger.shared.info("Performing optimized garbage collection", component: "OptimizedMemoryManager")
 
@@ -354,67 +439,12 @@ public final class OptimizedMemoryManager {
             memoryPools[size] = pool
         }
     }
+}
 
-    // MARK: - Memory Metrics
+// MARK: - Utilities Extension
 
-    public func getMemoryMetrics() -> MemoryMetrics {
-        metricsLock.lock()
-        defer { metricsLock.unlock() }
-
-        let currentUsage = getCurrentMemoryUsage()
-        let poolUtilization = calculatePoolUtilization()
-        let fragmentationRatio = calculateFragmentationRatio()
-        let gcRecommended = currentUsage > UInt64(Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold)
-
-        return MemoryMetrics(
-            currentUsage: currentUsage,
-            peakUsage: peakMemoryUsage,
-            poolUtilization: poolUtilization,
-            fragmentationRatio: fragmentationRatio,
-            gcRecommended: gcRecommended,
-            timestamp: Date()
-        )
-    }
-
-    private func calculatePoolUtilization() -> Double {
-        var totalBuffers = 0
-        var usedBuffers = 0
-
-        for (_, pool) in memoryPools {
-            totalBuffers += pool.poolSize
-            // Would need to access pool internals to calculate actual usage
-            usedBuffers += pool.poolSize / 2 // Simplified estimation
-        }
-
-        return totalBuffers > 0 ? Double(usedBuffers) / Double(totalBuffers) : 0.0
-    }
-
-    private func calculateFragmentationRatio() -> Double {
-        // Simplified fragmentation calculation
-        guard memoryUsageHistory.count >= 2 else { return 0.0 }
-
-        let recent = Array(memoryUsageHistory.suffix(10))
-        let variance = calculateVariance(recent)
-        let mean = recent.reduce(0, +) / UInt64(recent.count)
-
-        return mean > 0 ? Double(variance) / Double(mean) : 0.0
-    }
-
-    private func calculateVariance(_ values: [UInt64]) -> UInt64 {
-        guard values.count > 1 else { return 0 }
-
-        let mean = values.reduce(0, +) / UInt64(values.count)
-        let squaredDiffs = values.map { value in
-            let diff = Int64(value) - Int64(mean)
-            return UInt64(diff * diff)
-        }
-
-        return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
-    }
-
-    // MARK: - Utilities
-
-    private func getCurrentMemoryUsage() -> UInt64 {
+extension OptimizedMemoryManager {
+    fileprivate func getCurrentMemoryUsage() -> UInt64 {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
 
@@ -427,28 +457,100 @@ public final class OptimizedMemoryManager {
         return result == KERN_SUCCESS ? info.resident_size : 0
     }
 
-    private func formatMemory(_ bytes: UInt64) -> String {
+    fileprivate func formatMemory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / (1024 * 1024)
         return String(format: "%.1fMB", mb)
     }
 
-    private func deallocatePools() {
+    fileprivate func deallocatePools() {
         for (_, var pool) in memoryPools {
             pool.deallocate()
         }
         memoryPools.removeAll()
     }
 
-    // MARK: - Public Utilities
-
     public func logMemoryStatus() {
         let metrics = getMemoryMetrics()
 
-        Logger.shared.info("=== Memory Status ===", component: "OptimizedMemoryManager")
-        Logger.shared.info("Current: \(formatMemory(metrics.currentUsage))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Peak: \(formatMemory(metrics.peakUsage))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Pool Utilization: \(String(format: "%.1f%%", metrics.poolUtilization * 100))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Fragmentation: \(String(format: "%.3f", metrics.fragmentationRatio))", component: "OptimizedMemoryManager")
-        Logger.shared.info("GC Recommended: \(metrics.gcRecommended)", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "=== Memory Status ===",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Current: \(formatMemory(metrics.currentUsage))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Peak: \(formatMemory(metrics.peakUsage))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Pool Utilization: \(String(format: "%.1f%%", metrics.poolUtilization * 100))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Fragmentation: \(String(format: "%.3f", metrics.fragmentationRatio))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "GC Recommended: \(metrics.gcRecommended)",
+            component: "OptimizedMemoryManager"
+        )
+    }
+}
+
+// MARK: - Memory Metrics Extension
+
+extension OptimizedMemoryManager {
+    public func getMemoryMetrics() -> MemoryMetrics {
+        metricsLock.lock()
+        defer { metricsLock.unlock() }
+
+        let currentUsage = getCurrentMemoryUsage()
+        let poolUtilization = calculatePoolUtilization()
+        let fragmentationRatio = calculateFragmentationRatio()
+        let gcRecommended = currentUsage > UInt64(
+            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+        )
+
+        return MemoryMetrics(
+            currentUsage: currentUsage,
+            peakUsage: peakMemoryUsage,
+            poolUtilization: poolUtilization,
+            fragmentationRatio: fragmentationRatio,
+            gcRecommended: gcRecommended,
+            timestamp: Date()
+        )
+    }
+
+    fileprivate func calculatePoolUtilization() -> Double {
+        var totalBuffers = 0
+        var usedBuffers = 0
+
+        for (_, pool) in memoryPools {
+            totalBuffers += pool.poolSize
+            usedBuffers += pool.usedBuffers.count
+        }
+
+        return totalBuffers > 0 ? Double(usedBuffers) / Double(totalBuffers) : 0.0
+    }
+
+    fileprivate func calculateFragmentationRatio() -> Double {
+        let variance = calculateVariance(memorySnapshots)
+        let mean = memorySnapshots.isEmpty ? 0 : memorySnapshots.reduce(0, +) / UInt64(memorySnapshots.count)
+
+        return mean > 0 ? Double(variance) / Double(mean * mean) : 0.0
+    }
+
+    fileprivate func calculateVariance(_ values: [UInt64]) -> UInt64 {
+        guard values.count > 1 else { return 0 }
+
+        let mean = values.reduce(0, +) / UInt64(values.count)
+        let squaredDiffs = values.map { value in
+            let diff = Int64(value) - Int64(mean)
+            return UInt64(diff * diff)
+        }
+
+        return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
     }
 }

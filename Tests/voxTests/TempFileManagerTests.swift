@@ -3,7 +3,7 @@ import Foundation
 @testable import vox
 
 final class TempFileManagerTests: XCTestCase {
-    var tempFileManager: TempFileManager!
+    var tempFileManager: TempFileManager?
 
     override func setUp() {
         super.setUp()
@@ -12,7 +12,7 @@ final class TempFileManagerTests: XCTestCase {
 
     override func tearDown() {
         // Cleanup any remaining test files
-        tempFileManager.cleanupAllFiles()
+        tempFileManager?.cleanupAllFiles()
         super.tearDown()
     }
 
@@ -20,9 +20,13 @@ final class TempFileManagerTests: XCTestCase {
 
     func testCreateTemporaryAudioFile() {
         // Given: A request to create temporary audio file
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
 
         // When: Creating temporary audio file
-        guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+        guard let tempURL = manager.createTemporaryAudioFile() else {
             XCTFail("Should be able to create temporary audio file")
             return
         }
@@ -31,19 +35,24 @@ final class TempFileManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: tempURL.path))
         XCTAssertTrue(tempURL.pathExtension == "m4a")
         XCTAssertTrue(tempURL.lastPathComponent.hasPrefix("vox_audio_"))
-        XCTAssertTrue(tempFileManager.managedFileCount > 0)
+        XCTAssertTrue(manager.managedFileCount > 0)
 
         // Cleanup
-        XCTAssertTrue(tempFileManager.cleanupFile(at: tempURL))
+        XCTAssertTrue(manager.cleanupFile(at: tempURL))
     }
 
     func testCreateTemporaryFileWithCustomExtension() {
         // Given: Custom file extension and prefix
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         let customExtension = "wav"
         let customPrefix = "test_"
 
         // When: Creating temporary file with custom parameters
-        guard let tempURL = tempFileManager.createTemporaryFile(extension: customExtension, prefix: customPrefix) else {
+        guard let tempURL = manager.createTemporaryFile(extension: customExtension, prefix: customPrefix) else {
             XCTFail("Should be able to create temporary file with custom parameters")
             return
         }
@@ -54,35 +63,45 @@ final class TempFileManagerTests: XCTestCase {
         XCTAssertTrue(tempURL.lastPathComponent.hasPrefix(customPrefix))
 
         // Cleanup
-        XCTAssertTrue(tempFileManager.cleanupFile(at: tempURL))
+        XCTAssertTrue(manager.cleanupFile(at: tempURL))
     }
 
     func testFileRegistration() {
         // Given: A manually created temporary file
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         let tempDir = FileManager.default.temporaryDirectory
         let testURL = tempDir.appendingPathComponent("manual_test_file.txt")
 
         // Create file manually
         FileManager.default.createFile(atPath: testURL.path, contents: Data("test".utf8), attributes: nil)
 
-        let initialCount = tempFileManager.managedFileCount
+        let initialCount = manager.managedFileCount
 
         // When: Registering the file
-        tempFileManager.registerTemporaryFile(at: testURL)
+        manager.registerTemporaryFile(at: testURL)
 
         // Then: File should be tracked
-        XCTAssertEqual(tempFileManager.managedFileCount, initialCount + 1)
+        XCTAssertEqual(manager.managedFileCount, initialCount + 1)
 
         // Cleanup
-        XCTAssertTrue(tempFileManager.cleanupFile(at: testURL))
-        XCTAssertEqual(tempFileManager.managedFileCount, initialCount)
+        XCTAssertTrue(manager.cleanupFile(at: testURL))
+        XCTAssertEqual(manager.managedFileCount, initialCount)
     }
 
     // MARK: - Security Tests
 
     func testSecureFilePermissions() {
         // Given: A newly created temporary file
-        guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
+        guard let tempURL = manager.createTemporaryAudioFile() else {
             XCTFail("Should be able to create temporary file")
             return
         }
@@ -99,16 +118,21 @@ final class TempFileManagerTests: XCTestCase {
         }
 
         // Cleanup
-        XCTAssertTrue(tempFileManager.cleanupFile(at: tempURL))
+        XCTAssertTrue(manager.cleanupFile(at: tempURL))
     }
 
     func testUniqueFileNames() {
         // Given: Multiple temporary file creation requests
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         var createdURLs: [URL] = []
 
         // When: Creating multiple temporary files
         for _ in 0..<10 {
-            guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+            guard let tempURL = manager.createTemporaryAudioFile() else {
                 XCTFail("Should be able to create temporary file")
                 return
             }
@@ -121,7 +145,7 @@ final class TempFileManagerTests: XCTestCase {
         XCTAssertEqual(filenames.count, uniqueFilenames.count, "All filenames should be unique")
 
         // Cleanup
-        let failedCleanups = tempFileManager.cleanupFiles(at: createdURLs)
+        let failedCleanups = manager.cleanupFiles(at: createdURLs)
         XCTAssertTrue(failedCleanups.isEmpty, "All files should be cleaned up successfully")
     }
 
@@ -129,7 +153,12 @@ final class TempFileManagerTests: XCTestCase {
 
     func testSingleFileCleanup() {
         // Given: A temporary file
-        guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
+        guard let tempURL = manager.createTemporaryAudioFile() else {
             XCTFail("Should be able to create temporary file")
             return
         }
@@ -138,7 +167,7 @@ final class TempFileManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: tempURL.path))
 
         // When: Cleaning up the file
-        let cleanupSuccess = tempFileManager.cleanupFile(at: tempURL)
+        let cleanupSuccess = manager.cleanupFile(at: tempURL)
 
         // Then: File should be removed and cleanup should succeed
         XCTAssertTrue(cleanupSuccess)
@@ -147,9 +176,14 @@ final class TempFileManagerTests: XCTestCase {
 
     func testMultipleFileCleanup() {
         // Given: Multiple temporary files
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         var tempURLs: [URL] = []
         for _ in 0..<5 {
-            guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+            guard let tempURL = manager.createTemporaryAudioFile() else {
                 XCTFail("Should be able to create temporary file")
                 return
             }
@@ -162,7 +196,7 @@ final class TempFileManagerTests: XCTestCase {
         }
 
         // When: Cleaning up all files
-        let failedCleanups = tempFileManager.cleanupFiles(at: tempURLs)
+        let failedCleanups = manager.cleanupFiles(at: tempURLs)
 
         // Then: All files should be removed
         XCTAssertTrue(failedCleanups.isEmpty)
@@ -173,10 +207,15 @@ final class TempFileManagerTests: XCTestCase {
 
     func testCleanupAllFiles() {
         // Given: Multiple temporary files of different types
-        let initialCount = tempFileManager.managedFileCount
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
+        let initialCount = manager.managedFileCount
 
-        guard let audioFile = tempFileManager.createTemporaryAudioFile(),
-              let textFile = tempFileManager.createTemporaryFile(extension: "txt", prefix: "test_") else {
+        guard let audioFile = manager.createTemporaryAudioFile(),
+              let textFile = manager.createTemporaryFile(extension: "txt", prefix: "test_") else {
             XCTFail("Should be able to create temporary files")
             return
         }
@@ -184,25 +223,30 @@ final class TempFileManagerTests: XCTestCase {
         // Verify files exist and are tracked
         XCTAssertTrue(FileManager.default.fileExists(atPath: audioFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: textFile.path))
-        XCTAssertEqual(tempFileManager.managedFileCount, initialCount + 2)
+        XCTAssertEqual(manager.managedFileCount, initialCount + 2)
 
         // When: Cleaning up all files
-        tempFileManager.cleanupAllFiles()
+        manager.cleanupAllFiles()
 
         // Then: All managed files should be removed
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioFile.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: textFile.path))
-        XCTAssertEqual(tempFileManager.managedFileCount, initialCount)
+        XCTAssertEqual(manager.managedFileCount, initialCount)
     }
 
     // MARK: - Error Handling Tests
 
     func testCleanupNonExistentFile() {
         // Given: A URL that doesn't exist
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         let nonExistentURL = URL(fileURLWithPath: "/tmp/non_existent_file.txt")
 
         // When: Attempting to clean up non-existent file
-        let result = tempFileManager.cleanupFile(at: nonExistentURL)
+        let result = manager.cleanupFile(at: nonExistentURL)
 
         // Then: Should handle gracefully (return true for unmanaged files)
         XCTAssertTrue(result)
@@ -210,7 +254,12 @@ final class TempFileManagerTests: XCTestCase {
 
     func testCleanupFailureHandling() throws {
         // Given: A temporary file
-        guard let tempURL = tempFileManager.createTemporaryAudioFile() else {
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
+        guard let tempURL = manager.createTemporaryAudioFile() else {
             XCTFail("Should be able to create temporary file")
             return
         }
@@ -228,11 +277,11 @@ final class TempFileManagerTests: XCTestCase {
                 // Restore permissions for cleanup
                 try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: parentURL.path)
                 try? (tempURL as NSURL).setResourceValue(false, forKey: .isUserImmutableKey)
-                _ = tempFileManager.cleanupFile(at: tempURL)
+                _ = manager.cleanupFile(at: tempURL)
             }
 
             // When: Attempting cleanup
-            let cleanupSuccess = tempFileManager.cleanupFile(at: tempURL)
+            let cleanupSuccess = manager.cleanupFile(at: tempURL)
 
             // Then: Should handle failure gracefully
             XCTAssertFalse(cleanupSuccess)
@@ -247,11 +296,16 @@ final class TempFileManagerTests: XCTestCase {
 
     func testWithTemporaryFileOperation() {
         // Given: An operation that needs a temporary file
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         var operationExecuted = false
         var capturedURL: URL?
 
         // When: Using withTemporaryFile convenience method
-        let result = tempFileManager.withTemporaryFile(extension: "txt", prefix: "test_") { url in
+        let result = manager.withTemporaryFile(extension: "txt", prefix: "test_") { url in
             operationExecuted = true
             capturedURL = url
 
@@ -272,11 +326,16 @@ final class TempFileManagerTests: XCTestCase {
 
     func testWithTemporaryAudioFileOperation() {
         // Given: An operation that needs a temporary audio file
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         var operationExecuted = false
         var capturedURL: URL?
 
         // When: Using withTemporaryAudioFile convenience method
-        let result = tempFileManager.withTemporaryAudioFile { url in
+        let result = manager.withTemporaryAudioFile { url in
             operationExecuted = true
             capturedURL = url
 
@@ -298,6 +357,11 @@ final class TempFileManagerTests: XCTestCase {
 
     func testWithTemporaryFileOperationThrowsError() {
         // Given: An operation that throws an error
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         enum TestError: Error {
             case intentional
         }
@@ -307,7 +371,7 @@ final class TempFileManagerTests: XCTestCase {
 
         // When: Using withTemporaryFile with throwing operation
         do {
-            _ = try tempFileManager.withTemporaryFile(extension: "txt") { url in
+            _ = try manager.withTemporaryFile(extension: "txt") { url in
                 operationExecuted = true
                 capturedURL = url
                 throw TestError.intentional
@@ -330,6 +394,11 @@ final class TempFileManagerTests: XCTestCase {
 
     func testConcurrentFileCreation() {
         // Given: Multiple concurrent file creation requests
+        guard let manager = tempFileManager else {
+            XCTFail("Temp file manager not available")
+            return
+        }
+        
         let expectation = XCTestExpectation(description: "Concurrent file creation")
         expectation.expectedFulfillmentCount = 10
 
@@ -338,7 +407,7 @@ final class TempFileManagerTests: XCTestCase {
 
         // When: Creating files concurrently
         DispatchQueue.concurrentPerform(iterations: 10) { _ in
-            if let url = tempFileManager.createTemporaryAudioFile() {
+            if let url = manager.createTemporaryAudioFile() {
                 urlsLock.lock()
                 createdURLs.append(url)
                 urlsLock.unlock()
@@ -354,7 +423,7 @@ final class TempFileManagerTests: XCTestCase {
         XCTAssertEqual(uniqueURLs.count, 10)
 
         // Cleanup
-        let failedCleanups = tempFileManager.cleanupFiles(at: createdURLs)
+        let failedCleanups = manager.cleanupFiles(at: createdURLs)
         XCTAssertTrue(failedCleanups.isEmpty)
     }
 }

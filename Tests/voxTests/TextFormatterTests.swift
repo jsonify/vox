@@ -412,3 +412,13 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Total Words:"))
     }
 }
+
+// MARK: - Extended Text Formatter Tests
+
+extension TextFormatterTests {
+    // Additional test methods can be added here to split the main class
+    func testTextFormatterExtended() {
+        // Test placeholder for future expansion
+        XCTAssertTrue(true)
+    }
+}

@@ -13,8 +13,7 @@ public final class AudioSegmenter {
         public let totalSegments: Int
         public let isTemporary: Bool
 
-        public init(url: URL, startTime: TimeInterval, duration: TimeInterval,
-                    segmentIndex: Int, totalSegments: Int, isTemporary: Bool = true) {
+        public init(url: URL, startTime: TimeInterval, duration: TimeInterval, segmentIndex: Int, totalSegments: Int, isTemporary: Bool = true) {
             self.url = url
             self.startTime = startTime
             self.duration = duration
@@ -72,7 +71,10 @@ public final class AudioSegmenter {
         from audioFile: AudioFile,
         segmentDuration: TimeInterval
     ) async throws -> [AudioSegmentFile] {
-        Logger.shared.info("Creating audio segments from \(audioFile.path) with \(segmentDuration)s duration", component: "AudioSegmenter")
+        Logger.shared.info(
+            "Creating audio segments from \(audioFile.path) with \(segmentDuration)s duration",
+            component: "AudioSegmenter"
+        )
 
         // Load the audio asset
         let asset = AVURLAsset(url: audioFile.url)
@@ -94,7 +96,10 @@ public final class AudioSegmenter {
         let segmentCount = Int(ceil(totalDuration / segmentDuration))
         var segments: [AudioSegmentFile] = []
 
-        Logger.shared.info("Splitting \(String(format: "%.2f", totalDuration))s audio into \(segmentCount) segments", component: "AudioSegmenter")
+        Logger.shared.info(
+            "Splitting \(String(format: "%.2f", totalDuration))s audio into \(segmentCount) segments",
+            component: "AudioSegmenter"
+        )
 
         // Create temporary directory for segments
         let segmentDirectory = try createSegmentDirectory()
@@ -133,10 +138,16 @@ public final class AudioSegmenter {
                 do {
                     if FileManager.default.fileExists(atPath: segmentURL.path) {
                         try FileManager.default.removeItem(at: segmentURL)
-                        Logger.shared.debug("Cleaned up segment file: \(segmentURL.lastPathComponent)", component: "AudioSegmenter")
+                        Logger.shared.debug(
+                            "Cleaned up segment file: \(segmentURL.lastPathComponent)",
+                            component: "AudioSegmenter"
+                        )
                     }
                 } catch {
-                    Logger.shared.error("Failed to cleanup segment file \(segmentURL.path): \(error)", component: "AudioSegmenter")
+                    Logger.shared.error(
+                        "Failed to cleanup segment file \(segmentURL.path): \(error)",
+                        component: "AudioSegmenter"
+                    )
                 }
             }
 
@@ -151,10 +162,16 @@ public final class AudioSegmenter {
                 do {
                     if FileManager.default.fileExists(atPath: segment.url.path) {
                         try FileManager.default.removeItem(at: segment.url)
-                        Logger.shared.debug("Cleaned up segment: \(segment.url.lastPathComponent)", component: "AudioSegmenter")
+                        Logger.shared.debug(
+                            "Cleaned up segment: \(segment.url.lastPathComponent)",
+                            component: "AudioSegmenter"
+                        )
                     }
                 } catch {
-                    Logger.shared.error("Failed to cleanup segment \(segment.url.path): \(error)", component: "AudioSegmenter")
+                    Logger.shared.error(
+                        "Failed to cleanup segment \(segment.url.path): \(error)",
+                        component: "AudioSegmenter"
+                    )
                 }
             }
         }
@@ -209,7 +226,11 @@ public final class AudioSegmenter {
         // Use preset settings optimized for speech recognition
         // The Apple M4A preset already provides good settings for speech
 
-        Logger.shared.debug("Creating segment \(segmentIndex): \(String(format: "%.2f", startTime))s - \(String(format: "%.2f", startTime + duration))s", component: "AudioSegmenter")
+        Logger.shared.debug(
+            "Creating segment \(segmentIndex): \(String(format: "%.2f", startTime))s - " +
+            "\(String(format: "%.2f", startTime + duration))s",
+            component: "AudioSegmenter"
+        )
 
         // Perform export
         await exportSession.export()
@@ -226,7 +247,10 @@ public final class AudioSegmenter {
                 isTemporary: true
             )
 
-            Logger.shared.debug("Successfully created segment \(segmentIndex) at \(outputURL.path)", component: "AudioSegmenter")
+            Logger.shared.debug(
+                "Successfully created segment \(segmentIndex) at \(outputURL.path)",
+                component: "AudioSegmenter"
+            )
             return segmentFile
 
         case .failed:

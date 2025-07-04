@@ -11,8 +11,7 @@ final class MemoryMonitorTests: XCTestCase {
         XCTAssertGreaterThan(totalSystemMemory, 0, "Total system memory should be greater than 0")
 
         let expectedPercentage = (Double(usage.currentBytes) / Double(totalSystemMemory)) * 100.0
-        XCTAssertEqual(usage.usagePercentage, expectedPercentage, accuracy: 0.1,
-                       "Memory usage percentage should match expected calculation")
+        XCTAssertEqual(usage.usagePercentage, expectedPercentage, accuracy: 0.1, "Memory usage percentage should match expected calculation")
 
         // Log memory stats for verification
         print("Memory Test Stats:")

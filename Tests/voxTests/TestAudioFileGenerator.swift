@@ -48,7 +48,9 @@ class TestAudioFileGenerator {
         let fileName = "invalid_\(UUID().uuidString).mp4"
         let outputURL = testDirectory.appendingPathComponent(fileName)
 
-        let invalidData = "This is not a valid MP4 file content".data(using: .utf8)!
+        guard let invalidData = "This is not a valid MP4 file content".data(using: .utf8) else {
+            return testDirectory.appendingPathComponent("empty_fallback.mp4")
+        }
         FileManager.default.createFile(atPath: outputURL.path, contents: invalidData)
 
         return outputURL

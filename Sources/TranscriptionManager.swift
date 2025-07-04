@@ -1,5 +1,16 @@
 import Foundation
 
+// MARK: - TranscriptionConfig
+
+private struct TranscriptionConfig {
+    let forceCloud: Bool
+    let verbose: Bool
+    let fallbackAPI: FallbackAPI?
+    let apiKey: String?
+    let includeTimestamps: Bool
+    let language: String?
+}
+
 /// Manages the transcription process including language preferences and async operations
 struct TranscriptionManager {
     private let forceCloud: Bool
@@ -31,7 +42,10 @@ struct TranscriptionManager {
         // Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "TranscriptionManager")
         fputs("DEBUG: About to call transcribeAudioWithAsyncFunction\n", stderr)
 
-        let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
+        let transcriptionResult = try transcribeAudioWithAsyncFunction(
+            audioFile: audioFile,
+            preferredLanguages: preferredLanguages
+        )
         fputs("DEBUG: transcribeAudioWithAsyncFunction completed\n", stderr)
 
         return transcriptionResult
@@ -39,83 +53,124 @@ struct TranscriptionManager {
 
     private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
         fputs("DEBUG: In transcribeAudioWithAsyncFunction - start\n", stderr)
-        let forceCloudCapture = forceCloud
-        let verboseCapture = verbose
-        let fallbackAPICapture = fallbackAPI
-        let apiKeyCapture = apiKey
-        let includeTimestampsCapture = includeTimestamps
-        let languageCapture = language
-
+        
+        let capturedConfig = captureConfiguration()
         fputs("DEBUG: About to call runAsyncAndWait\n", stderr)
+        
         return try runAsyncAndWait { @Sendable in
             fputs("DEBUG: Inside runAsyncAndWait closure\n", stderr)
-            if forceCloudCapture {
-                fputs("DEBUG: Using force cloud path\n", stderr)
-                // Use cloud transcription (forced)
-                return try await performCloudTranscription(
+            
+            if capturedConfig.forceCloud {
+                return try await self.performCloudTranscription(
                     audioFile: audioFile,
-                    preferredLanguage: languageCapture,
-                    fallbackAPI: fallbackAPICapture,
-                    apiKey: apiKeyCapture,
-                    includeTimestamps: includeTimestampsCapture,
-                    verbose: verboseCapture
+                    preferredLanguage: capturedConfig.language,
+                    fallbackAPI: capturedConfig.fallbackAPI,
+                    apiKey: capturedConfig.apiKey,
+                    includeTimestamps: capturedConfig.includeTimestamps,
+                    verbose: capturedConfig.verbose
                 )
             } else {
-                fputs("DEBUG: Using native transcription path\n", stderr)
-                // Try native transcription first, fallback to cloud if needed
-                do {
-                    fputs("DEBUG: About to create SpeechTranscriber\n", stderr)
-                    let speechTranscriber = try SpeechTranscriber()
-                    fputs("DEBUG: SpeechTranscriber created, about to call transcribeWithLanguageDetection\n", stderr)
-                    return try await speechTranscriber.transcribeWithLanguageDetection(
-                        audioFile: audioFile,
-                        preferredLanguages: preferredLanguages
-                    ) { @Sendable progressReport in
-                        fputs("DEBUG: Progress callback called\n", stderr)
-                        // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
-                        fputs("DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
-                        // Create thread-safe progress display
-                        // DispatchQueue.main.sync {
-                        //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verboseCapture)
-                        // }
-                        fputs("DEBUG: Progress callback completed\n", stderr)
-                    }
-                } catch {
-                    fputs("DEBUG: Native transcription failed: \(error.localizedDescription)\n", stderr)
-                    fputs("DEBUG: Native transcription failed, attempting fallback\n", stderr)
-                    // TEMP DEBUG: Bypass Logger call
-                    // Logger.shared.warn("Native transcription failed, attempting cloud fallback: \(error.localizedDescription)", component: "TranscriptionManager")
-
-                    // Try cloud transcription as fallback
-                    if fallbackAPICapture != nil || apiKeyCapture != nil {
-                        fputs("DEBUG: Using cloud fallback with provided API key\n", stderr)
-                        return try await performCloudTranscription(
-                            audioFile: audioFile,
-                            preferredLanguage: languageCapture,
-                            fallbackAPI: fallbackAPICapture,
-                            apiKey: apiKeyCapture,
-                            includeTimestamps: includeTimestampsCapture,
-                            verbose: verboseCapture
-                        )
-                    } else {
-                        fputs("DEBUG: No cloud API key provided - creating demo transcription\n", stderr)
-                        // TEMP FIX: Create a demo transcription result when no API key is available
-                        // This allows users to test the full pipeline
-                        return TranscriptionResult(
-                            text: "[DEMO] Native speech recognition is temporarily disabled due to system compatibility issues. " +
-                                "To get real transcription, use: vox file.mp4 --force-cloud --api-key YOUR_OPENAI_KEY",
-                            language: "en-US",
-                            confidence: 0.95,
-                            duration: audioFile.format.duration,
-                            segments: [],
-                            engine: .speechAnalyzer,
-                            processingTime: 1.0,
-                            audioFormat: audioFile.format
-                        )
-                    }
-                }
+                return try await self.performNativeTranscriptionWithFallback(
+                    audioFile: audioFile,
+                    preferredLanguages: preferredLanguages,
+                    config: capturedConfig
+                )
             }
         }
+    }
+
+    private func captureConfiguration() -> TranscriptionConfig {
+        return TranscriptionConfig(
+            forceCloud: forceCloud,
+            verbose: verbose,
+            fallbackAPI: fallbackAPI,
+            apiKey: apiKey,
+            includeTimestamps: includeTimestamps,
+            language: language
+        )
+    }
+
+    private func performNativeTranscriptionWithFallback(
+        audioFile: AudioFile,
+        preferredLanguages: [String],
+        config: TranscriptionConfig
+    ) async throws -> TranscriptionResult {
+        fputs("DEBUG: Using native transcription path\n", stderr)
+        
+        do {
+            return try await performNativeTranscription(
+                audioFile: audioFile,
+                preferredLanguages: preferredLanguages,
+                verbose: config.verbose
+            )
+        } catch {
+            fputs("DEBUG: Native transcription failed, attempting fallback\n", stderr)
+            return try await handleNativeTranscriptionFailure(
+                audioFile: audioFile,
+                config: config,
+                error: error
+            )
+        }
+    }
+
+    private func performNativeTranscription(
+        audioFile: AudioFile,
+        preferredLanguages: [String],
+        verbose: Bool
+    ) async throws -> TranscriptionResult {
+        fputs("DEBUG: About to create SpeechTranscriber\n", stderr)
+        let speechTranscriber = try SpeechTranscriber()
+        fputs("DEBUG: SpeechTranscriber created, about to call transcribeWithLanguageDetection\n", stderr)
+        
+        return try await speechTranscriber.transcribeWithLanguageDetection(
+            audioFile: audioFile,
+            preferredLanguages: preferredLanguages
+        ) { @Sendable progressReport in
+            fputs("DEBUG: Progress callback called\n", stderr)
+            fputs(
+                "DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
+                stderr
+            )
+            fputs("DEBUG: Progress callback completed\n", stderr)
+        }
+    }
+
+    private func handleNativeTranscriptionFailure(
+        audioFile: AudioFile,
+        config: TranscriptionConfig,
+        error: Error
+    ) async throws -> TranscriptionResult {
+        fputs("DEBUG: Native transcription failed: \(error.localizedDescription)\n", stderr)
+        
+        if config.fallbackAPI != nil || config.apiKey != nil {
+            fputs("DEBUG: Using cloud fallback with provided API key\n", stderr)
+            return try await performCloudTranscription(
+                audioFile: audioFile,
+                preferredLanguage: config.language,
+                fallbackAPI: config.fallbackAPI,
+                apiKey: config.apiKey,
+                includeTimestamps: config.includeTimestamps,
+                verbose: config.verbose
+            )
+        } else {
+            fputs("DEBUG: No cloud API key provided - creating demo transcription\n", stderr)
+            return createDemoTranscriptionResult(audioFile: audioFile)
+        }
+    }
+
+    private func createDemoTranscriptionResult(audioFile: AudioFile) -> TranscriptionResult {
+        return TranscriptionResult(
+            text: "[DEMO] Native speech recognition is temporarily disabled due to " +
+                "system compatibility issues. To get real transcription, use: " +
+                "vox file.mp4 --force-cloud --api-key YOUR_OPENAI_KEY",
+            language: "en-US",
+            confidence: 0.95,
+            duration: audioFile.format.duration,
+            segments: [],
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: audioFile.format
+        )
     }
 
     private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
@@ -177,7 +232,10 @@ struct TranscriptionManager {
                 includeTimestamps: includeTimestamps
             ) { @Sendable progressReport in
                 // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
-                fputs("DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
+                fputs(
+                    "DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
+                    stderr
+                )
                 // Create thread-safe progress display
                 // DispatchQueue.main.sync {
                 //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verbose)

@@ -1,5 +1,77 @@
 import Foundation
 
+// MARK: - FFmpegProgressHandler
+
+private class FFmpegProgressHandler {
+    private let errorPipe: Pipe
+    private let progressCallback: ProgressCallback?
+    private weak var processor: FFmpegProcessor?
+    private var duration: TimeInterval = 0
+    private var progressTimer: Timer?
+    private var lastProgress: Double = 0.1
+
+    init(errorPipe: Pipe, progressCallback: ProgressCallback?, processor: FFmpegProcessor?) {
+        self.errorPipe = errorPipe
+        self.progressCallback = progressCallback
+        self.processor = processor
+    }
+
+    func start() {
+        setupProgressParsing()
+        startBackupTimer()
+    }
+
+    func stop() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+    }
+
+    private func setupProgressParsing() {
+        errorPipe.fileHandleForReading.readabilityHandler = { [weak self] fileHandle in
+            let data = fileHandle.availableData
+            if let output = String(data: data, encoding: .utf8) {
+                self?.parseProgressOutput(output)
+            }
+        }
+    }
+
+    private func parseProgressOutput(_ output: String) {
+        if duration == 0 {
+            duration = processor?.parseDuration(from: output) ?? 0
+        }
+
+        if let rawProgress = processor?.parseProgress(from: output, totalDuration: duration) {
+            let adjustedProgress = 0.1 + (rawProgress * 0.8)
+            if adjustedProgress > lastProgress {
+                lastProgress = adjustedProgress
+                DispatchQueue.main.async { [weak self] in
+                    self?.processor?.reportProgress(adjustedProgress, phase: .extracting, callback: self?.progressCallback)
+                }
+            }
+        }
+    }
+
+    private func startBackupTimer() {
+        guard progressCallback != nil else { return }
+        
+        let processStartTime = Date()
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            let elapsed = Date().timeIntervalSince(processStartTime)
+            let estimatedProgress = min(0.1 + (elapsed / max(self?.duration ?? 60, 60)) * 0.8, 0.9)
+            if estimatedProgress > self?.lastProgress ?? 0 {
+                self?.lastProgress = estimatedProgress
+                DispatchQueue.main.async {
+                    self?.processor?.reportProgress(
+                        estimatedProgress,
+                        phase: .extracting,
+                        callback: self?.progressCallback
+                    )
+                }
+            }
+        }
+    }
+}
+
 class FFmpegProcessor {
     typealias CompletionCallback = (Result<AudioFile, VoxError>) -> Void
 
@@ -98,105 +170,130 @@ class FFmpegProcessor {
         completion: @escaping (Result<AudioFormat, VoxError>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let process = Process()
-            process.launchPath = ffmpegPath
-
-            // FFmpeg arguments for audio extraction
-            process.arguments = [
-                "-i", inputPath,           // Input file
-                "-vn",                     // No video
-                "-acodec", "aac",          // AAC codec for compatibility
-                "-f", "mp4",               // MP4 container
-                "-movflags", "+faststart", // Optimize for streaming
-                "-y",                      // Overwrite output file
-                outputPath                 // Output file
-            ]
-
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-
-            var duration: TimeInterval = 0
-            var progressTimer: Timer?
-            var lastProgress: Double = 0.1
-
-            // Parse stderr for progress information
-            errorPipe.fileHandleForReading.readabilityHandler = { fileHandle in
-                let data = fileHandle.availableData
-                if let output = String(data: data, encoding: .utf8) {
-                    // Parse duration from initial output
-                    if duration == 0 {
-                        duration = self?.parseDuration(from: output) ?? 0
-                    }
-
-                    // Parse progress and map to our range (0.1 to 0.9)
-                    if let rawProgress = self?.parseProgress(from: output, totalDuration: duration) {
-                        let adjustedProgress = 0.1 + (rawProgress * 0.8)
-                        if adjustedProgress > lastProgress {
-                            lastProgress = adjustedProgress
-                            DispatchQueue.main.async {
-                                self?.reportProgress(adjustedProgress, phase: .extracting, callback: progressCallback)
-                            }
-                        }
-                    }
-                }
+            let process = self?.configureFFmpegProcess(
+                ffmpegPath: ffmpegPath,
+                inputPath: inputPath,
+                outputPath: outputPath
+            )
+            
+            guard let process = process else {
+                let error = VoxError.audioExtractionFailed("Failed to configure FFmpeg process")
+                completion(.failure(error))
+                return
             }
 
-            do {
-                try process.run()
+            let (outputPipe, errorPipe) = self?.setupFFmpegPipes(for: process) ?? (Pipe(), Pipe())
+            let progressHandler = self?.createProgressHandler(
+                errorPipe: errorPipe,
+                progressCallback: progressCallback
+            )
 
-                // Start a backup progress timer in case progress parsing fails
-                if progressCallback != nil {
-                    let processStartTime = Date()
-                    progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-                        if process.isRunning {
-                            // Estimated progress based on file processing (fallback)
-                            let elapsed = Date().timeIntervalSince(processStartTime)
-                            let estimatedProgress = min(0.1 + (elapsed / max(duration, 60)) * 0.8, 0.9)
-                            if estimatedProgress > lastProgress {
-                                lastProgress = estimatedProgress
-                                DispatchQueue.main.async {
-                                    self?.reportProgress(estimatedProgress, phase: .extracting, callback: progressCallback)
-                                }
-                            }
-                        }
-                    }
+            self?.executeFFmpegProcess(
+                process: process,
+                progressHandler: progressHandler,
+                outputPipe: outputPipe,
+                errorPipe: errorPipe,
+                ffmpegPath: ffmpegPath,
+                outputPath: outputPath,
+                completion: completion
+            )
+        }
+    }
+
+    private func configureFFmpegProcess(
+        ffmpegPath: String,
+        inputPath: String,
+        outputPath: String
+    ) -> Process {
+        let process = Process()
+        process.launchPath = ffmpegPath
+        process.arguments = [
+            "-i", inputPath,           // Input file
+            "-vn",                     // No video
+            "-acodec", "aac",          // AAC codec for compatibility
+            "-f", "mp4",               // MP4 container
+            "-movflags", "+faststart", // Optimize for streaming
+            "-y",                      // Overwrite output file
+            outputPath                 // Output file
+        ]
+        return process
+    }
+
+    private func setupFFmpegPipes(for process: Process) -> (Pipe, Pipe) {
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        return (outputPipe, errorPipe)
+    }
+
+    private func createProgressHandler(
+        errorPipe: Pipe,
+        progressCallback: ProgressCallback?
+    ) -> FFmpegProgressHandler {
+        return FFmpegProgressHandler(
+            errorPipe: errorPipe,
+            progressCallback: progressCallback,
+            processor: self
+        )
+    }
+
+    private func executeFFmpegProcess(
+        process: Process,
+        progressHandler: FFmpegProgressHandler?,
+        outputPipe: Pipe,
+        errorPipe: Pipe,
+        ffmpegPath: String,
+        outputPath: String,
+        completion: @escaping (Result<AudioFormat, VoxError>) -> Void
+    ) {
+        do {
+            try process.run()
+            progressHandler?.start()
+            
+            process.waitUntilExit()
+            progressHandler?.stop()
+
+            handleFFmpegProcessCompletion(
+                process: process,
+                errorPipe: errorPipe,
+                ffmpegPath: ffmpegPath,
+                outputPath: outputPath,
+                completion: completion
+            )
+        } catch {
+            let voxError = VoxError.audioExtractionFailed(
+                "Failed to start ffmpeg process: \(error.localizedDescription)"
+            )
+            logger.error(voxError.localizedDescription, component: "FFmpegProcessor")
+            completion(.failure(voxError))
+        }
+    }
+
+    private func handleFFmpegProcessCompletion(
+        process: Process,
+        errorPipe: Pipe,
+        ffmpegPath: String,
+        outputPath: String,
+        completion: @escaping (Result<AudioFormat, VoxError>) -> Void
+    ) {
+        DispatchQueue.main.async { [weak self] in
+            if process.terminationStatus == 0 {
+                self?.reportProgress(0.9, phase: .validating, callback: nil)
+                self?.getAudioFormat(
+                    ffmpegPath: ffmpegPath,
+                    filePath: outputPath
+                ) { formatResult in
+                    completion(formatResult)
                 }
-
-                process.waitUntilExit()
-                progressTimer?.invalidate()
-
-                DispatchQueue.main.async {
-                    if process.terminationStatus == 0 {
-                        // Report validating phase
-                        self?.reportProgress(0.9, phase: .validating, callback: progressCallback)
-
-                        // Extraction successful, now get audio format info
-                        self?.getAudioFormat(
-                            ffmpegPath: ffmpegPath,
-                            filePath: outputPath
-                        ) { formatResult in
-                            completion(formatResult)
-                        }
-                    } else {
-                        // Get error output
-                        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                        let errorOutput = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-
-                        let error = VoxError.audioExtractionFailed(
-                            "FFmpeg extraction failed (exit code: \(process.terminationStatus)): \(errorOutput)"
-                        )
-                        self?.logger.error(error.localizedDescription, component: "FFmpegProcessor")
-                        completion(.failure(error))
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    let voxError = VoxError.audioExtractionFailed("Failed to start ffmpeg process: \(error.localizedDescription)")
-                    self?.logger.error(voxError.localizedDescription, component: "FFmpegProcessor")
-                    completion(.failure(voxError))
-                }
+            } else {
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let errorOutput = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                let error = VoxError.audioExtractionFailed(
+                    "FFmpeg extraction failed (exit code: \(process.terminationStatus)): \(errorOutput)"
+                )
+                self?.logger.error(error.localizedDescription, component: "FFmpegProcessor")
+                completion(.failure(error))
             }
         }
     }
@@ -241,7 +338,9 @@ class FFmpegProcessor {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    let voxError = VoxError.audioExtractionFailed("Failed to get audio format: \(error.localizedDescription)")
+                    let voxError = VoxError.audioExtractionFailed(
+                        "Failed to get audio format: \(error.localizedDescription)"
+                    )
                     self?.logger.error(voxError.localizedDescription, component: "FFmpegProcessor")
                     completion(.failure(voxError))
                 }

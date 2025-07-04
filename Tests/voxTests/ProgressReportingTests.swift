@@ -66,7 +66,11 @@ final class ProgressReportingTests: XCTestCase {
         XCTAssertEqual(stats.averageConfidence, 0.85, accuracy: 0.01)
         XCTAssertEqual(stats.processingRate, 2.0, accuracy: 0.01)
         XCTAssertNotNil(stats.estimatedCompletion)
-        XCTAssertEqual(stats.estimatedCompletion!, 15.0, accuracy: 0.1) // 30/2 = 15 seconds
+        guard let estimatedCompletion = stats.estimatedCompletion else {
+            XCTFail("Estimated completion should not be nil")
+            return
+        }
+        XCTAssertEqual(estimatedCompletion, 15.0, accuracy: 0.1) // 30/2 = 15 seconds
         XCTAssertEqual(stats.formattedProcessingRate, "2.0x")
     }
 

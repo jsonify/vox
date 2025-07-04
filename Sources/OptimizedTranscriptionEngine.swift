@@ -62,7 +62,10 @@ public final class OptimizedTranscriptionEngine {
             qos: .background
         )
 
-        Logger.shared.info("OptimizedTranscriptionEngine initialized with \(platformOptimizer.architecture.displayName) optimizations", component: "OptimizedTranscriptionEngine")
+        Logger.shared.info(
+            "OptimizedTranscriptionEngine initialized with \(platformOptimizer.architecture.displayName) optimizations",
+            component: "OptimizedTranscriptionEngine"
+        )
     }
 
     // MARK: - Public API
@@ -118,7 +121,14 @@ public final class OptimizedTranscriptionEngine {
             guard let self = self else { return }
 
             let recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                self?.handleSingleFileResult(result, error: error, audioFile: audioFile, language: language ?? "en-US", startTime: startTime, completion: completion)
+                self?.handleSingleFileResult(
+                    result,
+                    error: error,
+                    audioFile: audioFile,
+                    language: language ?? "en-US",
+                    startTime: startTime,
+                    completion: completion
+                )
             }
 
             self.taskManager.addRecognitionTask(recognitionTask, for: taskID)
@@ -136,7 +146,9 @@ public final class OptimizedTranscriptionEngine {
         defer { cleanup() }
 
         if let error = error {
-            completion(.failure(VoxError.transcriptionFailed("Speech recognition failed: \(error.localizedDescription)")))
+            completion(.failure(
+                VoxError.transcriptionFailed("Speech recognition failed: \(error.localizedDescription)")
+            ))
             return
         }
 

@@ -122,7 +122,10 @@ class TempFileManager {
             logger.debug("Successfully cleaned up temporary file: \(filePath)", component: "TempFileManager")
             return true
         } catch {
-            logger.error("Failed to cleanup temporary file \(filePath): \(error.localizedDescription)", component: "TempFileManager")
+            logger.error(
+                "Failed to cleanup temporary file \(filePath): \(error.localizedDescription)",
+                component: "TempFileManager"
+            )
 
             // Attempt to zero out the file content as a security measure if deletion fails
             attemptSecureWipe(at: filePath)
@@ -139,10 +142,16 @@ class TempFileManager {
                 // Overwrite with zeros
                 let zeroData = Data(count: Int(fileSize))
                 try zeroData.write(to: fileURL)
-                logger.warn("Secure wiped temporary file that could not be deleted: \(filePath)", component: "TempFileManager")
+                logger.warn(
+                    "Secure wiped temporary file that could not be deleted: \(filePath)",
+                    component: "TempFileManager"
+                )
             }
         } catch {
-            logger.error("Failed to secure wipe temporary file: \(error.localizedDescription)", component: "TempFileManager")
+            logger.error(
+                "Failed to secure wipe temporary file: \(error.localizedDescription)",
+                component: "TempFileManager"
+            )
         }
     }
 
