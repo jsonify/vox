@@ -35,6 +35,21 @@ struct Vox: ParsableCommand {
     @Flag(help: "Include timestamps in output")
     var timestamps = false
     
+    @Flag(help: "Include speaker IDs in output")
+    var speakers = false
+    
+    @Flag(help: "Include confidence scores in output")
+    var confidence = false
+    
+    @Flag(help: "Use detailed text format with metadata")
+    var detailed = false
+    
+    @Option(help: "Paragraph break threshold in seconds (default: 2.0)")
+    var paragraphBreak: Double = 2.0
+    
+    @Option(help: "Line width for text wrapping (default: 80)")
+    var lineWidth: Int = 80
+    
     func run() throws {
         // TEMP DEBUG: Progressive debug to find crash point
         fputs("DEBUG: Entered run() method\n", stderr)
@@ -231,7 +246,31 @@ struct Vox: ParsableCommand {
         
         do {
             let formatter = OutputFormatter()
-            try formatter.saveTranscriptionResult(result, to: outputPath, format: format)
+            
+            // Configure formatting options based on CLI flags
+            if format == .txt {
+                let textOptions = TextFormattingOptions(
+                    includeTimestamps: timestamps,
+                    includeSpeakerIDs: speakers,
+                    includeConfidenceScores: confidence,
+                    paragraphBreakThreshold: paragraphBreak,
+                    sentenceBreakThreshold: 0.8,
+                    timestampFormat: .hms,
+                    confidenceThreshold: 0.7,
+                    lineWidth: lineWidth
+                )
+                
+                // Use detailed format if requested
+                let content = detailed ? 
+                    formatter.formatAsDetailedText(result, options: textOptions) :
+                    formatter.formatAsEnhancedText(result, options: textOptions)
+                
+                try content.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            } else {
+                // Use standard formatting for SRT and JSON
+                try formatter.saveTranscriptionResult(result, to: outputPath, format: format)
+            }
+            
             print("✓ Output saved to: \(outputPath)") // swiftlint:disable:this no_print
         } catch {
             Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")

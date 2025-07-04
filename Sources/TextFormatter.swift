@@ -169,6 +169,24 @@ class TextFormatter {
         header += "Processing Time: \(String(format: "%.1f", result.processingTime))s\n"
         header += "Segments: \(result.segments.count)\n"
         
+        // Add comprehensive audio technical details
+        let audioFormat = result.audioFormat
+        header += "Audio Format: \(audioFormat.codec)\n"
+        header += "Sample Rate: \(audioFormat.sampleRate) Hz\n"
+        header += "Channels: \(audioFormat.channels)\n"
+        if let bitRate = audioFormat.bitRate {
+            header += "Bit Rate: \(bitRate) kbps\n"
+        }
+        if let fileSize = audioFormat.fileSize {
+            let fileSizeMB = Double(fileSize) / (1024 * 1024)
+            header += "File Size: \(String(format: "%.2f", fileSizeMB)) MB\n"
+        }
+        header += "Audio Quality: \(audioFormat.quality.rawValue)\n"
+        
+        // Add performance metrics
+        let processingRate = result.duration / result.processingTime
+        header += "Processing Rate: \(String(format: "%.1fx", processingRate)) real-time\n"
+        
         // Add speaker count if available
         let speakers = Set(result.segments.compactMap { $0.speakerID })
         if !speakers.isEmpty {
