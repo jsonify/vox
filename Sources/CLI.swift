@@ -34,7 +34,7 @@ struct Vox: ParsableCommand {
 
     @Flag(help: "Include timestamps in output")
     var timestamps = false
-
+  
     @Flag(help: "Include speaker IDs in output")
     var speakers = false
 
@@ -275,6 +275,7 @@ struct Vox: ParsableCommand {
             }
 
             Logger.shared.info("✓ Output saved to: \(outputPath)", component: "CLI")
+
         } catch {
             Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")
             Logger.shared.error("❌ Failed to save output: \(error.localizedDescription)", component: "CLI")
