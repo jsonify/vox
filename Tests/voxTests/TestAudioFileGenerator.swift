@@ -1,7 +1,9 @@
 import Foundation
 import AVFoundation
+import XCTest
 
-class TestAudioFileGenerator {
+/// Generator for creating test audio files with various configurations
+public final class TestAudioFileGenerator {
     static let shared = TestAudioFileGenerator()
 
     private let testDirectory: URL
@@ -13,7 +15,8 @@ class TestAudioFileGenerator {
         do {
             try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
         } catch {
-            fatalError("Failed to create test directory: \(error)")
+            XCTFail("Failed to create test directory: \(error)")
+            fatalError("Test directory creation failed")
         }
     }
 
@@ -23,7 +26,15 @@ class TestAudioFileGenerator {
 
     // MARK: - Mock MP4 Creation
 
-    func createMockMP4File(
+    /// Creates a mock MP4 file for testing with specified parameters
+    /// - Parameters:
+    ///   - duration: Length of the audio/video in seconds
+    ///   - hasAudio: Whether to include an audio track
+    ///   - hasVideo: Whether to include a video track
+    ///   - sampleRate: Audio sample rate in Hz
+    ///   - channels: Number of audio channels
+    /// - Returns: URL to the created file, or nil if creation fails
+    public func createMockMP4File(
         duration: TimeInterval = 30.0,
         hasAudio: Bool = true,
         hasVideo: Bool = true,
@@ -44,7 +55,9 @@ class TestAudioFileGenerator {
 
     // MARK: - Invalid File Creation
 
-    func createInvalidMP4File() -> URL {
+    /// Creates an invalid MP4 file for testing error handling
+    /// - Returns: URL to the created invalid file
+    public func createInvalidMP4File() -> URL {
         let fileName = "invalid_\(UUID().uuidString).mp4"
         let outputURL = testDirectory.appendingPathComponent(fileName)
 
@@ -56,7 +69,9 @@ class TestAudioFileGenerator {
         return outputURL
     }
 
-    func createEmptyMP4File() -> URL {
+    /// Creates an empty MP4 file for testing error handling
+    /// - Returns: URL to the created empty file
+    public func createEmptyMP4File() -> URL {
         let fileName = "empty_\(UUID().uuidString).mp4"
         let outputURL = testDirectory.appendingPathComponent(fileName)
 
@@ -65,11 +80,16 @@ class TestAudioFileGenerator {
         return outputURL
     }
 
-    func createVideoOnlyMP4File(duration: TimeInterval = 10.0) -> URL? {
+    /// Creates an MP4 file with video track but no audio
+    /// - Parameter duration: Length of the video in seconds
+    /// - Returns: URL to the created file, or nil if creation fails
+    public func createVideoOnlyMP4File(duration: TimeInterval = 10.0) -> URL? {
         return createMockMP4File(duration: duration, hasAudio: false, hasVideo: true)
     }
 
-    func createCorruptedMP4File() -> URL {
+    /// Creates a corrupted MP4 file for testing error handling
+    /// - Returns: URL to the created corrupted file
+    public func createCorruptedMP4File() -> URL {
         let fileName = "corrupted_\(UUID().uuidString).mp4"
         let outputURL = testDirectory.appendingPathComponent(fileName)
 
@@ -89,36 +109,14 @@ class TestAudioFileGenerator {
 
     // MARK: - File Size Variants
 
-    func createLargeMP4File() -> URL? {
-        // For "large" files in tests, we'll just use the regular test file multiple times
-        // This avoids actually creating a 5-minute file which would be slow
-        if let testResourceURL = getTestResourceURL(preferSmall: false) {
-            return copyTestFile(from: testResourceURL)
-        }
-        return createMockMP4File(duration: 30.0) // Use shorter duration for tests
-    }
+    // MARK: - File Size Variants
 
-    func createSmallMP4File() -> URL? {
-        // Explicitly prefer the small test file
-        if let testResourceURL = getTestResourceURL(preferSmall: true) {
-            return copyTestFile(from: testResourceURL)
-        }
-        return createMockMP4File(duration: 1.0) // 1 second
-    }
-
-    // MARK: - Audio Format Variants
-
-    func createHighQualityMP4File() -> URL? {
-        return createMockMP4File(duration: 30.0, sampleRate: 48000, channels: 2)
-    }
-
-    func createLowQualityMP4File() -> URL? {
-        return createMockMP4File(duration: 30.0, sampleRate: 22050, channels: 1)
-    }
+    /// These methods are implemented in test-specific extensions for different testing scenarios
 
     // MARK: - Cleanup
 
-    func cleanup() {
+    /// Cleans up all test files and directories
+    public func cleanup() {
         try? FileManager.default.removeItem(at: testDirectory)
     }
 
@@ -165,7 +163,7 @@ class TestAudioFileGenerator {
             try FileManager.default.copyItem(at: sourceURL, to: outputURL)
             return outputURL
         } catch {
-            print("Failed to copy test file: \(error)")
+            XCTFail("Failed to copy test file: \(error)")
             return nil
         }
     }

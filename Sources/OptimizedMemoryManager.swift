@@ -255,7 +255,10 @@ public final class OptimizedMemoryManager {
         isMonitoring = true
 
         memoryQueue.async { [weak self] in
-            self?.monitoringTimer = Timer.scheduledTimer(withTimeInterval: monitoringInterval, repeats: true) { _ in
+            self?.monitoringTimer = Timer.scheduledTimer(
+                withTimeInterval: monitoringInterval,
+                repeats: true
+            ) { _ in
                 self?.collectMemoryMetrics()
             }
 
@@ -263,7 +266,10 @@ public final class OptimizedMemoryManager {
             RunLoop.current.run()
         }
 
-        Logger.shared.info("Started memory monitoring with \(monitoringInterval)s interval", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Started memory monitoring with \(monitoringInterval)s interval",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     public func stopMonitoring() {
@@ -288,9 +294,10 @@ public final class OptimizedMemoryManager {
         metricsLock.unlock()
 
         // Check if garbage collection is recommended
-        if currentUsage > UInt64(
+        let threshold = UInt64(
             Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
-        ) {
+        )
+        if currentUsage > threshold {
             Logger.shared.warn(
                 "Memory usage approaching threshold: \(formatMemory(currentUsage))",
                 component: "OptimizedMemoryManager"
@@ -298,8 +305,6 @@ public final class OptimizedMemoryManager {
             performOptimizedGarbageCollection()
         }
     }
-
-    // MARK: - Garbage Collection (see extension below)
 
     // MARK: - Memory Metrics
 
@@ -310,9 +315,10 @@ public final class OptimizedMemoryManager {
         let currentUsage = getCurrentMemoryUsage()
         let poolUtilization = calculatePoolUtilization()
         let fragmentationRatio = calculateFragmentationRatio()
-        let gcRecommended = currentUsage > UInt64(
+        let threshold = UInt64(
             Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
         )
+        let gcRecommended = currentUsage > threshold
 
         return MemoryMetrics(
             currentUsage: currentUsage,
@@ -360,122 +366,10 @@ public final class OptimizedMemoryManager {
         return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
     }
 
-    // MARK: - Utilities (see extensions below)
-}
-
-// MARK: - Garbage Collection Extension
-
-extension OptimizedMemoryManager {
-    public func performOptimizedGarbageCollection() {
-        Logger.shared.info("Performing optimized garbage collection", component: "OptimizedMemoryManager")
-
-        memoryQueue.async { [weak self] in
-            guard let self = self else { return }
-
-            let beforeGC = self.getCurrentMemoryUsage()
-
-            // Platform-specific GC optimizations
-            switch self.platformOptimizer.architecture {
-            case .appleSilicon:
-                self.performAppleSiliconGC()
-            case .intel:
-                self.performIntelGC()
-            case .unknown:
-                self.performConservativeGC()
-            }
-
-            let afterGC = self.getCurrentMemoryUsage()
-            let freed = beforeGC > afterGC ? beforeGC - afterGC : 0
-
-            Logger.shared.info("GC freed \(self.formatMemory(freed)) (\(beforeGC) -> \(afterGC))", component: "OptimizedMemoryManager")
-        }
-    }
-
-    private func performAppleSiliconGC() {
-        // Apple Silicon specific optimizations
-        // Unified memory allows for more aggressive cleanup
-
-        // Force autoreleasepool drain
-        autoreleasepool {
-            // Trigger system memory pressure relief
-            if #available(macOS 11.0, *) {
-                // Use memory pressure APIs if available
-            }
-        }
-
-        // Compact memory pools
-        compactMemoryPools()
-
-        // Suggest VM page cleanup
-        madvise(nil, 0, MADV_FREE)
-    }
-
-    private func performIntelGC() {
-        // Intel specific optimizations
-        // Traditional memory hierarchy requires different approach
-
-        autoreleasepool {
-            // Conservative cleanup for Intel systems
-        }
-
-        // More selective pool compaction
-        compactMemoryPools(aggressive: false)
-    }
-
-    private func performConservativeGC() {
-        autoreleasepool {
-            // Basic cleanup only
-        }
-    }
-
-    private func compactMemoryPools(aggressive: Bool = true) {
-        for (size, pool) in memoryPools {
-            if aggressive {
-                // On Apple Silicon, can afford more aggressive compaction
-                // Would implement pool defragmentation here
-            }
-
-            // Basic pool maintenance
-            memoryPools[size] = pool
-        }
-    }
-}
-
-// MARK: - Utilities Extension
-
-extension OptimizedMemoryManager {
-    fileprivate func getCurrentMemoryUsage() -> UInt64 {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
-
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-
-        return result == KERN_SUCCESS ? info.resident_size : 0
-    }
-
-    fileprivate func formatMemory(_ bytes: UInt64) -> String {
-        let mb = Double(bytes) / (1024 * 1024)
-        return String(format: "%.1fMB", mb)
-    }
-
-    fileprivate func deallocatePools() {
-        for (_, var pool) in memoryPools {
-            pool.deallocate()
-        }
-        memoryPools.removeAll()
-    }
-
     public func logMemoryStatus() {
         let metrics = getMemoryMetrics()
 
-        Logger.shared.info(
-            "=== Memory Status ===",
-            component: "OptimizedMemoryManager"
-        )
+        Logger.shared.info("=== Memory Status ===", component: "OptimizedMemoryManager")
         Logger.shared.info(
             "Current: \(formatMemory(metrics.currentUsage))",
             component: "OptimizedMemoryManager"
@@ -497,60 +391,106 @@ extension OptimizedMemoryManager {
             component: "OptimizedMemoryManager"
         )
     }
+
+    // MARK: - Utilities
+
+    private func getCurrentMemoryUsage() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+
+        return result == KERN_SUCCESS ? info.resident_size : 0
+    }
+
+    private func formatMemory(_ bytes: UInt64) -> String {
+        let mb = Double(bytes) / (1024 * 1024)
+        return String(format: "%.1fMB", mb)
+    }
+
+    private func deallocatePools() {
+        for (_, var pool) in memoryPools {
+            pool.deallocate()
+        }
+        memoryPools.removeAll()
+    }
 }
 
-// MARK: - Memory Metrics Extension
+// MARK: - Garbage Collection Extension
 
-extension OptimizedMemoryManager {
-    public func getMemoryMetrics() -> MemoryMetrics {
-        metricsLock.lock()
-        defer { metricsLock.unlock() }
-
-        let currentUsage = getCurrentMemoryUsage()
-        let poolUtilization = calculatePoolUtilization()
-        let fragmentationRatio = calculateFragmentationRatio()
-        let gcRecommended = currentUsage > UInt64(
-            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+public extension OptimizedMemoryManager {
+    func performOptimizedGarbageCollection() {
+        Logger.shared.info(
+            "Performing optimized garbage collection",
+            component: "OptimizedMemoryManager"
         )
 
-        return MemoryMetrics(
-            currentUsage: currentUsage,
-            peakUsage: peakMemoryUsage,
-            poolUtilization: poolUtilization,
-            fragmentationRatio: fragmentationRatio,
-            gcRecommended: gcRecommended,
-            timestamp: Date()
-        )
+        memoryQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            let beforeGC = self.getCurrentMemoryUsage()
+
+            // Platform-specific GC optimizations
+            switch self.platformOptimizer.architecture {
+            case .appleSilicon:
+                self.performAppleSiliconGC()
+            case .intel:
+                self.performIntelGC()
+            case .unknown:
+                self.performConservativeGC()
+            }
+
+            let afterGC = self.getCurrentMemoryUsage()
+            let freed = beforeGC > afterGC ? beforeGC - afterGC : 0
+
+            Logger.shared.info(
+                "GC freed \(self.formatMemory(freed)) (\(beforeGC) -> \(afterGC))",
+                component: "OptimizedMemoryManager"
+            )
+        }
     }
+}
 
-    fileprivate func calculatePoolUtilization() -> Double {
-        var totalBuffers = 0
-        var usedBuffers = 0
+// MARK: - Private Garbage Collection Methods
 
-        for (_, pool) in memoryPools {
-            totalBuffers += pool.poolSize
-            usedBuffers += pool.usedBuffers.count
+private extension OptimizedMemoryManager {
+    func performAppleSiliconGC() {
+        // Apple Silicon specific optimizations
+        autoreleasepool {
+            #if os(macOS) && canImport(Darwin)
+            // Use memory pressure APIs if available
+            #endif
         }
 
-        return totalBuffers > 0 ? Double(usedBuffers) / Double(totalBuffers) : 0.0
+        compactMemoryPools()
+        madvise(nil, 0, MADV_FREE)
     }
 
-    fileprivate func calculateFragmentationRatio() -> Double {
-        let variance = calculateVariance(memorySnapshots)
-        let mean = memorySnapshots.isEmpty ? 0 : memorySnapshots.reduce(0, +) / UInt64(memorySnapshots.count)
-
-        return mean > 0 ? Double(variance) / Double(mean * mean) : 0.0
-    }
-
-    fileprivate func calculateVariance(_ values: [UInt64]) -> UInt64 {
-        guard values.count > 1 else { return 0 }
-
-        let mean = values.reduce(0, +) / UInt64(values.count)
-        let squaredDiffs = values.map { value in
-            let diff = Int64(value) - Int64(mean)
-            return UInt64(diff * diff)
+    func performIntelGC() {
+        // Intel specific optimizations
+        autoreleasepool {
+            // Conservative cleanup for Intel systems
         }
+        compactMemoryPools(aggressive: false)
+    }
 
-        return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
+    func performConservativeGC() {
+        autoreleasepool {
+            // Basic cleanup only
+        }
+    }
+
+    func compactMemoryPools(aggressive: Bool = true) {
+        for (size, pool) in memoryPools {
+            if aggressive {
+                // On Apple Silicon, can afford more aggressive compaction
+                // Would implement pool defragmentation here
+            }
+            memoryPools[size] = pool
+        }
     }
 }
