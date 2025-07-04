@@ -2,7 +2,6 @@ import Foundation
 
 /// Handles formatting transcription results into different output formats
 struct OutputFormatter {
-    
     func format(_ result: TranscriptionResult, as format: OutputFormat, includeTimestamps: Bool = false) throws -> String {
         switch format {
         case .txt:

@@ -42,11 +42,11 @@ class TextFormatter {
     /// Formats a transcription result as clean, readable text
     func formatAsText(_ result: TranscriptionResult) -> String {
         var output = ""
-        var currentSpeaker: String? = nil
+        var currentSpeaker: String?
         var currentParagraph: [String] = []
         var lastEndTime: TimeInterval = 0
         
-        for (_, segment) in result.segments.enumerated() {
+        for segment in result.segments {
             let isNewParagraph = shouldStartNewParagraph(segment, lastEndTime: lastEndTime)
             let isNewSpeaker = segment.speakerID != currentSpeaker
             

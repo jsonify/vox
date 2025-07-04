@@ -54,33 +54,33 @@ struct Vox: ParsableCommand {
         // TEMP DEBUG: Progressive debug to find crash point
         fputs("DEBUG: Entered run() method\n", stderr)
         fflush(stderr)
-        print("DEBUG: Entered run() method")
+        Logger.shared.debug("Entered run() method", component: "CLI")
         
         fputs("DEBUG: About to call configureLogging()\n", stderr)
-        print("DEBUG: About to call configureLogging()")
+        Logger.shared.debug("About to call configureLogging()", component: "CLI")
         configureLogging()
         fputs("DEBUG: configureLogging() completed\n", stderr)
-        print("DEBUG: configureLogging() completed")
+        Logger.shared.debug("configureLogging() completed", component: "CLI")
         
         fputs("DEBUG: About to call displayStartupInfo()\n", stderr)
-        print("DEBUG: About to call displayStartupInfo()")
+        Logger.shared.debug("About to call displayStartupInfo()", component: "CLI")
         displayStartupInfo()
         fputs("DEBUG: displayStartupInfo() completed\n", stderr)
-        print("DEBUG: displayStartupInfo() completed")
+        Logger.shared.debug("displayStartupInfo() completed", component: "CLI")
         
         fputs("DEBUG: About to call processAudioFile()\n", stderr)
-        print("DEBUG: About to call processAudioFile()")
+        Logger.shared.debug("About to call processAudioFile()", component: "CLI")
         try processAudioFile()
         fputs("DEBUG: processAudioFile() completed\n", stderr)
-        print("DEBUG: processAudioFile() completed")
+        Logger.shared.debug("processAudioFile() completed", component: "CLI")
     }
     
     private func configureLogging() {
         fputs("DEBUG: In configureLogging(), about to access Logger.shared\n", stderr)
-        print("DEBUG: In configureLogging(), about to access Logger.shared")
+        Logger.shared.debug("In configureLogging(), about to access Logger.shared", component: "CLI")
         Logger.shared.configure(verbose: verbose)
         fputs("DEBUG: Logger.shared.configure() completed\n", stderr)
-        print("DEBUG: Logger.shared.configure() completed")
+        Logger.shared.debug("Logger.shared.configure() completed", component: "CLI")
         
         fputs("DEBUG: About to call Logger.shared.info\n", stderr)
         // TEMP DEBUG: Bypass Logger calls to isolate the issue
@@ -120,18 +120,18 @@ struct Vox: ParsableCommand {
     }
     
     private func displayStartupInfo() {
-        print("Vox CLI - Audio transcription tool") // swiftlint:disable:this no_print
-        print("Input file: \(inputFile)") // swiftlint:disable:this no_print
-        print("Output format: \(format)") // swiftlint:disable:this no_print
+        Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
+        Logger.shared.info("Input file: \(inputFile)", component: "CLI")
+        Logger.shared.info("Output format: \(format)", component: "CLI")
         
         if let output = output {
-            print("Output file: \(output)") // swiftlint:disable:this no_print
+            Logger.shared.info("Output file: \(output)", component: "CLI")
         }
         
         if forceCloud {
-            print("Using cloud transcription") // swiftlint:disable:this no_print
+            Logger.shared.info("Using cloud transcription", component: "CLI")
         } else {
-            print("Using native transcription with fallback") // swiftlint:disable:this no_print
+            Logger.shared.info("Using native transcription with fallback", component: "CLI")
         }
     }
     
@@ -147,7 +147,7 @@ struct Vox: ParsableCommand {
         saveOutput(transcriptionResult)
         cleanup(audioFile)
         
-        print("Audio processing completed successfully!") // swiftlint:disable:this no_print
+        Logger.shared.info("Audio processing completed successfully!", component: "CLI")
     }
     
     private func extractAudio() throws -> AudioFile {
@@ -164,13 +164,15 @@ struct Vox: ParsableCommand {
         var extractedAudioFile: AudioFile?
         
         fputs("DEBUG: About to print 'Extracting audio from...'\n", stderr)
-        print("Extracting audio from: \(inputFile)") // swiftlint:disable:this no_print
+        Logger.shared.info("Extracting audio from: \(inputFile)", component: "CLI")
         fputs("DEBUG: Print completed, about to call audioProcessor.extractAudio\n", stderr)
         
-        audioProcessor.extractAudio(from: inputFile,
-                                    progressCallback: { progressReport in
-                                        progressDisplay.displayProgress(progressReport)
-                                    }) { result in
+        audioProcessor.extractAudio(
+            from: inputFile,
+            progressCallback: { progressReport in
+                progressDisplay.displayProgress(progressReport)
+            },
+            completion: { result in
             switch result {
             case .success(let audioFile):
                 fputs("DEBUG: CLI extractAudio success callback received\n", stderr)
@@ -190,7 +192,8 @@ struct Vox: ParsableCommand {
             }
             
             semaphore.signal()
-        }
+            }
+        )
         
         semaphore.wait()
         
@@ -206,18 +209,18 @@ struct Vox: ParsableCommand {
     }
     
     private func displayAudioExtractionSuccess(_ audioFile: AudioFile) {
-        print("✓ Audio extracted successfully") // swiftlint:disable:this no_print
-        print("  - Format: \(audioFile.format.codec)") // swiftlint:disable:this no_print
-        print("  - Sample Rate: \(audioFile.format.sampleRate) Hz") // swiftlint:disable:this no_print
-        print("  - Channels: \(audioFile.format.channels)") // swiftlint:disable:this no_print
-        print("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds") // swiftlint:disable:this no_print
+        Logger.shared.info("✓ Audio extracted successfully", component: "CLI")
+        Logger.shared.info("  - Format: \(audioFile.format.codec)", component: "CLI")
+        Logger.shared.info("  - Sample Rate: \(audioFile.format.sampleRate) Hz", component: "CLI")
+        Logger.shared.info("  - Channels: \(audioFile.format.channels)", component: "CLI")
+        Logger.shared.info("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds", component: "CLI")
         
         if let bitRate = audioFile.format.bitRate {
-            print("  - Bit Rate: \(bitRate) bps") // swiftlint:disable:this no_print
+            Logger.shared.info("  - Bit Rate: \(bitRate) bps", component: "CLI")
         }
         
         if let tempPath = audioFile.temporaryPath {
-            print("  - Temporary file: \(tempPath)") // swiftlint:disable:this no_print
+            Logger.shared.info("  - Temporary file: \(tempPath)", component: "CLI")
         }
     }
     
@@ -271,10 +274,10 @@ struct Vox: ParsableCommand {
                 try formatter.saveTranscriptionResult(result, to: outputPath, format: format)
             }
             
-            print("✓ Output saved to: \(outputPath)") // swiftlint:disable:this no_print
+            Logger.shared.info("✓ Output saved to: \(outputPath)", component: "CLI")
         } catch {
             Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")
-            print("❌ Failed to save output: \(error.localizedDescription)") // swiftlint:disable:this no_print
+            Logger.shared.error("❌ Failed to save output: \(error.localizedDescription)", component: "CLI")
         }
     }
     
