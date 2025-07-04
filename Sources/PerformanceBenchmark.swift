@@ -295,7 +295,7 @@ public final class PerformanceBenchmark {
 // MARK: - Calculation Methods Extension
 
 extension PerformanceBenchmark {
-    fileprivate func calculateMemoryProfile(
+    private func calculateMemoryProfile(
         context: BenchmarkContext,
         finalMemory: UInt64
     ) -> MemoryProfile {
@@ -314,7 +314,7 @@ extension PerformanceBenchmark {
         )
     }
 
-    fileprivate func calculateThermalProfile(
+    private func calculateThermalProfile(
         context: BenchmarkContext,
         finalState: ProcessInfo.ThermalState,
         duration: TimeInterval
@@ -334,7 +334,7 @@ extension PerformanceBenchmark {
         )
     }
 
-    fileprivate func calculateEfficiencyMetrics(
+    private func calculateEfficiencyMetrics(
         processingTime: TimeInterval,
         audioDuration: TimeInterval,
         memoryProfile: MemoryProfile,
@@ -368,7 +368,7 @@ extension PerformanceBenchmark {
 // MARK: - Benchmark Methods Extension
 
 extension PerformanceBenchmark {
-    fileprivate func benchmarkStandardTranscription(_ audioFile: AudioFile) async -> BenchmarkResult? {
+    private func benchmarkStandardTranscription(_ audioFile: AudioFile) async -> BenchmarkResult? {
         let testName = "Standard_Transcription"
         startBenchmark(testName)
 
@@ -382,7 +382,7 @@ extension PerformanceBenchmark {
         }
     }
 
-    fileprivate func benchmarkOptimizedTranscription(_ audioFile: AudioFile) async -> BenchmarkResult? {
+    private func benchmarkOptimizedTranscription(_ audioFile: AudioFile) async -> BenchmarkResult? {
         let testName = "Optimized_Transcription"
         startBenchmark(testName)
 
@@ -398,7 +398,7 @@ extension PerformanceBenchmark {
         }
     }
 
-    fileprivate func benchmarkMemoryStress(_ audioFile: AudioFile) async -> BenchmarkResult? {
+    private func benchmarkMemoryStress(_ audioFile: AudioFile) async -> BenchmarkResult? {
         let testName = "Memory_Stress"
         startBenchmark(testName)
 
@@ -421,7 +421,7 @@ extension PerformanceBenchmark {
         return endBenchmark(testName, audioDuration: audioFile.format.duration)
     }
 
-    fileprivate func benchmarkConcurrentProcessing(_ audioFile: AudioFile) async -> BenchmarkResult? {
+    private func benchmarkConcurrentProcessing(_ audioFile: AudioFile) async -> BenchmarkResult? {
         let testName = "Concurrent_Processing"
         startBenchmark(testName)
 
