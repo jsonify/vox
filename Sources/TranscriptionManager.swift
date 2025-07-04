@@ -8,7 +8,7 @@ struct TranscriptionManager {
     private let fallbackAPI: FallbackAPI?
     private let apiKey: String?
     private let includeTimestamps: Bool
-    
+
     init(forceCloud: Bool, verbose: Bool, language: String?, fallbackAPI: FallbackAPI? = nil, apiKey: String? = nil, includeTimestamps: Bool = false) {
         self.forceCloud = forceCloud
         self.verbose = verbose
@@ -17,26 +17,26 @@ struct TranscriptionManager {
         self.apiKey = apiKey
         self.includeTimestamps = includeTimestamps
     }
-    
+
     func transcribeAudio(audioFile: AudioFile) throws -> TranscriptionResult {
         fputs("DEBUG: In TranscriptionManager.transcribeAudio\n", stderr)
         print("Starting transcription...") // swiftlint:disable:this no_print
-        
+
         fputs("DEBUG: About to build language preferences\n", stderr)
         // Determine preferred languages based on user input and system preferences
         let preferredLanguages = buildLanguagePreferences()
         fputs("DEBUG: Language preferences built\n", stderr)
-        
+
         // TEMP DEBUG: Bypass Logger call
         // Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "TranscriptionManager")
         fputs("DEBUG: About to call transcribeAudioWithAsyncFunction\n", stderr)
-        
+
         let transcriptionResult = try transcribeAudioWithAsyncFunction(audioFile: audioFile, preferredLanguages: preferredLanguages)
         fputs("DEBUG: transcribeAudioWithAsyncFunction completed\n", stderr)
-        
+
         return transcriptionResult
     }
-    
+
     private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
         fputs("DEBUG: In transcribeAudioWithAsyncFunction - start\n", stderr)
         let forceCloudCapture = forceCloud
@@ -45,7 +45,7 @@ struct TranscriptionManager {
         let apiKeyCapture = apiKey
         let includeTimestampsCapture = includeTimestamps
         let languageCapture = language
-        
+
         fputs("DEBUG: About to call runAsyncAndWait\n", stderr)
         return try runAsyncAndWait { @Sendable in
             fputs("DEBUG: Inside runAsyncAndWait closure\n", stderr)
@@ -69,24 +69,23 @@ struct TranscriptionManager {
                     fputs("DEBUG: SpeechTranscriber created, about to call transcribeWithLanguageDetection\n", stderr)
                     return try await speechTranscriber.transcribeWithLanguageDetection(
                         audioFile: audioFile,
-                        preferredLanguages: preferredLanguages,
-                        progressCallback: { @Sendable progressReport in
-                            fputs("DEBUG: Progress callback called\n", stderr)
-                            // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
-                            fputs("DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
-                            // Create thread-safe progress display
-                            // DispatchQueue.main.sync {
-                            //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verboseCapture)
-                            // }
-                            fputs("DEBUG: Progress callback completed\n", stderr)
-                        }
-                    )
+                        preferredLanguages: preferredLanguages
+                    ) { @Sendable progressReport in
+                        fputs("DEBUG: Progress callback called\n", stderr)
+                        // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
+                        fputs("DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
+                        // Create thread-safe progress display
+                        // DispatchQueue.main.sync {
+                        //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verboseCapture)
+                        // }
+                        fputs("DEBUG: Progress callback completed\n", stderr)
+                    }
                 } catch {
                     fputs("DEBUG: Native transcription failed: \(error.localizedDescription)\n", stderr)
                     fputs("DEBUG: Native transcription failed, attempting fallback\n", stderr)
                     // TEMP DEBUG: Bypass Logger call
                     // Logger.shared.warn("Native transcription failed, attempting cloud fallback: \(error.localizedDescription)", component: "TranscriptionManager")
-                    
+
                     // Try cloud transcription as fallback
                     if fallbackAPICapture != nil || apiKeyCapture != nil {
                         fputs("DEBUG: Using cloud fallback with provided API key\n", stderr)
@@ -103,7 +102,8 @@ struct TranscriptionManager {
                         // TEMP FIX: Create a demo transcription result when no API key is available
                         // This allows users to test the full pipeline
                         return TranscriptionResult(
-                            text: "[DEMO] Native speech recognition is temporarily disabled due to system compatibility issues. To get real transcription, use: vox file.mp4 --force-cloud --api-key YOUR_OPENAI_KEY",
+                            text: "[DEMO] Native speech recognition is temporarily disabled due to system compatibility issues. " +
+                                "To get real transcription, use: vox file.mp4 --force-cloud --api-key YOUR_OPENAI_KEY",
                             language: "en-US",
                             confidence: 0.95,
                             duration: audioFile.format.duration,
@@ -117,12 +117,12 @@ struct TranscriptionManager {
             }
         }
     }
-    
+
     private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
         fputs("DEBUG: In runAsyncAndWait - start\n", stderr)
         let semaphore = DispatchSemaphore(value: 0)
         let resultBox = ResultBox<T>()
-        
+
         fputs("DEBUG: About to create Task\n", stderr)
         Task {
             fputs("DEBUG: Inside Task execution\n", stderr)
@@ -141,17 +141,17 @@ struct TranscriptionManager {
             semaphore.signal()
             fputs("DEBUG: Semaphore signaled in Task\n", stderr)
         }
-        
+
         fputs("DEBUG: About to wait on semaphore\n", stderr)
         semaphore.wait()
         fputs("DEBUG: Semaphore wait completed\n", stderr)
-        
+
         fputs("DEBUG: About to call resultBox.getResult()\n", stderr)
         let result = try resultBox.getResult()
         fputs("DEBUG: resultBox.getResult() completed\n", stderr)
         return result
     }
-    
+
     private func performCloudTranscription(
         audioFile: AudioFile,
         preferredLanguage: String?,
@@ -160,31 +160,29 @@ struct TranscriptionManager {
         includeTimestamps: Bool,
         verbose: Bool
     ) async throws -> TranscriptionResult {
-        
         // Determine which cloud API to use
         let selectedAPI = fallbackAPI ?? .openai
-        
+
         fputs("DEBUG: Using cloud transcription: \(selectedAPI.rawValue)\n", stderr)
         // TEMP DEBUG: Bypass Logger call
         // Logger.shared.info("Using cloud transcription: \(selectedAPI.rawValue)", component: "TranscriptionManager")
-        
+
         switch selectedAPI {
         case .openai:
             let whisperClient = try WhisperAPIClient.create(with: apiKey)
-            
+
             return try await whisperClient.transcribe(
                 audioFile: audioFile,
                 language: preferredLanguage,
-                includeTimestamps: includeTimestamps,
-                progressCallback: { @Sendable progressReport in
-                    // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
-                    fputs("DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
-                    // Create thread-safe progress display
-                    // DispatchQueue.main.sync {
-                    //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verbose)
-                    // }
-                }
-            )
+                includeTimestamps: includeTimestamps
+            ) { @Sendable progressReport in
+                // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
+                fputs("DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n", stderr)
+                // Create thread-safe progress display
+                // DispatchQueue.main.sync {
+                //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verbose)
+                // }
+            }
         case .revai:
             fputs("DEBUG: Rev.ai API not yet implemented\n", stderr)
             // TEMP DEBUG: Bypass Logger call
@@ -192,11 +190,11 @@ struct TranscriptionManager {
             throw VoxError.transcriptionFailed("Rev.ai API not yet implemented")
         }
     }
-    
+
     private func buildLanguagePreferences() -> [String] {
         fputs("DEBUG: In buildLanguagePreferences\n", stderr)
         var languages: [String] = []
-        
+
         // 1. User-specified language (highest priority)
         if let userLanguage = language {
             languages.append(userLanguage)
@@ -204,19 +202,19 @@ struct TranscriptionManager {
             // Logger.shared.info("Using user-specified language: \(userLanguage)", component: "TranscriptionManager")
             fputs("DEBUG: Using user-specified language: \(userLanguage)\n", stderr)
         }
-        
+
         // 2. System preferred languages
         fputs("DEBUG: About to call getSystemPreferredLanguages\n", stderr)
         let systemLanguages = getSystemPreferredLanguages()
         fputs("DEBUG: getSystemPreferredLanguages completed\n", stderr)
         languages.append(contentsOf: systemLanguages)
         fputs("DEBUG: languages.append completed\n", stderr)
-        
+
         // 3. Default fallback
         if !languages.contains("en-US") {
             languages.append("en-US")
         }
-        
+
         // Remove duplicates while preserving order
         var uniqueLanguages: [String] = []
         var seen = Set<String>()
@@ -224,43 +222,43 @@ struct TranscriptionManager {
             uniqueLanguages.append(lang)
             seen.insert(lang)
         }
-        
+
         return uniqueLanguages
     }
-    
+
     private func getSystemPreferredLanguages() -> [String] {
         fputs("DEBUG: In getSystemPreferredLanguages\n", stderr)
-        
+
         // TEMP DEBUG: Bypass system language detection to isolate hang
         fputs("DEBUG: Bypassing system language detection for now\n", stderr)
         return ["en-US"] // Simple fallback
-        
+
         /*
-        // Original implementation commented out for debugging
-        let preferredLanguages = Locale.preferredLanguages
-        
-        // Convert to proper locale identifiers and filter for supported ones
-        let supportedLocales = SpeechTranscriber.supportedLocales()
-        let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
-        
-        var systemLanguages: [String] = []
-        
-        for langCode in preferredLanguages.prefix(3) { // Limit to top 3 system preferences
-            // Try exact match first
-            if supportedIdentifiers.contains(langCode) {
-                systemLanguages.append(langCode)
-                continue
-            }
-            
-            // Try language-only match (e.g., "en" -> "en-US")
-            let languageOnly = String(langCode.prefix(2))
-            if let match = supportedIdentifiers.first(where: { $0.hasPrefix(languageOnly + "-") }) {
-                systemLanguages.append(match)
-            }
-        }
-        
-        Logger.shared.info("System preferred languages: \(systemLanguages.joined(separator: ", "))", component: "TranscriptionManager")
-        return systemLanguages
-        */
+         // Original implementation commented out for debugging
+         let preferredLanguages = Locale.preferredLanguages
+
+         // Convert to proper locale identifiers and filter for supported ones
+         let supportedLocales = SpeechTranscriber.supportedLocales()
+         let supportedIdentifiers = Set(supportedLocales.map { $0.identifier })
+
+         var systemLanguages: [String] = []
+
+         for langCode in preferredLanguages.prefix(3) { // Limit to top 3 system preferences
+         // Try exact match first
+         if supportedIdentifiers.contains(langCode) {
+         systemLanguages.append(langCode)
+         continue
+         }
+
+         // Try language-only match (e.g., "en" -> "en-US")
+         let languageOnly = String(langCode.prefix(2))
+         if let match = supportedIdentifiers.first(where: { $0.hasPrefix(languageOnly + "-") }) {
+         systemLanguages.append(match)
+         }
+         }
+
+         Logger.shared.info("System preferred languages: \(systemLanguages.joined(separator: ", "))", component: "TranscriptionManager")
+         return systemLanguages
+         */
     }
 }

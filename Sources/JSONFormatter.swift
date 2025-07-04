@@ -2,7 +2,6 @@ import Foundation
 
 /// Handles structured JSON output formatting for complete transcription data
 class JSONFormatter {
-    
     /// Configuration options for JSON output formatting
     struct JSONFormattingOptions {
         let includeMetadata: Bool
@@ -13,13 +12,13 @@ class JSONFormatter {
         let includeConfidenceScores: Bool
         let prettyPrint: Bool
         let dateFormat: DateFormat
-        
+
         enum DateFormat {
             case iso8601
             case timestamp
             case milliseconds
         }
-        
+
         static let `default` = JSONFormattingOptions(
             includeMetadata: true,
             includeProcessingStats: true,
@@ -31,20 +30,20 @@ class JSONFormatter {
             dateFormat: .iso8601
         )
     }
-    
+
     private let options: JSONFormattingOptions
-    
+
     init(options: JSONFormattingOptions = .default) {
         self.options = options
     }
-    
+
     /// Formats a TranscriptionResult as comprehensive JSON with all metadata
     func formatAsJSON(_ result: TranscriptionResult) throws -> String {
         let jsonData = buildComprehensiveJSON(from: result)
-        
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = options.prettyPrint ? .prettyPrinted : []
-        
+
         switch options.dateFormat {
         case .iso8601:
             encoder.dateEncodingStrategy = .iso8601
@@ -53,15 +52,15 @@ class JSONFormatter {
         case .milliseconds:
             encoder.dateEncodingStrategy = .millisecondsSince1970
         }
-        
+
         let data = try encoder.encode(jsonData)
         return String(data: data, encoding: .utf8) ?? ""
     }
-    
+
     /// Builds a comprehensive JSON structure with all requested data
     private func buildComprehensiveJSON(from result: TranscriptionResult) -> JSONTranscriptionData {
         let timestamp = Date()
-        
+
         return JSONTranscriptionData(
             transcription: buildTranscriptionContent(from: result),
             metadata: options.includeMetadata ? buildMetadata(from: result, timestamp: timestamp) : nil,
@@ -73,7 +72,7 @@ class JSONFormatter {
             format: "vox-json"
         )
     }
-    
+
     private func buildTranscriptionContent(from result: TranscriptionResult) -> JSONTranscriptionContent {
         return JSONTranscriptionContent(
             text: result.text,
@@ -84,14 +83,14 @@ class JSONFormatter {
             segmentCount: result.segments.count
         )
     }
-    
+
     private func buildMetadata(from result: TranscriptionResult, timestamp: Date) -> JSONMetadata {
         let speakers = Set(result.segments.compactMap { $0.speakerID })
-        let averageConfidence = result.segments.isEmpty ? 0.0 : 
+        let averageConfidence = result.segments.isEmpty ? 0.0 :
             result.segments.map { $0.confidence }.reduce(0, +) / Double(result.segments.count)
-        
+
         let lowConfidenceSegments = result.segments.filter { $0.confidence < 0.5 }
-        
+
         return JSONMetadata(
             engine: result.engine.rawValue,
             engineVersion: getEngineVersion(for: result.engine),
@@ -104,10 +103,10 @@ class JSONFormatter {
             qualityScore: calculateQualityScore(from: result)
         )
     }
-    
+
     private func buildAudioInformation(from result: TranscriptionResult) -> JSONAudioInformation {
         let format = result.audioFormat
-        
+
         return JSONAudioInformation(
             codec: format.codec,
             sampleRate: format.sampleRate,
@@ -123,23 +122,23 @@ class JSONFormatter {
             formatDescription: format.description
         )
     }
-    
+
     private func buildProcessingStats(from result: TranscriptionResult) -> JSONProcessingStats {
         let processingRate = result.processingTime > 0 ? result.duration / result.processingTime : 0.0
         let totalWords = result.segments.reduce(0) { count, segment in
             count + segment.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         }
-        
+
         return JSONProcessingStats(
             processingTime: result.processingTime,
             processingRate: processingRate,
             totalSegments: result.segments.count,
             totalWords: totalWords,
-            averageSegmentLength: result.segments.isEmpty ? 0.0 : 
+            averageSegmentLength: result.segments.isEmpty ? 0.0 :
                 result.segments.map { $0.duration }.reduce(0, +) / Double(result.segments.count)
         )
     }
-    
+
     private func buildSegments(from result: TranscriptionResult) -> [JSONSegment] {
         return result.segments.map { segment in
             JSONSegment(
@@ -160,10 +159,10 @@ class JSONFormatter {
             )
         }
     }
-    
+
     private func buildWordTiming(from wordTiming: WordTiming?) -> JSONWordTiming? {
         guard let wordTiming = wordTiming else { return nil }
-        
+
         return JSONWordTiming(
             word: wordTiming.word,
             startTime: wordTiming.startTime,
@@ -172,7 +171,7 @@ class JSONFormatter {
             confidence: wordTiming.confidence
         )
     }
-    
+
     private func getEngineVersion(for engine: TranscriptionEngine) -> String {
         switch engine {
         case .speechAnalyzer:
@@ -183,7 +182,7 @@ class JSONFormatter {
             return "Rev.ai API"
         }
     }
-    
+
     private func calculateQualityScore(from result: TranscriptionResult) -> Double {
         let confidenceScore = result.confidence * 0.4
         let audioQualityScore = {
@@ -199,7 +198,7 @@ class JSONFormatter {
             }
         }()
         let completenessScore = result.segments.isEmpty ? 0.0 : 0.3
-        
+
         return confidenceScore + audioQualityScore + completenessScore
     }
 }
