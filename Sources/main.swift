@@ -1,6 +1,7 @@
 import Foundation
 
-print("DEBUG: Starting main.swift")
-print("DEBUG: About to call Vox.main()")
+Logger.shared.info("Starting main.swift", component: "main")
+Logger.shared.info("Vox CLI started", component: "main")
+Logger.shared.info("About to call Vox.main()", component: "main")
 Vox.main()
-print("DEBUG: Vox.main() completed")
+Logger.shared.info("Vox.main() completed", component: "main")

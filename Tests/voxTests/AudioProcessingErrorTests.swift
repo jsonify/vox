@@ -33,6 +33,7 @@ final class AudioProcessingErrorTests: XCTestCase {
 
     // MARK: - File System Error Tests
 
+
     func testExtractionWithNonexistentFile() {
         let nonexistentPath = "/this/path/absolutely/does/not/exist/video.mp4"
         let expectation = XCTestExpectation(description: "Nonexistent file error")
@@ -64,7 +65,7 @@ final class AudioProcessingErrorTests: XCTestCase {
                 XCTFail("Should fail with empty path")
             case .failure(let error):
                 if case .invalidInputFile = error {
-                    // Expected error case
+                    // Test passed: Empty path correctly triggers invalidInputFile error
                 } else {
                     XCTFail("Expected invalidInputFile error for empty path, got \(error)")
                 }
@@ -89,7 +90,7 @@ final class AudioProcessingErrorTests: XCTestCase {
                 XCTFail("Should fail with directory path")
             case .failure(let error):
                 if case .invalidInputFile = error {
-                    // Expected error case
+                    // Test passed: Directory path correctly triggers invalidInputFile error
                 } else {
                     XCTFail("Expected invalidInputFile error for directory path, got \(error)")
                 }
@@ -106,10 +107,7 @@ final class AudioProcessingErrorTests: XCTestCase {
             return
         }
         let textFile = tempDir.appendingPathComponent("not_a_video.txt")
-        guard let testData = "This is just text, not a video file".data(using: .utf8) else {
-            XCTFail("Failed to create test data")
-            return
-        }
+        let testData = Data("not a video file".utf8)
         FileManager.default.createFile(atPath: textFile.path, contents: testData)
 
         let expectation = XCTestExpectation(description: "Invalid extension error")
@@ -133,6 +131,7 @@ final class AudioProcessingErrorTests: XCTestCase {
 
     // MARK: - Invalid File Content Tests
 
+
     func testExtractionWithInvalidMP4Content() {
         guard let generator = testFileGenerator else {
             XCTFail("Test file generator not available")
@@ -148,11 +147,17 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .failure(let error):
                 // Should be either unsupportedFormat or audioExtractionFailed
                 switch error {
-                case .unsupportedFormat, .audioExtractionFailed:
-                    // Expected error cases
+                case .unsupportedFormat:
+                    // Test passed: Invalid MP4 content triggers format error
+                    break
+                case .audioExtractionFailed:
+                    // Test passed: Invalid MP4 content triggers extraction error
                     break
                 default:
-                    XCTFail("Expected unsupportedFormat or audioExtractionFailed error, got \(error)")
+                    XCTFail("""
+                        Expected unsupportedFormat or audioExtractionFailed error, \
+                        got \(error)
+                        """)
                 }
             }
             expectation.fulfill()
@@ -175,7 +180,7 @@ final class AudioProcessingErrorTests: XCTestCase {
                 XCTFail("Should fail with empty MP4 file")
             case .failure(let error):
                 if case .audioExtractionFailed = error {
-                    // Expected error case
+                    // Test passed: Empty MP4 file correctly triggers extraction failure
                 } else {
                     XCTFail("Expected audioExtractionFailed error for empty MP4 file, got \(error)")
                 }
@@ -200,7 +205,7 @@ final class AudioProcessingErrorTests: XCTestCase {
                 XCTFail("Should fail with corrupted MP4 file")
             case .failure(let error):
                 if case .audioExtractionFailed = error {
-                    // Expected error case
+                    // Test passed: Corrupted MP4 file correctly triggers extraction failure
                 } else {
                     XCTFail("Expected audioExtractionFailed error for corrupted MP4 file, got \(error)")
                 }
@@ -213,7 +218,8 @@ final class AudioProcessingErrorTests: XCTestCase {
 
     func testExtractionWithVideoOnlyMP4File() {
         guard let generator = testFileGenerator,
-              let videoOnlyMP4 = generator.createVideoOnlyMP4File() else {
+              let videoOnlyMP4 = generator.createVideoOnlyMP4File()
+       else {
             XCTFail("Failed to create video-only MP4 file")
             return
         }
@@ -226,11 +232,17 @@ final class AudioProcessingErrorTests: XCTestCase {
                 XCTFail("Should fail with video-only MP4 file")
             case .failure(let error):
                 switch error {
-                case .audioExtractionFailed, .unsupportedFormat:
-                    // Expected error cases for video-only MP4 files
+                case .audioExtractionFailed:
+                    // Test passed: Video-only file triggers extraction error
+                    break
+                case .unsupportedFormat:
+                    // Test passed: Video-only file triggers format error
                     break
                 default:
-                    XCTFail("Expected audioExtractionFailed or unsupportedFormat error for video-only MP4 file, got \(error)")
+                    XCTFail("""
+                        Expected audioExtractionFailed or unsupportedFormat error \
+                        for video-only MP4 file, got \(error)
+                        """)
                 }
             }
             expectation.fulfill()
@@ -241,6 +253,7 @@ final class AudioProcessingErrorTests: XCTestCase {
 
     // MARK: - FFmpeg-Specific Error Tests
 
+
     func testFFmpegUnavailableError() {
         // Create a processor and test when ffmpeg is not available
         guard let tempDir = tempDirectory else {
@@ -248,10 +261,7 @@ final class AudioProcessingErrorTests: XCTestCase {
             return
         }
         let testFile = tempDir.appendingPathComponent("test.mp4")
-        guard let testData = "fake mp4 data".data(using: .utf8) else {
-            XCTFail("Failed to create test data")
-            return
-        }
+        let testData = Data("not a video file".utf8)
         FileManager.default.createFile(atPath: testFile.path, contents: testData)
 
         let expectation = XCTestExpectation(description: "FFmpeg unavailable error")
@@ -263,7 +273,8 @@ final class AudioProcessingErrorTests: XCTestCase {
             case .failure(let error):
                 if case .audioExtractionFailed(let message) = error {
                     XCTAssertTrue(
-                        message.contains("ffmpeg") || message.contains("extraction failed"),
+                        message.contains("ffmpeg") ||
+                        message.contains("extraction failed"),
                         "Error message should mention ffmpeg or extraction failure"
                     )
                 } else {

@@ -1,8 +1,9 @@
 import Foundation
 
 /// OpenAI Whisper API client for cloud-based transcription fallback
-class WhisperAPIClient {
+public class WhisperAPIClient {
     // MARK: - Configuration
+
 
     private let apiKey: String
     private let baseURL = "https://api.openai.com/v1/audio/transcriptions"
@@ -13,12 +14,14 @@ class WhisperAPIClient {
 
     // MARK: - Rate Limiting
 
+
     private var lastRequestTime = Date.distantPast
     private let minRequestInterval: TimeInterval = 1.0 // Minimum 1 second between requests
 
     // MARK: - Initialization
 
-    init(apiKey: String) {
+
+    public init(apiKey: String) {
         self.apiKey = apiKey
 
         let config = URLSessionConfiguration.default
@@ -32,6 +35,7 @@ class WhisperAPIClient {
 
     // MARK: - Public API
 
+
     /// Transcribe audio file using OpenAI Whisper API
     /// - Parameters:
     ///   - audioFile: The audio file to transcribe
@@ -39,7 +43,7 @@ class WhisperAPIClient {
     ///   - includeTimestamps: Whether to include word-level timestamps
     ///   - progressCallback: Optional callback for progress updates
     /// - Returns: TranscriptionResult containing the transcribed text and metadata
-    func transcribe(
+    public func transcribe(
         audioFile: AudioFile,
         language: String? = nil,
         includeTimestamps: Bool = false,
@@ -83,6 +87,7 @@ class WhisperAPIClient {
 
     // MARK: - Private Methods
 
+
     private func validateFileSize(_ audioFile: AudioFile) throws {
         guard let fileSize = audioFile.format.fileSize else {
             throw VoxError.audioFormatValidationFailed("Unable to determine file size")
@@ -115,53 +120,68 @@ class WhisperAPIClient {
         guard let url = URL(string: baseURL) else {
             throw VoxError.processingFailed("Invalid OpenAI API URL")
         }
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
+        
         let boundary = UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
+        
         var body = Data()
-
+        body.append(createRequestParameters(language: language, includeTimestamps: includeTimestamps, boundary: boundary))
+        body.append(try createAudioFileData(audioFile: audioFile, boundary: boundary))
+        body.append(createBoundaryClosing(boundary: boundary))
+        
+        request.httpBody = body
+        
+        Logger.shared.debug("Created multipart request with \(body.count) bytes", component: "OpenAI")
+        return request
+    }
+    
+    private func createRequestParameters(
+        language: String?,
+        includeTimestamps: Bool,
+        boundary: String
+    ) -> Data {
+        var parametersData = Data()
+        
         // Add model parameter
-        body.append(createFormField(name: "model", value: "whisper-1", boundary: boundary))
-
+        parametersData.append(createFormField(name: "model", value: "whisper-1", boundary: boundary))
+        
         // Add language parameter if provided
         if let language = language {
-            body.append(createFormField(name: "language", value: language, boundary: boundary))
+            parametersData.append(createFormField(name: "language", value: language, boundary: boundary))
         }
-
+        
         // Add response format
         let responseFormat = includeTimestamps ? "verbose_json" : "json"
-        body.append(createFormField(name: "response_format", value: responseFormat, boundary: boundary))
-
+        parametersData.append(createFormField(name: "response_format", value: responseFormat, boundary: boundary))
+        
         // Add timestamp granularities if needed
         if includeTimestamps {
-            body.append(createFormField(name: "timestamp_granularities[]", value: "word", boundary: boundary))
+            parametersData.append(createFormField(name: "timestamp_granularities[]", value: "word", boundary: boundary))
         }
-
-        // Add audio file
+        
+        return parametersData
+    }
+    
+    private func createAudioFileData(audioFile: AudioFile, boundary: String) throws -> Data {
         let audioData = try Data(contentsOf: audioFile.url)
-        body.append(createFileField(
+        return createFileField(
             name: "file",
             filename: audioFile.url.lastPathComponent,
             data: audioData,
             mimeType: getMimeType(for: audioFile.format.codec),
             boundary: boundary
-        ))
-
-        // Close boundary
-        if let boundaryData = "--\(boundary)--\r\n".data(using: .utf8) {
-            body.append(boundaryData)
+        )
+    }
+    
+    private func createBoundaryClosing(boundary: String) -> Data {
+        guard let boundaryData = "--\(boundary)--\r\n".data(using: .utf8) else {
+            return Data()
         }
-
-        request.httpBody = body
-
-        Logger.shared.debug("Created multipart request with \(body.count) bytes", component: "OpenAI")
-
-        return request
+        return boundaryData
     }
 
     private func createFormField(name: String, value: String, boundary: String) -> Data {
@@ -218,105 +238,150 @@ class WhisperAPIClient {
         progressCallback: ProgressCallback?
     ) async throws -> (Data, URLResponse) {
         var lastError: Error?
-
+        
         for attempt in 1...maxRetries {
             do {
-                Logger.shared.debug("OpenAI API request attempt \(attempt)/\(maxRetries)", component: "OpenAI")
-
-                // Update progress for upload
-                progressCallback?(TranscriptionProgress(
-                    progress: 0.2 + (0.1 * Double(attempt - 1)),
-                    status: "Uploading to OpenAI (attempt \(attempt))...",
-                    phase: .extracting,
-                    startTime: Date()
-                ))
-
-                let (data, response) = try await session.data(for: request)
-
-                // Check HTTP status
-                if let httpResponse = response as? HTTPURLResponse {
-                    Logger.shared.debug("OpenAI API response status: \(httpResponse.statusCode)", component: "OpenAI")
-
-                    switch httpResponse.statusCode {
-                    case 200...299:
-                        return (data, response)
-                    case 429: // Rate limit
-                        let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? rateLimitDelay
-                        Logger.shared.warn("Rate limited by OpenAI API, waiting \(retryAfter)s", component: "OpenAI")
-                        try await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
-                        continue
-                    case 401:
-                        throw VoxError.apiKeyMissing("Invalid OpenAI API key")
-                    case 413:
-                        throw VoxError.processingFailed("File too large for OpenAI API")
-                    default:
-                        let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                        throw VoxError.transcriptionFailed("OpenAI API error (\(httpResponse.statusCode)): \(errorMessage)")
-                    }
-                }
-
-                return (data, response)
+                return try await performSingleRequest(
+                    request: request,
+                    attempt: attempt,
+                    progressCallback: progressCallback
+                )
             } catch {
-                lastError = error
-                Logger.shared.warn("OpenAI API request failed (attempt \(attempt)): \(error.localizedDescription)", component: "OpenAI")
-
-                // Don't retry on certain errors
-                if case VoxError.apiKeyMissing = error {
+                if let voxError = error as? VoxError, case .apiKeyMissing = voxError {
                     throw error
                 }
-
-                // Wait before retry
+                
+                lastError = error
+                Logger.shared.warn("OpenAI API request failed (attempt \(attempt)): \(error.localizedDescription)",
+                                 component: "OpenAI")
+                
                 if attempt < maxRetries {
-                    let delay = Double(attempt) * rateLimitDelay
-                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    try await handleRetryDelay(attempt: attempt)
                 }
             }
         }
-
+        
         throw lastError ?? VoxError.transcriptionFailed("OpenAI API request failed after \(maxRetries) attempts")
+    }
+    
+    private func performSingleRequest(
+        request: URLRequest,
+        attempt: Int,
+        progressCallback: ProgressCallback?
+    ) async throws -> (Data, URLResponse) {
+        Logger.shared.debug("OpenAI API request attempt \(attempt)/\(maxRetries)", component: "OpenAI")
+        
+        updateProgress(attempt: attempt, progressCallback: progressCallback)
+        
+        let (data, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return (data, response)
+        }
+        
+        Logger.shared.debug("OpenAI API response status: \(httpResponse.statusCode)", component: "OpenAI")
+        
+        try await handleHTTPResponse(httpResponse, data: data)
+        return (data, response)
+    }
+    
+    private func handleHTTPResponse(_ response: HTTPURLResponse, data: Data) async throws {
+        switch response.statusCode {
+        case 200...299:
+            return
+        case 429:
+            let retryAfter = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? rateLimitDelay
+            Logger.shared.warn("Rate limited by OpenAI API, waiting \(retryAfter)s", component: "OpenAI")
+            try await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
+            throw VoxError.rateLimitError(retryAfter)
+        case 401:
+            throw VoxError.apiKeyMissing("Invalid OpenAI API key")
+        case 413:
+            throw VoxError.processingFailed("File too large for OpenAI API")
+        default:
+            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw VoxError.transcriptionFailed("OpenAI API error (\(response.statusCode)): \(errorMessage)")
+        }
+    }
+    
+    private func handleRetryDelay(attempt: Int) async throws {
+        let delay = Double(attempt) * rateLimitDelay
+        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+    }
+    
+    private func updateProgress(attempt: Int, progressCallback: ProgressCallback?) {
+        progressCallback?(TranscriptionProgress(
+            progress: 0.2 + (0.1 * Double(attempt - 1)),
+            status: "Uploading to OpenAI (attempt \(attempt))...",
+            phase: .extracting,
+            startTime: Date()
+        ))
     }
 
     private func parseResponse(_ response: (Data, URLResponse), audioFile: AudioFile, startTime: Date) throws -> TranscriptionResult {
         let (data, _) = response
-
         Logger.shared.debug("Parsing OpenAI response (\(data.count) bytes)", component: "OpenAI")
-
+        
+        let (text, json) = try parseJSONResponse(data)
+        let segments = try createTranscriptionSegments(json: json, text: text, audioFile: audioFile)
+        let processingTime = Date().timeIntervalSince(startTime)
+        let detectedLanguage = json["language"] as? String ?? "unknown"
+        
+        return createTranscriptionResult(
+            text: text,
+            language: detectedLanguage,
+            segments: segments,
+            audioFile: audioFile,
+            processingTime: processingTime
+        )
+    }
+    
+    private func parseJSONResponse(_ data: Data) throws -> (String, [String: Any]) {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw VoxError.transcriptionFailed("Invalid JSON response from OpenAI API")
         }
-
+        
         guard let text = json["text"] as? String else {
             throw VoxError.transcriptionFailed("Missing text field in OpenAI response")
         }
-
-        // Parse segments if available (verbose format)
-        var segments: [TranscriptionSegment] = []
+        
+        return (text, json)
+    }
+    
+    private func createTranscriptionSegments(
+        json: [String: Any],
+        text: String,
+        audioFile: AudioFile
+    ) throws -> [TranscriptionSegment] {
         if let wordsArray = json["words"] as? [[String: Any]] {
-            segments = parseWordSegments(wordsArray)
-        } else {
-            // Create a single segment for the entire text
-            segments = [
-                TranscriptionSegment(
-                    text: text,
-                    startTime: 0,
-                    endTime: audioFile.format.duration,
-                    confidence: 1.0,
-                    speakerID: nil,
-                    words: nil,
-                    segmentType: .speech,
-                    pauseDuration: nil
-                )
-            ]
+            return parseWordSegments(wordsArray)
         }
-
-        let processingTime = Date().timeIntervalSince(startTime)
-
-        // Determine language from response or fallback
-        let detectedLanguage = json["language"] as? String ?? "unknown"
-
-        return TranscriptionResult(
+        
+        // Create a single segment for the entire text
+        return [
+            TranscriptionSegment(
+                text: text,
+                startTime: 0,
+                endTime: audioFile.format.duration,
+                confidence: 1.0,
+                speakerID: nil,
+                words: nil,
+                segmentType: .speech,
+                pauseDuration: nil
+            )
+        ]
+    }
+    
+    private func createTranscriptionResult(
+        text: String,
+        language: String,
+        segments: [TranscriptionSegment],
+        audioFile: AudioFile,
+        processingTime: TimeInterval
+    ) -> TranscriptionResult {
+        TranscriptionResult(
             text: text,
-            language: detectedLanguage,
+            language: language,
             confidence: calculateOverallConfidence(segments),
             duration: audioFile.format.duration,
             segments: segments,
@@ -366,12 +431,13 @@ class WhisperAPIClient {
 
 // MARK: - API Key Management
 
+
 extension WhisperAPIClient {
     /// Create WhisperAPIClient with API key from various sources
     /// - Parameter providedKey: API key provided via command line
     /// - Returns: Configured WhisperAPIClient instance
     /// - Throws: VoxError if no API key is found
-    static func create(with providedKey: String?) throws -> WhisperAPIClient {
+    public static func create(with providedKey: String?) throws -> WhisperAPIClient {
         let apiKey = providedKey
             ?? ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
             ?? ProcessInfo.processInfo.environment["VOX_OPENAI_API_KEY"]

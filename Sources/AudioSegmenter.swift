@@ -105,15 +105,15 @@ public final class AudioSegmenter {
         let segmentDirectory = try createSegmentDirectory()
 
         // Create each segment file
-        for i in 0..<segmentCount {
-            let segmentStartTime = TimeInterval(i) * segmentDuration
+        for index in 0..<segmentCount {
+            let segmentStartTime = TimeInterval(index) * segmentDuration
             let segmentActualDuration = min(segmentDuration, totalDuration - segmentStartTime)
 
             let segmentFile = try await createSegmentFile(
                 from: asset,
                 startTime: segmentStartTime,
                 duration: segmentActualDuration,
-                segmentIndex: i,
+                segmentIndex: index,
                 totalSegments: segmentCount,
                 outputDirectory: segmentDirectory
             )
