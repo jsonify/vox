@@ -2,7 +2,6 @@ import Foundation
 
 /// Handles formatting transcription results into different output formats
 struct OutputFormatter {
-    
     func format(_ result: TranscriptionResult, as format: OutputFormat, includeTimestamps: Bool = false) throws -> String {
         switch format {
         case .txt:
@@ -24,7 +23,7 @@ struct OutputFormatter {
             return try formatAsJSON(result)
         }
     }
-    
+
     /// Format transcription result with full TextFormatter configuration options
     func format(_ result: TranscriptionResult, as format: OutputFormat, options: TextFormattingOptions) throws -> String {
         switch format {
@@ -36,18 +35,18 @@ struct OutputFormatter {
             return try formatAsJSON(result)
         }
     }
-    
+
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat) throws {
         let content = try self.format(result, as: format)
         try content.write(toFile: path, atomically: true, encoding: .utf8)
     }
-    
+
     /// Save transcription result with full TextFormatter configuration options
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, options: TextFormattingOptions) throws {
         let content = try self.format(result, as: format, options: options)
         try content.write(toFile: path, atomically: true, encoding: .utf8)
     }
-    
+
     /// Format transcription result with custom JSON formatting options
     func format(_ result: TranscriptionResult, as format: OutputFormat, jsonOptions: JSONFormatter.JSONFormattingOptions) throws -> String {
         switch format {
@@ -60,16 +59,16 @@ struct OutputFormatter {
             return try jsonFormatter.formatAsJSON(result)
         }
     }
-    
+
     /// Save transcription result with custom JSON formatting options
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, jsonOptions: JSONFormatter.JSONFormattingOptions) throws {
         let content = try self.format(result, as: format, jsonOptions: jsonOptions)
         try content.write(toFile: path, atomically: true, encoding: .utf8)
     }
-    
+
     private func formatAsSRT(_ result: TranscriptionResult) -> String {
         var srtContent = ""
-        
+
         // Add comprehensive metadata header as comments
         srtContent += "NOTE\n"
         srtContent += "00:00:00,000 --> 00:00:00,001\n"
@@ -81,50 +80,50 @@ struct OutputFormatter {
         srtContent += "Processing Time: \(String(format: "%.2fs", result.processingTime))\n"
         srtContent += "Audio: \(result.audioFormat.codec) \(result.audioFormat.sampleRate)Hz \(result.audioFormat.channels)ch\n"
         srtContent += "Segments: \(result.segments.count)\n\n"
-        
+
         for (index, segment) in result.segments.enumerated() {
             let startTime = formatSRTTime(segment.startTime)
             let endTime = formatSRTTime(segment.endTime)
-            
+
             srtContent += "\(index + 1)\n"
             srtContent += "\(startTime) --> \(endTime)\n"
-            
+
             // Add speaker information and confidence if available
             var segmentText = segment.text
             if let speakerID = segment.speakerID {
                 segmentText = "[\(speakerID)] \(segmentText)"
             }
-            
+
             // Add confidence indicator for low confidence segments
             if segment.confidence < 0.7 {
                 segmentText += " [Low Confidence: \(String(format: "%.1f%%", segment.confidence * 100))]"
             }
-            
+
             srtContent += "\(segmentText)\n\n"
         }
-        
+
         return srtContent
     }
-    
+
     private func formatSRTTime(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
         let minutes = (Int(seconds) % 3600) / 60
         let secs = Int(seconds) % 60
         let milliseconds = Int((seconds.truncatingRemainder(dividingBy: 1)) * 1000)
-        
+
         return String(format: "%02d:%02d:%02d,%03d", hours, minutes, secs, milliseconds)
     }
-    
+
     private func formatAsJSON(_ result: TranscriptionResult) throws -> String {
         let jsonFormatter = JSONFormatter()
         return try jsonFormatter.formatAsJSON(result)
     }
-    
+
     func formatTime(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
         let minutes = (Int(seconds) % 3600) / 60
         let secs = Int(seconds) % 60
-        
+
         if hours > 0 {
             return String(format: "%02d:%02d:%02d", hours, minutes, secs)
         } else {

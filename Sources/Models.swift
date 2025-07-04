@@ -7,13 +7,13 @@ import ArgumentParser
 struct TimingThresholds {
     /// Threshold for detecting significant silence gaps that might indicate speaker changes
     static let significantPauseThreshold: TimeInterval = 1.0
-    
+
     /// Minimum pause duration to consider a speaker change (typically indicates turn-taking)
     static let speakerChangeThreshold: TimeInterval = 2.0
-    
+
     /// Minimum pause duration combined with sentence ending to indicate paragraph boundary
     static let paragraphBoundaryThreshold: TimeInterval = 1.5
-    
+
     /// Threshold for detecting definitive speaker changes based on longer pauses
     static let definiteSpeakerChangeThreshold: TimeInterval = 3.0
 }
@@ -38,7 +38,7 @@ struct TranscriptionSegment: Codable {
     let words: WordTiming?  // Updated to single WordTiming since each segment represents one word
     let segmentType: SegmentType
     let pauseDuration: TimeInterval?
-    
+
     init(text: String,
          startTime: TimeInterval,
          endTime: TimeInterval,
@@ -56,23 +56,23 @@ struct TranscriptionSegment: Codable {
         self.segmentType = segmentType
         self.pauseDuration = pauseDuration
     }
-    
+
     var duration: TimeInterval {
         return endTime - startTime
     }
-    
+
     var isSentenceBoundary: Bool {
         return segmentType == .sentenceBoundary || text.hasSuffix(".") || text.hasSuffix("!") || text.hasSuffix("?")
     }
-    
+
     var isParagraphBoundary: Bool {
         return segmentType == .paragraphBoundary
     }
-    
+
     var hasSpeakerChange: Bool {
         return segmentType == .speakerChange
     }
-    
+
     var hasSilenceGap: Bool {
         return segmentType == .silence || (pauseDuration ?? 0) > TimingThresholds.significantPauseThreshold
     }
@@ -83,7 +83,7 @@ struct WordTiming: Codable {
     let startTime: TimeInterval
     let endTime: TimeInterval
     let confidence: Double
-    
+
     var duration: TimeInterval {
         return endTime - startTime
     }
@@ -114,11 +114,11 @@ public struct AudioFormat: Codable {
     let isValid: Bool
     let validationError: String?
     let quality: AudioQuality
-    
-    init(codec: String, 
-         sampleRate: Int, 
-         channels: Int, 
-         bitRate: Int?, 
+
+    init(codec: String,
+         sampleRate: Int,
+         channels: Int,
+         bitRate: Int?,
          duration: TimeInterval,
          fileSize: UInt64? = nil,
          isValid: Bool = true,
@@ -133,15 +133,15 @@ public struct AudioFormat: Codable {
         self.validationError = validationError
         self.quality = AudioQuality.determine(from: sampleRate, bitRate: bitRate, channels: channels)
     }
-    
+
     var isCompatible: Bool {
         return AudioFormatValidator.isSupported(codec: codec, sampleRate: sampleRate, channels: channels)
     }
-    
+
     var isTranscriptionReady: Bool {
         return isValid && AudioFormatValidator.isTranscriptionCompatible(codec: codec)
     }
-    
+
     var description: String {
         let sizeStr = fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "unknown"
         let bitRateStr = bitRate.map { "\($0 / 1000) kbps" } ?? "unknown"
@@ -154,12 +154,12 @@ enum AudioQuality: String, CaseIterable, Codable {
     case medium
     case high
     case lossless
-    
+
     static func determine(from sampleRate: Int, bitRate: Int?, channels: Int) -> AudioQuality {
         guard let bitRate = bitRate else { return .medium }
-        
+
         let effectiveBitRate = bitRate / max(channels, 1)
-        
+
         if sampleRate >= 96000 && effectiveBitRate >= 256000 {
             return .lossless
         } else if sampleRate >= 44100 && effectiveBitRate >= 128000 {
@@ -176,11 +176,11 @@ public struct AudioFile {
     public let path: String
     public let format: AudioFormat
     public let temporaryPath: String?
-    
+
     public var url: URL {
         return URL(fileURLWithPath: path)
     }
-    
+
     public init(path: String, format: AudioFormat, temporaryPath: String? = nil) {
         self.path = path
         self.format = format
@@ -203,7 +203,7 @@ public enum VoxError: Error, LocalizedError {
     case temporaryFileCreationFailed(String)
     case temporaryFileCleanupFailed(String)
     case processingFailed(String)
-    
+
     public var errorDescription: String? {
         switch self {
         case .invalidInputFile(let path):
@@ -236,11 +236,11 @@ public enum VoxError: Error, LocalizedError {
             return "Invalid audio file"
         }
     }
-    
+
     func log() {
         Logger.shared.error(self.localizedDescription, component: componentName)
     }
-    
+
     private var componentName: String {
         switch self {
         case .invalidInputFile, .unsupportedFormat:
@@ -267,7 +267,7 @@ enum OutputFormat: String, CaseIterable, ExpressibleByArgument {
     case txt
     case srt
     case json
-    
+
     var defaultValueDescription: String {
         return "txt"
     }
@@ -297,7 +297,7 @@ public struct TranscriptionProgress: ProgressReporting {
     public let startTime: Date
     public let elapsedTime: TimeInterval
     public let currentPhase: ProcessingPhase
-    
+
     // Additional properties for enhanced progress reporting
     public let stage: ProcessingPhase
     public let currentSegment: Int?
@@ -306,9 +306,9 @@ public struct TranscriptionProgress: ProgressReporting {
     public let memoryUsage: MemoryUsage?
     public let thermalState: ProcessInfo.ThermalState?
     public let message: String?
-    
-    public init(progress: Double, 
-                status: String, 
+
+    public init(progress: Double,
+                status: String,
                 phase: ProcessingPhase,
                 startTime: Date,
                 processingSpeed: Double? = nil,
@@ -326,14 +326,14 @@ public struct TranscriptionProgress: ProgressReporting {
         self.elapsedTime = Date().timeIntervalSince(startTime)
         self.processingSpeed = processingSpeed
         self.isComplete = progress >= 1.0
-        
+
         if let speed = processingSpeed, speed > 0, progress > 0, progress < 1.0 {
             let remainingWork = 1.0 - progress
             self.estimatedTimeRemaining = remainingWork / speed
         } else {
             self.estimatedTimeRemaining = nil
         }
-        
+
         // Set additional properties
         self.currentSegment = currentSegment
         self.totalSegments = totalSegments
@@ -342,14 +342,14 @@ public struct TranscriptionProgress: ProgressReporting {
         self.thermalState = thermalState
         self.message = message
     }
-    
+
     var formattedProgress: String {
         return String(format: "%.1f%%", currentProgress * 100)
     }
-    
+
     var formattedTimeRemaining: String {
         guard let timeRemaining = estimatedTimeRemaining else { return "calculating..." }
-        
+
         if timeRemaining < 60 {
             return String(format: "%.0fs", timeRemaining)
         } else if timeRemaining < 3600 {
@@ -362,7 +362,7 @@ public struct TranscriptionProgress: ProgressReporting {
             return String(format: "%dh %dm", hours, minutes)
         }
     }
-    
+
     var formattedElapsedTime: String {
         if elapsedTime < 60 {
             return String(format: "%.1fs", elapsedTime)
@@ -386,7 +386,7 @@ public enum ProcessingPhase: String, CaseIterable {
     case validating = "Validating output"
     case finalizing = "Finalizing"
     case complete = "Complete"
-    
+
     var statusMessage: String {
         switch self {
         case .initializing:
@@ -423,31 +423,31 @@ public struct MemoryUsage {
     let currentBytes: UInt64
     let peakBytes: UInt64
     let availableBytes: UInt64
-    
+
     var currentMB: Double {
         return Double(currentBytes) / (1024 * 1024)
     }
-    
+
     var peakMB: Double {
         return Double(peakBytes) / (1024 * 1024)
     }
-    
+
     var availableMB: Double {
         return Double(availableBytes) / (1024 * 1024)
     }
-    
+
     var usagePercentage: Double {
         let totalSystemMemory = ProcessInfo.processInfo.physicalMemory
         Logger.shared.debug("Memory Usage Calculation:", component: "MemoryMonitor")
         Logger.shared.debug("- Total System Memory: \(ByteCountFormatter.string(fromByteCount: Int64(totalSystemMemory), countStyle: .memory))", component: "MemoryMonitor")
         Logger.shared.debug("- Current Usage: \(ByteCountFormatter.string(fromByteCount: Int64(currentBytes), countStyle: .memory))", component: "MemoryMonitor")
         Logger.shared.debug("- Available: \(ByteCountFormatter.string(fromByteCount: Int64(availableBytes), countStyle: .memory))", component: "MemoryMonitor")
-        
+
         guard totalSystemMemory > 0 else {
             Logger.shared.error("Invalid total system memory", component: "MemoryMonitor")
             return 0.0
         }
-        
+
         let percentage = (Double(currentBytes) / Double(totalSystemMemory)) * 100.0
         Logger.shared.debug("- Usage Percentage: \(String(format: "%.1f%%", percentage))", component: "MemoryMonitor")
         return percentage
@@ -461,11 +461,11 @@ struct ProcessingStats {
     let processingRate: Double // segments per second
     let audioProcessed: TimeInterval // seconds of audio processed
     let audioRemaining: TimeInterval // seconds of audio remaining
-    
+
     var estimatedCompletion: TimeInterval? {
         return processingRate > 0 ? audioRemaining / processingRate : nil
     }
-    
+
     var formattedProcessingRate: String {
         return String(format: "%.1fx", processingRate)
     }
@@ -477,13 +477,13 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
     private(set) var currentSegmentText: String?
     private(set) var memoryUsage: MemoryUsage
     private(set) var processingStats: ProcessingStats
-    
+
     private let startTime: Date
     private let totalAudioDuration: TimeInterval
     private var segmentStartTimes: [Date] = []
     private var confidenceValues: [Double] = []
     private let memoryMonitor: MemoryMonitor
-    
+
     init(totalAudioDuration: TimeInterval) {
         self.startTime = Date()
         self.totalAudioDuration = totalAudioDuration
@@ -498,28 +498,28 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
             audioRemaining: totalAudioDuration
         )
     }
-    
-    func updateProgress(segmentIndex: Int, 
-                       totalSegments: Int, 
-                       segmentText: String?, 
-                       segmentConfidence: Double,
-                       audioTimeProcessed: TimeInterval) {
+
+    func updateProgress(segmentIndex: Int,
+                        totalSegments: Int,
+                        segmentText: String?,
+                        segmentConfidence: Double,
+                        audioTimeProcessed: TimeInterval) {
         self.currentSegmentIndex = segmentIndex
         self.totalSegments = totalSegments
         self.currentSegmentText = segmentText
-        
+
         // Update memory usage
         self.memoryUsage = memoryMonitor.getCurrentUsage()
-        
+
         // Track confidence values
         confidenceValues.append(segmentConfidence)
-        
+
         // Calculate processing stats
         let elapsedTime = Date().timeIntervalSince(startTime)
         let processingRate = elapsedTime > 0 ? audioTimeProcessed / elapsedTime : 0
         let averageConfidence = confidenceValues.isEmpty ? 0 : confidenceValues.reduce(0, +) / Double(confidenceValues.count)
         let wordsProcessed = segmentText?.split(separator: " ").count ?? 0
-        
+
         self.processingStats = ProcessingStats(
             segmentsProcessed: segmentIndex + 1,
             wordsProcessed: self.processingStats.wordsProcessed + wordsProcessed,
@@ -529,17 +529,17 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
             audioRemaining: max(0, totalAudioDuration - audioTimeProcessed)
         )
     }
-    
+
     func generateDetailedProgressReport() -> TranscriptionProgress {
         let progress = totalSegments > 0 ? Double(currentSegmentIndex) / Double(totalSegments) : 0.0
-        
+
         let status: String
         if let text = currentSegmentText {
             status = "Processing: \"\(String(text.prefix(30)))\(text.count > 30 ? "..." : "")\""
         } else {
             status = "Processing audio segment \(currentSegmentIndex + 1)/\(totalSegments)"
         }
-        
+
         return TranscriptionProgress(
             progress: progress,
             status: status,
@@ -554,32 +554,32 @@ class MemoryMonitor {
     func getCurrentUsage() -> MemoryUsage {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
-        
+
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
                 task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
             }
         }
-        
+
         let currentBytes = result == KERN_SUCCESS ? UInt64(info.resident_size) : 0
-        
+
         // Get system memory info
         var systemInfo = vm_statistics64()
         var systemCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
-        
+
         let systemResult = withUnsafeMutablePointer(to: &systemInfo) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &systemCount)
             }
         }
-        
+
         let pageSize = UInt64(vm_page_size)
-        let availableBytes = systemResult == KERN_SUCCESS ? 
+        let availableBytes = systemResult == KERN_SUCCESS ?
             UInt64(systemInfo.free_count + systemInfo.inactive_count) * pageSize : 0
-        
+
         // Track peak usage (simplified - in real implementation would need persistent tracking)
         let peakBytes = currentBytes
-        
+
         return MemoryUsage(
             currentBytes: currentBytes,
             peakBytes: peakBytes,
