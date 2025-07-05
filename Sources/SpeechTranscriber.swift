@@ -339,7 +339,7 @@ class SpeechTranscriber {
 
 // MARK: - Language Detection Extension
 
-public extension SpeechTranscriber {
+extension SpeechTranscriber {
     /// Validate and normalize language code
     static func validateLanguageCode(_ languageCode: String) -> String? {
         fputs("DEBUG: In validateLanguageCode for: \(languageCode)\n", stderr)

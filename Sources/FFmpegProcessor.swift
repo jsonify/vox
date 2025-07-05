@@ -350,11 +350,11 @@ class FFmpegProcessor {
 
     // MARK: - Parsing Helpers
 
-    private func parseDuration(from output: String) -> TimeInterval {
+    internal func parseDuration(from output: String) -> TimeInterval {
         return FFmpegAudioFormatParser.parseDuration(from: output)
     }
 
-    private func parseProgress(from output: String, totalDuration: TimeInterval) -> Double? {
+    internal func parseProgress(from output: String, totalDuration: TimeInterval) -> Double? {
         return FFmpegAudioFormatParser.parseProgress(from: output, totalDuration: totalDuration)
     }
 
@@ -386,7 +386,7 @@ class FFmpegProcessor {
         }
     }
 
-    private func reportProgress(_ progress: Double, phase: ProcessingPhase, callback: ProgressCallback?) {
+    internal func reportProgress(_ progress: Double, phase: ProcessingPhase, callback: ProgressCallback?) {
         guard let startTime = processingStartTime else { return }
 
         let elapsedTime = Date().timeIntervalSince(startTime)
