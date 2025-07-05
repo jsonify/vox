@@ -149,7 +149,7 @@ final class AudioProcessorPerformanceTests: XCTestCase {
 
         // Create multiple test files
         var testFiles: [URL] = []
-        for index in 0..<3 {
+        for _ in 0..<3 {
             if let testFile = generator.createMockMP4File(duration: 5.0) {
                 testFiles.append(testFile)
             }

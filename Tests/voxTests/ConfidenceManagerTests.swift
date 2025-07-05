@@ -19,27 +19,27 @@ final class ConfidenceManagerTests: XCTestCase {
     func testQualityLevelDetermination() {
         // Test excellent quality (>80%)
         let excellentResult = createMockTranscriptionResult(confidence: 0.9)
-        let excellentAssessment = manager.assessQuality(result: excellentResult)
+        let excellentAssessment = confidenceManager!.assessQuality(result: excellentResult)
         XCTAssertEqual(excellentAssessment.qualityLevel, .excellent)
 
         // Test good quality (60-80%)
         let goodResult = createMockTranscriptionResult(confidence: 0.7)
-        let goodAssessment = manager.assessQuality(result: goodResult)
+        let goodAssessment = confidenceManager!.assessQuality(result: goodResult)
         XCTAssertEqual(goodAssessment.qualityLevel, .good)
 
         // Test acceptable quality (40-60%)
         let acceptableResult = createMockTranscriptionResult(confidence: 0.5)
-        let acceptableAssessment = manager.assessQuality(result: acceptableResult)
+        let acceptableAssessment = confidenceManager!.assessQuality(result: acceptableResult)
         XCTAssertEqual(acceptableAssessment.qualityLevel, .acceptable)
 
         // Test poor quality (20-40%)
         let poorResult = createMockTranscriptionResult(confidence: 0.3)
-        let poorAssessment = manager.assessQuality(result: poorResult)
+        let poorAssessment = confidenceManager!.assessQuality(result: poorResult)
         XCTAssertEqual(poorAssessment.qualityLevel, .poor)
 
         // Test unacceptable quality (<20%)
         let unacceptableResult = createMockTranscriptionResult(confidence: 0.1)
-        let unacceptableAssessment = manager.assessQuality(result: unacceptableResult)
+        let unacceptableAssessment = confidenceManager!.assessQuality(result: unacceptableResult)
         XCTAssertEqual(unacceptableAssessment.qualityLevel, .unacceptable)
     }
 

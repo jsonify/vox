@@ -115,8 +115,8 @@ final class AudioProcessorTempFileTests: XCTestCase {
     }
 
     func testTemporaryFileCleanup() {
-        guard let generator = TestAudioFileGenerator.shared,
-              let testVideoURL = generator.createMockMP4File() else {
+        let generator = TestAudioFileGenerator.shared
+        guard let testVideoURL = generator.createMockMP4File() else {
             XCTFail("Failed to create test MP4 file")
             return
         }
@@ -177,8 +177,8 @@ final class AudioProcessorTempFileTests: XCTestCase {
         }
 
         // Cleanup all files
-        let success = TempFileManager.shared.cleanupFiles(at: tempURLs)
-        XCTAssertTrue(success)
+        let failedCleanups = TempFileManager.shared.cleanupFiles(at: tempURLs)
+        XCTAssertTrue(failedCleanups.isEmpty, "Some files failed to cleanup: \(failedCleanups)")
 
         // Verify files are deleted
         for url in tempURLs {
@@ -211,7 +211,7 @@ final class AudioProcessorTempFileTests: XCTestCase {
         }
 
         // Trigger cleanup
-        TempFileManager.shared.performPeriodicCleanup()
+        TempFileManager.shared.cleanupAllFiles()
 
         // Give some time for cleanup to complete
         let expectation = XCTestExpectation(description: "Auto cleanup completion")

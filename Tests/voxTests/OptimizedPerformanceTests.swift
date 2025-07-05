@@ -191,7 +191,7 @@ final class OptimizedPerformanceTests: XCTestCase {
     func testBenchmarkFramework() throws {
         guard let bench = benchmark,
               let optimizer = platformOptimizer,
-              let testAudioFile = createTestAudioFile() else {
+              let _ = createTestAudioFile() else {
             throw XCTSkip("Unable to create test audio file or required components")
         }
 
