@@ -2,7 +2,9 @@ import Foundation
 
 struct AudioFormatValidator {
     private static let supportedCodecs: Set<String> = ["aac", "m4a", "mp4", "wav", "flac", "mp3", "opus", "vorbis"]
-    private static let supportedSampleRates: Set<Int> = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000]
+    private static let supportedSampleRates: Set<Int> = [
+        8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000
+    ]
     private static let supportedChannelCounts: Set<Int> = [1, 2, 4, 6, 8]
 
     // Enhanced codec compatibility matrix
@@ -29,15 +31,26 @@ struct AudioFormatValidator {
 
     static func validate(codec: String, sampleRate: Int, channels: Int, bitRate: Int?) -> (isValid: Bool, error: String?) {
         if !supportedCodecs.contains(codec.lowercased()) {
-            return (false, "Unsupported codec: \(codec). Supported codecs: \(supportedCodecs.sorted().joined(separator: ", "))")
+            return (
+                false,
+                "Unsupported codec: \(codec). Supported codecs: \(supportedCodecs.sorted().joined(separator: ", "))"
+            )
         }
 
         if !supportedSampleRates.contains(sampleRate) {
-            return (false, "Unsupported sample rate: \(sampleRate)Hz. Supported rates: \(supportedSampleRates.sorted().map { "\($0)Hz" }.joined(separator: ", "))")
+            return (
+                false,
+                "Unsupported sample rate: \(sampleRate)Hz. Supported rates: " +
+                "\(supportedSampleRates.sorted().map { "\($0)Hz" }.joined(separator: ", "))"
+            )
         }
 
         if !supportedChannelCounts.contains(channels) {
-            return (false, "Unsupported channel count: \(channels). Supported counts: \(supportedChannelCounts.sorted().map(String.init).joined(separator: ", "))")
+            return (
+                false,
+                "Unsupported channel count: \(channels). Supported counts: " +
+                "\(supportedChannelCounts.sorted().map(String.init).joined(separator: ", "))"
+            )
         }
 
         if let bitRate = bitRate, bitRate < 1000 {
@@ -67,7 +80,11 @@ struct AudioFormatValidator {
         }
 
         // Determine best transcription engine based on audio characteristics
-        let qualityScore = calculateQualityScore(sampleRate: format.sampleRate, bitRate: format.bitRate, channels: format.channels)
+        let qualityScore = calculateQualityScore(
+            sampleRate: format.sampleRate,
+            bitRate: format.bitRate,
+            channels: format.channels
+        )
 
         if format.sampleRate >= 44100 && qualityScore > 0.7 {
             return ("apple-speechanalyzer", 0.95)

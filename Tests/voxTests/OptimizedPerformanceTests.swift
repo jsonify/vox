@@ -3,10 +3,10 @@ import Foundation
 @testable import vox
 
 final class OptimizedPerformanceTests: XCTestCase {
-    var benchmark: PerformanceBenchmark!
-    var platformOptimizer: PlatformOptimizer!
-    var memoryManager: OptimizedMemoryManager!
-    var testFileGenerator: TestAudioFileGenerator!
+    var benchmark: PerformanceBenchmark?
+    var platformOptimizer: PlatformOptimizer?
+    var memoryManager: OptimizedMemoryManager?
+    var testFileGenerator: TestAudioFileGenerator?
 
     override func setUp() {
         super.setUp()
@@ -16,7 +16,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         testFileGenerator = TestAudioFileGenerator.shared
 
         // Log system configuration
-        platformOptimizer.logSystemInfo()
+        platformOptimizer?.logSystemInfo()
     }
 
     override func tearDown() {
@@ -27,21 +27,31 @@ final class OptimizedPerformanceTests: XCTestCase {
     // MARK: - Platform Detection Tests
 
     func testPlatformDetection() {
+        guard let optimizer = platformOptimizer else {
+            XCTFail("Platform optimizer not available")
+            return
+        }
+        
         Logger.shared.info("=== Platform Detection Test ===", component: "OptimizedPerformanceTests")
 
-        XCTAssertNotEqual(platformOptimizer.architecture, .unknown, "Should detect platform architecture")
-        XCTAssertGreaterThan(platformOptimizer.processorCount, 0, "Should detect processor count")
-        XCTAssertGreaterThan(platformOptimizer.physicalMemory, 0, "Should detect physical memory")
+        XCTAssertNotEqual(optimizer.architecture, .unknown, "Should detect platform architecture")
+        XCTAssertGreaterThan(optimizer.processorCount, 0, "Should detect processor count")
+        XCTAssertGreaterThan(optimizer.physicalMemory, 0, "Should detect physical memory")
 
-        Logger.shared.info("Architecture: \(platformOptimizer.architecture.displayName)", component: "OptimizedPerformanceTests")
-        Logger.shared.info("Processor Count: \(platformOptimizer.processorCount)", component: "OptimizedPerformanceTests")
-        Logger.shared.info("Physical Memory: \(platformOptimizer.physicalMemory / 1024 / 1024 / 1024)GB", component: "OptimizedPerformanceTests")
+        Logger.shared.info("Architecture: \(optimizer.architecture.displayName)", component: "OptimizedPerformanceTests")
+        Logger.shared.info("Processor Count: \(optimizer.processorCount)", component: "OptimizedPerformanceTests")
+        Logger.shared.info("Physical Memory: \(optimizer.physicalMemory / 1024 / 1024 / 1024)GB", component: "OptimizedPerformanceTests")
     }
 
     // MARK: - Configuration Optimization Tests
 
     func testAudioProcessingConfiguration() {
-        let config = platformOptimizer.getAudioProcessingConfig()
+        guard let optimizer = platformOptimizer else {
+            XCTFail("Platform optimizer not available")
+            return
+        }
+        
+        let config = optimizer.getAudioProcessingConfig()
 
         XCTAssertGreaterThan(config.concurrentOperations, 0, "Should have concurrent operations")
         XCTAssertGreaterThan(config.bufferSize, 0, "Should have buffer size")
@@ -49,7 +59,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         Logger.shared.info("Audio Config - Concurrent: \(config.concurrentOperations), Buffer: \(config.bufferSize)", component: "OptimizedPerformanceTests")
 
         // Platform-specific assertions
-        switch platformOptimizer.architecture {
+        switch optimizer.architecture {
         case .appleSilicon:
             XCTAssertTrue(config.useHardwareAcceleration, "Apple Silicon should use hardware acceleration")
             XCTAssertGreaterThanOrEqual(config.bufferSize, 4096, "Apple Silicon should use larger buffers")
@@ -63,7 +73,12 @@ final class OptimizedPerformanceTests: XCTestCase {
     }
 
     func testSpeechRecognitionConfiguration() {
-        let config = platformOptimizer.getSpeechRecognitionConfig()
+        guard let optimizer = platformOptimizer else {
+            XCTFail("Platform optimizer not available")
+            return
+        }
+        
+        let config = optimizer.getSpeechRecognitionConfig()
 
         XCTAssertTrue(config.useOnDeviceRecognition, "Should prefer on-device recognition")
         XCTAssertGreaterThan(config.segmentDuration, 0, "Should have segment duration")
@@ -72,13 +87,18 @@ final class OptimizedPerformanceTests: XCTestCase {
         Logger.shared.info("Speech Config - Segment: \(config.segmentDuration)s, Memory Interval: \(config.memoryMonitoringInterval)s", component: "OptimizedPerformanceTests")
 
         // Apple Silicon should have more optimistic settings
-        if platformOptimizer.architecture == .appleSilicon {
+        if optimizer.architecture == .appleSilicon {
             XCTAssertLessThanOrEqual(config.progressReportingInterval, 0.5, "Apple Silicon should have frequent progress updates")
         }
     }
 
     func testMemoryConfiguration() {
-        let config = platformOptimizer.getMemoryConfig()
+        guard let optimizer = platformOptimizer else {
+            XCTFail("Platform optimizer not available")
+            return
+        }
+        
+        let config = optimizer.getMemoryConfig()
 
         XCTAssertGreaterThan(config.maxMemoryUsage, 0, "Should have memory limit")
         XCTAssertGreaterThan(config.bufferPoolSize, 0, "Should have buffer pool")
@@ -87,20 +107,25 @@ final class OptimizedPerformanceTests: XCTestCase {
         Logger.shared.info("Memory Config - Max: \(config.maxMemoryUsage / 1024 / 1024)MB, Pools: \(config.bufferPoolSize)", component: "OptimizedPerformanceTests")
 
         // Ensure memory usage is reasonable
-        let memoryRatio = Double(config.maxMemoryUsage) / Double(platformOptimizer.physicalMemory)
+        let memoryRatio = Double(config.maxMemoryUsage) / Double(optimizer.physicalMemory)
         XCTAssertLessThan(memoryRatio, 0.8, "Memory usage should be reasonable")
     }
 
     // MARK: - Memory Manager Tests
 
     func testMemoryPoolPerformance() {
+        guard let manager = memoryManager else {
+            XCTFail("Memory manager not available")
+            return
+        }
+        
         let startTime = Date()
         let iterations = 1000
         var buffers: [UnsafeMutableRawPointer] = []
 
         // Test buffer allocation performance
         for _ in 0..<iterations {
-            if let buffer = memoryManager.borrowBuffer(size: 4096) {
+            if let buffer = manager.borrowBuffer(size: 4096) {
                 buffers.append(buffer)
             }
         }
@@ -110,7 +135,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         // Test buffer deallocation performance
         let deallocStartTime = Date()
         for buffer in buffers {
-            memoryManager.returnBuffer(buffer, size: 4096)
+            manager.returnBuffer(buffer, size: 4096)
         }
         let deallocationTime = Date().timeIntervalSince(deallocStartTime)
 
@@ -123,10 +148,15 @@ final class OptimizedPerformanceTests: XCTestCase {
     }
 
     func testOptimizedMemoryOperations() {
+        guard let manager = memoryManager else {
+            XCTFail("Memory manager not available")
+            return
+        }
+        
         let bufferSize = 64 * 1024 // 64KB
         let sourceData = Data(repeating: 0x42, count: bufferSize)
 
-        guard let destBuffer = memoryManager.borrowBuffer(size: bufferSize) else {
+        guard let destBuffer = manager.borrowBuffer(size: bufferSize) else {
             XCTFail("Failed to allocate destination buffer")
             return
         }
@@ -134,7 +164,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         let startTime = Date()
 
         sourceData.withUnsafeBytes { sourcePtr in
-            memoryManager.optimizedMemcopy(
+            manager.optimizedMemcopy(
                 destination: destBuffer,
                 source: sourcePtr.bindMemory(to: UInt8.self).baseAddress!,
                 byteCount: bufferSize
@@ -149,7 +179,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         let copiedData = Data(bytes: destBuffer, count: bufferSize)
         XCTAssertEqual(sourceData, copiedData, "Memory copy should be correct")
 
-        memoryManager.returnBuffer(destBuffer, size: bufferSize)
+        manager.returnBuffer(destBuffer, size: bufferSize)
 
         // Performance should be reasonable
         let mbPerSecond = Double(bufferSize) / (1024 * 1024) / copyTime
@@ -159,32 +189,39 @@ final class OptimizedPerformanceTests: XCTestCase {
     // MARK: - Benchmark Framework Tests
 
     func testBenchmarkFramework() throws {
-        guard let testAudioFile = createTestAudioFile() else {
-            throw XCTSkip("Unable to create test audio file")
+        guard let bench = benchmark,
+              let optimizer = platformOptimizer,
+              let _ = createTestAudioFile() else {
+            throw XCTSkip("Unable to create test audio file or required components")
         }
 
-        benchmark.startBenchmark("Framework_Test")
+        bench.startBenchmark("Framework_Test")
 
         // Simulate some work
         usleep(100000) // 100ms
 
-        let result = benchmark.endBenchmark("Framework_Test", audioDuration: 1.0)
+        let result = bench.endBenchmark("Framework_Test", audioDuration: 1.0)
 
         XCTAssertEqual(result.testName, "Framework_Test")
-        XCTAssertEqual(result.platform, platformOptimizer.architecture)
+        XCTAssertEqual(result.platform, optimizer.architecture)
         XCTAssertGreaterThan(result.processingTime, 0.09) // Should be > 90ms
         XCTAssertLessThan(result.processingTime, 0.2) // Should be < 200ms
 
         Logger.shared.info("Benchmark Framework Test:", component: "OptimizedPerformanceTests")
         Logger.shared.info(result.summary, component: "OptimizedPerformanceTests")
 
-        benchmark.logBenchmarkResult(result)
+        bench.logBenchmarkResult(result)
     }
 
     // MARK: - Platform-Specific Performance Tests
 
     func testAppleSiliconOptimizations() throws {
-        guard platformOptimizer.architecture == .appleSilicon else {
+        guard let optimizer = platformOptimizer,
+              let bench = benchmark else {
+            throw XCTSkip("Required components not available")
+        }
+        
+        guard optimizer.architecture == .appleSilicon else {
             throw XCTSkip("Test requires Apple Silicon")
         }
 
@@ -194,7 +231,7 @@ final class OptimizedPerformanceTests: XCTestCase {
 
         Logger.shared.info("Testing Apple Silicon optimizations", component: "OptimizedPerformanceTests")
 
-        benchmark.startBenchmark("Apple_Silicon_Test")
+        bench.startBenchmark("Apple_Silicon_Test")
 
         // Test optimized transcription engine
         let engine = OptimizedTranscriptionEngine()
@@ -205,7 +242,7 @@ final class OptimizedPerformanceTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(progress.currentProgress, 0.0)
             XCTAssertLessThanOrEqual(progress.currentProgress, 1.0)
         } completion: { result in
-            let benchmarkResult = self.benchmark.endBenchmark("Apple_Silicon_Test", audioDuration: testAudioFile.format.duration)
+            let benchmarkResult = bench.endBenchmark("Apple_Silicon_Test", audioDuration: testAudioFile.format.duration)
 
             switch result {
             case .success(let transcriptionResult):
@@ -225,7 +262,12 @@ final class OptimizedPerformanceTests: XCTestCase {
     }
 
     func testIntelOptimizations() throws {
-        guard platformOptimizer.architecture == .intel else {
+        guard let optimizer = platformOptimizer,
+              let bench = benchmark else {
+            throw XCTSkip("Required components not available")
+        }
+        
+        guard optimizer.architecture == .intel else {
             throw XCTSkip("Test requires Intel processor")
         }
 
@@ -235,10 +277,10 @@ final class OptimizedPerformanceTests: XCTestCase {
 
         Logger.shared.info("Testing Intel optimizations", component: "OptimizedPerformanceTests")
 
-        benchmark.startBenchmark("Intel_Test")
+        bench.startBenchmark("Intel_Test")
 
         // Test with Intel-specific optimizations
-        let audioConfig = platformOptimizer.getAudioProcessingConfig()
+        let audioConfig = optimizer.getAudioProcessingConfig()
         XCTAssertFalse(audioConfig.useHardwareAcceleration || audioConfig.concurrentOperations >= 8, "Intel should use appropriate settings")
 
         let engine = OptimizedTranscriptionEngine()
@@ -247,7 +289,7 @@ final class OptimizedPerformanceTests: XCTestCase {
         engine.transcribeAudio(from: testAudioFile) { _ in
             // Monitor progress
         } completion: { result in
-            let benchmarkResult = self.benchmark.endBenchmark("Intel_Test", audioDuration: testAudioFile.format.duration)
+            let benchmarkResult = bench.endBenchmark("Intel_Test", audioDuration: testAudioFile.format.duration)
 
             switch result {
             case .success:
@@ -267,14 +309,15 @@ final class OptimizedPerformanceTests: XCTestCase {
     // MARK: - Performance Comparison Tests
 
     func testOptimizedVsStandardPerformance() async throws {
-        guard let testAudioFile = createTestAudioFile() else {
-            throw XCTSkip("Unable to create test audio file")
+        guard let bench = benchmark,
+              let testAudioFile = createTestAudioFile() else {
+            throw XCTSkip("Unable to create test audio file or benchmark not available")
         }
 
         Logger.shared.info("Comparing optimized vs standard performance", component: "OptimizedPerformanceTests")
 
         // Test standard transcription
-        benchmark.startBenchmark("Standard_Comparison")
+        bench.startBenchmark("Standard_Comparison")
 
         do {
             let standardTranscriber = try SpeechTranscriber()
@@ -285,10 +328,10 @@ final class OptimizedPerformanceTests: XCTestCase {
                 Logger.shared.debug("Standard progress: \(progress.formattedProgress)", component: "OptimizedPerformanceTests")
             }
 
-            let standardResult = benchmark.endBenchmark("Standard_Comparison", audioDuration: testAudioFile.format.duration)
+            let standardResult = bench.endBenchmark("Standard_Comparison", audioDuration: testAudioFile.format.duration)
 
             // Test optimized transcription
-            benchmark.startBenchmark("Optimized_Comparison")
+            bench.startBenchmark("Optimized_Comparison")
 
             let optimizedEngine = OptimizedTranscriptionEngine()
 
@@ -302,7 +345,7 @@ final class OptimizedPerformanceTests: XCTestCase {
                 }
             }
 
-            let optimizedBenchmarkResult = benchmark.endBenchmark("Optimized_Comparison", audioDuration: testAudioFile.format.duration)
+            let optimizedBenchmarkResult = bench.endBenchmark("Optimized_Comparison", audioDuration: testAudioFile.format.duration)
 
             // Compare results
             Logger.shared.info("Performance Comparison:", component: "OptimizedPerformanceTests")
@@ -338,8 +381,13 @@ final class OptimizedPerformanceTests: XCTestCase {
     // MARK: - Thermal Management Tests
 
     func testThermalAdaptation() {
+        guard let optimizer = platformOptimizer else {
+            XCTFail("Platform optimizer not available")
+            return
+        }
+        
         let currentThermalState = ProcessInfo.processInfo.thermalState
-        let adaptedOptimization = platformOptimizer.adjustForThermalState()
+        let adaptedOptimization = optimizer.adjustForThermalState()
 
         Logger.shared.info("Thermal State: \(currentThermalState), Adapted Optimization: \(adaptedOptimization.rawValue)", component: "OptimizedPerformanceTests")
 
@@ -360,7 +408,8 @@ final class OptimizedPerformanceTests: XCTestCase {
     // MARK: - Helper Methods
 
     private func createTestAudioFile() -> AudioFile? {
-        guard let testURL = testFileGenerator.createSmallMP4File() else {
+        guard let generator = testFileGenerator,
+              let testURL = generator.createSmallMP4File() else {
             return nil
         }
 

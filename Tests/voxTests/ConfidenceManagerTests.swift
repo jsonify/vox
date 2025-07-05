@@ -2,7 +2,7 @@ import XCTest
 @testable import vox
 
 final class ConfidenceManagerTests: XCTestCase {
-    var confidenceManager: ConfidenceManager!
+    var confidenceManager: ConfidenceManager?
 
     override func setUp() {
         super.setUp()
@@ -19,33 +19,38 @@ final class ConfidenceManagerTests: XCTestCase {
     func testQualityLevelDetermination() {
         // Test excellent quality (>80%)
         let excellentResult = createMockTranscriptionResult(confidence: 0.9)
-        let excellentAssessment = confidenceManager.assessQuality(result: excellentResult)
+        let excellentAssessment = confidenceManager!.assessQuality(result: excellentResult)
         XCTAssertEqual(excellentAssessment.qualityLevel, .excellent)
 
         // Test good quality (60-80%)
         let goodResult = createMockTranscriptionResult(confidence: 0.7)
-        let goodAssessment = confidenceManager.assessQuality(result: goodResult)
+        let goodAssessment = confidenceManager!.assessQuality(result: goodResult)
         XCTAssertEqual(goodAssessment.qualityLevel, .good)
 
         // Test acceptable quality (40-60%)
         let acceptableResult = createMockTranscriptionResult(confidence: 0.5)
-        let acceptableAssessment = confidenceManager.assessQuality(result: acceptableResult)
+        let acceptableAssessment = confidenceManager!.assessQuality(result: acceptableResult)
         XCTAssertEqual(acceptableAssessment.qualityLevel, .acceptable)
 
         // Test poor quality (20-40%)
         let poorResult = createMockTranscriptionResult(confidence: 0.3)
-        let poorAssessment = confidenceManager.assessQuality(result: poorResult)
+        let poorAssessment = confidenceManager!.assessQuality(result: poorResult)
         XCTAssertEqual(poorAssessment.qualityLevel, .poor)
 
         // Test unacceptable quality (<20%)
         let unacceptableResult = createMockTranscriptionResult(confidence: 0.1)
-        let unacceptableAssessment = confidenceManager.assessQuality(result: unacceptableResult)
+        let unacceptableAssessment = confidenceManager!.assessQuality(result: unacceptableResult)
         XCTAssertEqual(unacceptableAssessment.qualityLevel, .unacceptable)
     }
 
     // MARK: - Low Confidence Segment Tests
 
     func testLowConfidenceSegmentIdentification() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let segments = [
             TranscriptionSegment(text: "Good segment", startTime: 0.0, endTime: 5.0, confidence: 0.8, speakerID: nil),
             TranscriptionSegment(text: "Bad segment", startTime: 5.0, endTime: 10.0, confidence: 0.2, speakerID: nil),
@@ -54,7 +59,7 @@ final class ConfidenceManagerTests: XCTestCase {
         ]
 
         let result = createMockTranscriptionResult(segments: segments)
-        let assessment = confidenceManager.assessQuality(result: result)
+        let assessment = manager.assessQuality(result: result)
 
         // Should identify 2 low-confidence segments (confidence < 0.4)
         XCTAssertEqual(assessment.lowConfidenceSegments.count, 2)
@@ -66,8 +71,13 @@ final class ConfidenceManagerTests: XCTestCase {
     }
 
     func testEmptySegmentsHandling() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let result = createMockTranscriptionResult(segments: [])
-        let assessment = confidenceManager.assessQuality(result: result)
+        let assessment = manager.assessQuality(result: result)
 
         XCTAssertTrue(assessment.lowConfidenceSegments.isEmpty)
         XCTAssertEqual(assessment.lowConfidencePercentage, 0.0)
@@ -76,18 +86,28 @@ final class ConfidenceManagerTests: XCTestCase {
     // MARK: - Fallback Trigger Tests
 
     func testShouldUseFallbackBasedOnOverallConfidence() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         // Test low overall confidence should trigger fallback
         let lowConfidenceResult = createMockTranscriptionResult(confidence: 0.2)
-        let lowAssessment = confidenceManager.assessQuality(result: lowConfidenceResult)
+        let lowAssessment = manager.assessQuality(result: lowConfidenceResult)
         XCTAssertTrue(lowAssessment.shouldUseFallback)
 
         // Test high overall confidence should not trigger fallback
         let highConfidenceResult = createMockTranscriptionResult(confidence: 0.8)
-        let highAssessment = confidenceManager.assessQuality(result: highConfidenceResult)
+        let highAssessment = manager.assessQuality(result: highConfidenceResult)
         XCTAssertFalse(highAssessment.shouldUseFallback)
     }
 
     func testShouldUseFallbackBasedOnLowConfidenceSegmentPercentage() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         // Create result with high overall confidence but many low-confidence segments
         let segments = [
             TranscriptionSegment(text: "Segment 1", startTime: 0.0, endTime: 5.0, confidence: 0.2, speakerID: nil),
@@ -97,7 +117,7 @@ final class ConfidenceManagerTests: XCTestCase {
         ]
 
         let result = createMockTranscriptionResult(confidence: 0.375, segments: segments) // Average confidence is acceptable
-        let assessment = confidenceManager.assessQuality(result: result)
+        let assessment = manager.assessQuality(result: result)
 
         // Should trigger fallback due to high percentage of low-confidence segments (75% > 30%)
         XCTAssertTrue(assessment.shouldUseFallback)
@@ -106,35 +126,50 @@ final class ConfidenceManagerTests: XCTestCase {
     // MARK: - Quality Standards Tests
 
     func testMeetsQualityStandards() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         // Test result that meets standards
         let goodSegments = [
             TranscriptionSegment(text: "Good segment 1", startTime: 0.0, endTime: 5.0, confidence: 0.8, speakerID: nil),
             TranscriptionSegment(text: "Good segment 2", startTime: 5.0, endTime: 10.0, confidence: 0.7, speakerID: nil)
         ]
         let goodResult = createMockTranscriptionResult(confidence: 0.75, segments: goodSegments)
-        XCTAssertTrue(confidenceManager.meetsQualityStandards(result: goodResult))
+        XCTAssertTrue(manager.meetsQualityStandards(result: goodResult))
 
         // Test result that doesn't meet standards (low overall confidence)
         let badResult = createMockTranscriptionResult(confidence: 0.2)
-        XCTAssertFalse(confidenceManager.meetsQualityStandards(result: badResult))
+        XCTAssertFalse(manager.meetsQualityStandards(result: badResult))
     }
 
     // MARK: - Warning Generation Tests
 
     func testWarningGeneration() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         // Test poor quality generates warnings
         let poorResult = createMockTranscriptionResult(confidence: 0.25)
-        let poorAssessment = confidenceManager.assessQuality(result: poorResult)
+        let poorAssessment = manager.assessQuality(result: poorResult)
         XCTAssertFalse(poorAssessment.warnings.isEmpty)
         XCTAssertTrue(poorAssessment.warnings.contains { $0.contains("poor") })
 
         // Test high quality generates no warnings
         let goodResult = createMockTranscriptionResult(confidence: 0.85)
-        let goodAssessment = confidenceManager.assessQuality(result: goodResult)
+        let goodAssessment = manager.assessQuality(result: goodResult)
         XCTAssertTrue(goodAssessment.warnings.isEmpty)
     }
 
     func testWarningForHighLowConfidenceSegmentPercentage() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let segments = Array(repeating:
                                 TranscriptionSegment(text: "Low confidence", startTime: 0.0, endTime: 5.0, confidence: 0.2, speakerID: nil),
                              count: 8
@@ -144,7 +179,7 @@ final class ConfidenceManagerTests: XCTestCase {
         )
 
         let result = createMockTranscriptionResult(segments: segments)
-        let assessment = confidenceManager.assessQuality(result: result)
+        let assessment = manager.assessQuality(result: result)
 
         // Should generate warning for high percentage of low-confidence segments
         XCTAssertTrue(assessment.warnings.contains { $0.contains("80.0% of segments have low confidence") })
@@ -153,9 +188,14 @@ final class ConfidenceManagerTests: XCTestCase {
     // MARK: - Recommendation Tests
 
     func testRecommendationGeneration() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         // Test poor quality generates fallback recommendation
         let poorResult = createMockTranscriptionResult(confidence: 0.15)
-        let poorAssessment = confidenceManager.assessQuality(result: poorResult)
+        let poorAssessment = manager.assessQuality(result: poorResult)
 
         let fallbackRecommendations = poorAssessment.recommendations.filter { $0.type == .fallback }
         XCTAssertFalse(fallbackRecommendations.isEmpty)
@@ -163,8 +203,13 @@ final class ConfidenceManagerTests: XCTestCase {
     }
 
     func testAudioQualityRecommendation() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let mediumResult = createMockTranscriptionResult(confidence: 0.45)
-        let assessment = confidenceManager.assessQuality(result: mediumResult)
+        let assessment = manager.assessQuality(result: mediumResult)
 
         let audioRecommendations = assessment.recommendations.filter { $0.type == .audioquality }
         XCTAssertFalse(audioRecommendations.isEmpty)
@@ -174,9 +219,14 @@ final class ConfidenceManagerTests: XCTestCase {
     // MARK: - Quality Report Tests
 
     func testQualityReportGeneration() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let result = createMockTranscriptionResult(confidence: 0.75)
-        let assessment = confidenceManager.assessQuality(result: result)
-        let report = confidenceManager.generateQualityReport(assessment: assessment)
+        let assessment = manager.assessQuality(result: result)
+        let report = manager.generateQualityReport(assessment: assessment)
 
         XCTAssertTrue(report.contains("📊 Quality Assessment"))
         XCTAssertTrue(report.contains("75.0%"))
@@ -184,9 +234,14 @@ final class ConfidenceManagerTests: XCTestCase {
     }
 
     func testQualityReportWithWarnings() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let poorResult = createMockTranscriptionResult(confidence: 0.2)
-        let poorAssessment = confidenceManager.assessQuality(result: poorResult)
-        let report = confidenceManager.generateQualityReport(assessment: poorAssessment)
+        let poorAssessment = manager.assessQuality(result: poorResult)
+        let report = manager.generateQualityReport(assessment: poorAssessment)
 
         XCTAssertTrue(report.contains("⚠️  Quality Warnings"))
         XCTAssertTrue(report.contains("🔄 Fallback recommended"))
@@ -216,8 +271,13 @@ final class ConfidenceManagerTests: XCTestCase {
     // MARK: - Edge Cases
 
     func testZeroConfidenceHandling() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let zeroResult = createMockTranscriptionResult(confidence: 0.0)
-        let assessment = confidenceManager.assessQuality(result: zeroResult)
+        let assessment = manager.assessQuality(result: zeroResult)
 
         XCTAssertEqual(assessment.qualityLevel, .unacceptable)
         XCTAssertTrue(assessment.shouldUseFallback)
@@ -225,8 +285,13 @@ final class ConfidenceManagerTests: XCTestCase {
     }
 
     func testPerfectConfidenceHandling() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let perfectResult = createMockTranscriptionResult(confidence: 1.0)
-        let assessment = confidenceManager.assessQuality(result: perfectResult)
+        let assessment = manager.assessQuality(result: perfectResult)
 
         XCTAssertEqual(assessment.qualityLevel, .excellent)
         XCTAssertFalse(assessment.shouldUseFallback)
@@ -280,6 +345,11 @@ extension ConfidenceManagerTests {
 
 extension ConfidenceManagerTests {
     func testSegmentIssueReasonDetermination() {
+        guard let manager = confidenceManager else {
+            XCTFail("Confidence manager not available")
+            return
+        }
+        
         let segments = [
             TranscriptionSegment(text: "Short", startTime: 0.0, endTime: 0.3, confidence: 0.6, speakerID: nil),
             TranscriptionSegment(text: "", startTime: 1.0, endTime: 2.0, confidence: 0.3, speakerID: nil),
@@ -287,7 +357,7 @@ extension ConfidenceManagerTests {
         ]
 
         let result = createMockTranscriptionResult(segments: segments)
-        let assessment = confidenceManager.assessQuality(result: result)
+        let assessment = manager.assessQuality(result: result)
 
         XCTAssertEqual(assessment.lowConfidenceSegments.count, 2) // Empty text and very low confidence
 

@@ -52,29 +52,39 @@ struct QualityAssessment {
 
 /// Quality level classification
 enum QualityLevel: String, CaseIterable {
-    case excellent = "excellent"    // >80% confidence
-    case good = "good"             // 60-80% confidence
-    case acceptable = "acceptable"  // 40-60% confidence
-    case poor = "poor"             // 20-40% confidence
-    case unacceptable = "unacceptable" // <20% confidence
+    case excellent    // >80% confidence
+    case good         // 60-80% confidence
+    case acceptable   // 40-60% confidence
+    case poor         // 20-40% confidence
+    case unacceptable // <20% confidence
 
     var description: String {
         switch self {
-        case .excellent: return "Excellent transcription quality"
-        case .good: return "Good transcription quality"
-        case .acceptable: return "Acceptable transcription quality"
-        case .poor: return "Poor transcription quality - consider using fallback"
-        case .unacceptable: return "Unacceptable transcription quality - fallback recommended"
+        case .excellent:
+            return "Excellent transcription quality"
+        case .good:
+            return "Good transcription quality"
+        case .acceptable:
+            return "Acceptable transcription quality"
+        case .poor:
+            return "Poor transcription quality - consider using fallback"
+        case .unacceptable:
+            return "Unacceptable transcription quality - fallback recommended"
         }
     }
 
     var emoji: String {
         switch self {
-        case .excellent: return "🟢"
-        case .good: return "🟡"
-        case .acceptable: return "🟠"
-        case .poor: return "🔴"
-        case .unacceptable: return "⚫"
+        case .excellent:
+            return "🟢"
+        case .good:
+            return "🟡"
+        case .acceptable:
+            return "🟠"
+        case .poor:
+            return "🔴"
+        case .unacceptable:
+            return "⚫"
         }
     }
 }
@@ -198,11 +208,16 @@ class ConfidenceManager {
 
     private func determineQualityLevel(confidence: Double) -> QualityLevel {
         switch confidence {
-        case 0.8...1.0: return .excellent
-        case 0.6..<0.8: return .good
-        case 0.4..<0.6: return .acceptable
-        case 0.2..<0.4: return .poor
-        default: return .unacceptable
+        case 0.8...1.0:
+            return .excellent
+        case 0.6..<0.8:
+            return .good
+        case 0.4..<0.6:
+            return .acceptable
+        case 0.2..<0.4:
+            return .poor
+        default:
+            return .unacceptable
         }
     }
 

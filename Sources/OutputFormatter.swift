@@ -78,7 +78,8 @@ struct OutputFormatter {
         srtContent += "Duration: \(formatTime(result.duration))\n"
         srtContent += "Overall Confidence: \(String(format: "%.1f%%", result.confidence * 100))\n"
         srtContent += "Processing Time: \(String(format: "%.2fs", result.processingTime))\n"
-        srtContent += "Audio: \(result.audioFormat.codec) \(result.audioFormat.sampleRate)Hz \(result.audioFormat.channels)ch\n"
+        srtContent += "Audio: \(result.audioFormat.codec) \(result.audioFormat.sampleRate)Hz "
+        srtContent += "\(result.audioFormat.channels)ch\n"
         srtContent += "Segments: \(result.segments.count)\n\n"
 
         for (index, segment) in result.segments.enumerated() {

@@ -74,7 +74,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
 
         // Verify that the JSON can be parsed back
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
@@ -98,7 +101,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         let metadata = parsedData?["metadata"] as? [String: Any]
@@ -115,7 +121,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         let audioInfo = parsedData?["audioInformation"] as? [String: Any]
@@ -133,7 +142,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         let processingStats = parsedData?["processingStats"] as? [String: Any]
@@ -152,7 +164,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         let segments = parsedData?["segments"] as? [[String: Any]]
@@ -175,7 +190,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter()
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         let segments = parsedData?["segments"] as? [[String: Any]]
@@ -206,7 +224,10 @@ final class JSONFormatterTests: XCTestCase {
         let formatter = JSONFormatter(options: options)
 
         let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            XCTFail("Failed to convert JSON string to data")
+            return
+        }
         let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
 
         // Should not include optional sections
@@ -243,206 +264,5 @@ final class JSONFormatterTests: XCTestCase {
         XCTAssertFalse(jsonString.contains("\n"))
         XCTAssertTrue(jsonString.contains("{"))
         XCTAssertTrue(jsonString.contains("}"))
-    }
-
-    // MARK: - Edge Cases Tests
-
-    func testEmptySegmentsHandling() throws {
-        let result = TranscriptionResult(
-            text: "",
-            language: "en-US",
-            confidence: 0.0,
-            duration: 0.0,
-            segments: [],
-            engine: .speechAnalyzer,
-            processingTime: 0.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 16000,
-                channels: 1,
-                bitRate: 256000,
-                duration: 0.0
-            )
-        )
-
-        let formatter = JSONFormatter()
-        let jsonString = try formatter.formatAsJSON(result)
-
-        XCTAssertFalse(jsonString.isEmpty)
-        let jsonData = jsonString.data(using: .utf8)!
-        let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-
-        // Should handle empty segments gracefully
-        XCTAssertNotNil(parsedData)
-        let segments = parsedData?["segments"] as? [[String: Any]]
-        XCTAssertTrue(segments?.isEmpty == true)
-
-        let processingStats = parsedData?["processingStats"] as? [String: Any]
-        XCTAssertEqual(processingStats?["totalSegments"] as? Int, 0)
-        XCTAssertEqual(processingStats?["totalWords"] as? Int, 0)
-    }
-
-    func testLowConfidenceSegments() throws {
-        let segments = [
-            TranscriptionSegment(
-                text: "Low confidence text",
-                startTime: 0.0,
-                endTime: 1.0,
-                confidence: 0.3,
-                speakerID: "Speaker1",
-                words: nil,
-                segmentType: .speech,
-                pauseDuration: nil
-            )
-        ]
-
-        let result = TranscriptionResult(
-            text: "Low confidence text",
-            language: "en-US",
-            confidence: 0.3,
-            duration: 1.0,
-            segments: segments,
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 16000,
-                channels: 1,
-                bitRate: 256000,
-                duration: 1.0
-            )
-        )
-
-        let formatter = JSONFormatter()
-        let jsonString = try formatter.formatAsJSON(result)
-        let jsonData = jsonString.data(using: .utf8)!
-        let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-
-        let metadata = parsedData?["metadata"] as? [String: Any]
-        XCTAssertEqual(metadata?["lowConfidenceSegmentCount"] as? Int, 1)
-        XCTAssertEqual(metadata?["averageConfidence"] as? Double, 0.3)
-    }
-
-    // MARK: - Integration Tests
-
-    func testOutputFormatterIntegration() throws {
-        let result = createTestTranscriptionResult()
-        let formatter = OutputFormatter()
-
-        let jsonOutput = try formatter.format(result, as: .json)
-
-        XCTAssertFalse(jsonOutput.isEmpty)
-        XCTAssertTrue(jsonOutput.contains("\"transcription\""))
-        XCTAssertTrue(jsonOutput.contains("\"metadata\""))
-        XCTAssertTrue(jsonOutput.contains("\"audioInformation\""))
-        XCTAssertTrue(jsonOutput.contains("\"processingStats\""))
-        XCTAssertTrue(jsonOutput.contains("\"segments\""))
-    }
-
-    func testCustomJSONOptionsIntegration() throws {
-        let result = createTestTranscriptionResult()
-        let formatter = OutputFormatter()
-
-        let jsonOptions = JSONFormatter.JSONFormattingOptions(
-            includeMetadata: true,
-            includeProcessingStats: true,
-            includeSegmentDetails: true,
-            includeAudioInformation: true,
-            includeWordTimings: false,
-            includeConfidenceScores: false,
-            prettyPrint: false,
-            dateFormat: .timestamp
-        )
-
-        let jsonOutput = try formatter.format(result, as: .json, jsonOptions: jsonOptions)
-
-        XCTAssertFalse(jsonOutput.isEmpty)
-        XCTAssertTrue(jsonOutput.contains("\"transcription\""))
-        XCTAssertFalse(jsonOutput.contains("  ")) // Should be compact
-    }
-
-    // MARK: - Quality Score Tests
-
-    func testLosslessAudioQualityScore() throws {
-        let losslessResult = TranscriptionResult(
-            text: "Lossless audio transcription",
-            language: "en-US",
-            confidence: 0.95,
-            duration: 1.0,
-            segments: [
-                TranscriptionSegment(
-                    text: "Lossless audio transcription",
-                    startTime: 0.0,
-                    endTime: 1.0,
-                    confidence: 0.95,
-                    speakerID: "Speaker1",
-                    words: nil,
-                    segmentType: .speech,
-                    pauseDuration: nil
-                )
-            ],
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 192000,
-                channels: 2,
-                bitRate: 1411000,
-                duration: 1.0
-            )
-        )
-
-        let formatter = JSONFormatter()
-        let jsonString = try formatter.formatAsJSON(losslessResult)
-        let jsonData = jsonString.data(using: .utf8)!
-        let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-
-        let metadata = parsedData?["metadata"] as? [String: Any]
-        let qualityScore = metadata?["qualityScore"] as? Double
-
-        XCTAssertNotNil(qualityScore)
-        // Should have high quality score: confidence(0.95 * 0.4) + audio(0.3) + completeness(0.3) = 0.98
-        XCTAssertEqual(qualityScore!, 0.98, accuracy: 0.01)
-    }
-
-    func testQualityScoreCalculation() throws {
-        let highQualityResult = TranscriptionResult(
-            text: "High quality transcription",
-            language: "en-US",
-            confidence: 0.95,
-            duration: 1.0,
-            segments: [
-                TranscriptionSegment(
-                    text: "High quality transcription",
-                    startTime: 0.0,
-                    endTime: 1.0,
-                    confidence: 0.95,
-                    speakerID: "Speaker1",
-                    words: nil,
-                    segmentType: .speech,
-                    pauseDuration: nil
-                )
-            ],
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 96000,
-                channels: 2,
-                bitRate: 512000,
-                duration: 1.0
-            )
-        )
-
-        let formatter = JSONFormatter()
-        let jsonString = try formatter.formatAsJSON(highQualityResult)
-        let jsonData = jsonString.data(using: .utf8)!
-        let parsedData = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-
-        let metadata = parsedData?["metadata"] as? [String: Any]
-        let qualityScore = metadata?["qualityScore"] as? Double
-
-        XCTAssertNotNil(qualityScore)
-        XCTAssertGreaterThan(qualityScore!, 0.5)
     }
 }

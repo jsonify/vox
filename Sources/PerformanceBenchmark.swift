@@ -106,7 +106,10 @@ public final class PerformanceBenchmark {
     // MARK: - Initialization
 
     private init() {
-        Logger.shared.info("Initialized PerformanceBenchmark for \(platformOptimizer.architecture.displayName)", component: "PerformanceBenchmark")
+        Logger.shared.info(
+            "Initialized PerformanceBenchmark for \(platformOptimizer.architecture.displayName)", 
+            component: "PerformanceBenchmark"
+        )
     }
 
     // MARK: - Benchmark Control
@@ -174,7 +177,10 @@ public final class PerformanceBenchmark {
             timestamp: endTime
         )
 
-        Logger.shared.info("Completed benchmark: \(testName) - \(String(format: "%.2f", processingTime))s", component: "PerformanceBenchmark")
+        Logger.shared.info(
+            "Completed benchmark: \(testName) - \(String(format: "%.2f", processingTime))s",
+            component: "PerformanceBenchmark"
+        )
         return result
     }
 
@@ -208,8 +214,87 @@ public final class PerformanceBenchmark {
         activeBenchmarks[testName] = context
     }
 
-    // MARK: - Calculation Methods
+    // MARK: - Calculation Methods (see extensions below)
 
+    private func calculateEnergyEfficiency(
+        processingRatio: Double,
+        thermalProfile: ThermalProfile
+    ) -> Double {
+        var baseEfficiency: Double
+
+        switch platformOptimizer.architecture {
+        case .appleSilicon:
+            // Apple Silicon is more energy efficient
+            baseEfficiency = 0.9
+
+        case .intel:
+            // Intel systems consume more energy
+            baseEfficiency = 0.7
+
+        case .unknown:
+            baseEfficiency = 0.5
+        }
+
+        // Reduce efficiency for thermal pressure
+        let thermalPenalty = thermalProfile.thermalPressureSeconds > 0 ? 0.2 : 0.0
+
+        // Reduce efficiency for slow processing
+        let processingPenalty = processingRatio > 2.0 ? (processingRatio - 2.0) * 0.1 : 0.0
+
+        return max(0.0, baseEfficiency - thermalPenalty - processingPenalty)
+    }
+
+    // MARK: - Benchmark Suites
+
+    public func runComprehensiveBenchmark(audioFile: AudioFile) async -> [BenchmarkResult] {
+        var results: [BenchmarkResult] = []
+
+        // Standard transcription benchmark
+        if let standardResult = await benchmarkStandardTranscription(audioFile) {
+            results.append(standardResult)
+        }
+
+        // Optimized transcription benchmark
+        if let optimizedResult = await benchmarkOptimizedTranscription(audioFile) {
+            results.append(optimizedResult)
+        }
+
+        // Memory stress test
+        if let memoryResult = await benchmarkMemoryStress(audioFile) {
+            results.append(memoryResult)
+        }
+
+        // Concurrent processing benchmark
+        if let concurrentResult = await benchmarkConcurrentProcessing(audioFile) {
+            results.append(concurrentResult)
+        }
+
+        return results
+    }
+
+    // MARK: - Benchmark Methods (see extensions below)
+
+    // MARK: - Utilities
+
+    private func getCurrentMemoryUsage() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+
+        return result == KERN_SUCCESS ? info.resident_size : 0
+    }
+
+    // MARK: - Reporting (see extensions below)
+}
+
+// MARK: - Calculation Methods Extension
+
+extension PerformanceBenchmark {
     private func calculateMemoryProfile(
         context: BenchmarkContext,
         finalMemory: UInt64
@@ -278,63 +363,11 @@ public final class PerformanceBenchmark {
             concurrencyUtilization: concurrencyUtilization
         )
     }
+}
 
-    private func calculateEnergyEfficiency(
-        processingRatio: Double,
-        thermalProfile: ThermalProfile
-    ) -> Double {
-        var baseEfficiency: Double
+// MARK: - Benchmark Methods Extension
 
-        switch platformOptimizer.architecture {
-        case .appleSilicon:
-            // Apple Silicon is more energy efficient
-            baseEfficiency = 0.9
-
-        case .intel:
-            // Intel systems consume more energy
-            baseEfficiency = 0.7
-
-        case .unknown:
-            baseEfficiency = 0.5
-        }
-
-        // Reduce efficiency for thermal pressure
-        let thermalPenalty = thermalProfile.thermalPressureSeconds > 0 ? 0.2 : 0.0
-
-        // Reduce efficiency for slow processing
-        let processingPenalty = processingRatio > 2.0 ? (processingRatio - 2.0) * 0.1 : 0.0
-
-        return max(0.0, baseEfficiency - thermalPenalty - processingPenalty)
-    }
-
-    // MARK: - Benchmark Suites
-
-    public func runComprehensiveBenchmark(audioFile: AudioFile) async -> [BenchmarkResult] {
-        var results: [BenchmarkResult] = []
-
-        // Standard transcription benchmark
-        if let standardResult = await benchmarkStandardTranscription(audioFile) {
-            results.append(standardResult)
-        }
-
-        // Optimized transcription benchmark
-        if let optimizedResult = await benchmarkOptimizedTranscription(audioFile) {
-            results.append(optimizedResult)
-        }
-
-        // Memory stress test
-        if let memoryResult = await benchmarkMemoryStress(audioFile) {
-            results.append(memoryResult)
-        }
-
-        // Concurrent processing benchmark
-        if let concurrentResult = await benchmarkConcurrentProcessing(audioFile) {
-            results.append(concurrentResult)
-        }
-
-        return results
-    }
-
+extension PerformanceBenchmark {
     private func benchmarkStandardTranscription(_ audioFile: AudioFile) async -> BenchmarkResult? {
         let testName = "Standard_Transcription"
         startBenchmark(testName)
@@ -410,24 +443,11 @@ public final class PerformanceBenchmark {
 
         return endBenchmark(testName, audioDuration: audioFile.format.duration)
     }
+}
 
-    // MARK: - Utilities
+// MARK: - Reporting Extension
 
-    private func getCurrentMemoryUsage() -> UInt64 {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
-
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-
-        return result == KERN_SUCCESS ? info.resident_size : 0
-    }
-
-    // MARK: - Reporting
-
+extension PerformanceBenchmark {
     public func generateBenchmarkReport(_ results: [BenchmarkResult]) -> String {
         var report = """
         ===== Performance Benchmark Report =====
@@ -452,11 +472,29 @@ public final class PerformanceBenchmark {
     }
 
     public func logBenchmarkResult(_ result: BenchmarkResult) {
-        Logger.shared.info("=== Benchmark Result: \(result.testName) ===", component: "PerformanceBenchmark")
-        Logger.shared.info("Processing Time: \(String(format: "%.2f", result.processingTime))s", component: "PerformanceBenchmark")
-        Logger.shared.info("Processing Ratio: \(String(format: "%.2f", result.processingRatio))x real-time", component: "PerformanceBenchmark")
-        Logger.shared.info("Peak Memory: \(String(format: "%.1f", result.memoryUsage.peakMB))MB", component: "PerformanceBenchmark")
-        Logger.shared.info("Thermal Impact: \(result.thermalImpact.thermalImpact)", component: "PerformanceBenchmark")
-        Logger.shared.info("Efficiency Score: \(String(format: "%.1f", result.efficiency.overallScore * 100))%", component: "PerformanceBenchmark")
+        Logger.shared.info(
+            "=== Benchmark Result: \(result.testName) ===",
+            component: "PerformanceBenchmark"
+        )
+        Logger.shared.info(
+            "Processing Time: \(String(format: "%.2f", result.processingTime))s",
+            component: "PerformanceBenchmark"
+        )
+        Logger.shared.info(
+            "Processing Ratio: \(String(format: "%.2f", result.processingRatio))x real-time",
+            component: "PerformanceBenchmark"
+        )
+        Logger.shared.info(
+            "Peak Memory: \(String(format: "%.1f", result.memoryUsage.peakMB))MB",
+            component: "PerformanceBenchmark"
+        )
+        Logger.shared.info(
+            "Thermal Impact: \(result.thermalImpact.thermalImpact)",
+            component: "PerformanceBenchmark"
+        )
+        Logger.shared.info(
+            "Efficiency Score: \(String(format: "%.1f", result.efficiency.overallScore * 100))%",
+            component: "PerformanceBenchmark"
+        )
     }
 }

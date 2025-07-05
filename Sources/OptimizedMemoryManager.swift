@@ -19,7 +19,10 @@ public final class OptimizedMemoryManager {
 
             // Pre-allocate buffers
             for _ in 0..<poolSize {
-                let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: MemoryLayout<UInt8>.alignment)
+                let buffer = UnsafeMutableRawPointer.allocate(
+                    byteCount: bufferSize, 
+                    alignment: MemoryLayout<UInt8>.alignment
+                )
                 availableBuffers.append(buffer)
             }
         }
@@ -93,7 +96,10 @@ public final class OptimizedMemoryManager {
         self.memoryConfig = platformOptimizer.getMemoryConfig()
         setupMemoryPools()
 
-        Logger.shared.info("Initialized OptimizedMemoryManager with \(memoryConfig.bufferPoolSize) pools", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Initialized OptimizedMemoryManager with \(memoryConfig.bufferPoolSize) pools",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     deinit {
@@ -114,7 +120,10 @@ public final class OptimizedMemoryManager {
             )
         }
 
-        Logger.shared.info("Created memory pools for buffer sizes: \(bufferSizes)", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Created memory pools for buffer sizes: \(bufferSizes)",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     public func borrowBuffer(size: Int) -> UnsafeMutableRawPointer? {
@@ -124,8 +133,14 @@ public final class OptimizedMemoryManager {
         guard let poolSize = suitableSize,
               var pool = memoryPools[poolSize] else {
             // Fallback to direct allocation for unusual sizes
-            Logger.shared.warn("No suitable pool for size \(size), using direct allocation", component: "OptimizedMemoryManager")
-            return UnsafeMutableRawPointer.allocate(byteCount: size, alignment: MemoryLayout<UInt8>.alignment)
+            Logger.shared.warn(
+                "No suitable pool for size \(size), using direct allocation",
+                component: "OptimizedMemoryManager"
+            )
+            return UnsafeMutableRawPointer.allocate(
+                byteCount: size,
+                alignment: MemoryLayout<UInt8>.alignment
+            )
         }
 
         let buffer = pool.borrowBuffer()
@@ -240,7 +255,10 @@ public final class OptimizedMemoryManager {
         isMonitoring = true
 
         memoryQueue.async { [weak self] in
-            self?.monitoringTimer = Timer.scheduledTimer(withTimeInterval: monitoringInterval, repeats: true) { _ in
+            self?.monitoringTimer = Timer.scheduledTimer(
+                withTimeInterval: monitoringInterval,
+                repeats: true
+            ) { _ in
                 self?.collectMemoryMetrics()
             }
 
@@ -248,7 +266,10 @@ public final class OptimizedMemoryManager {
             RunLoop.current.run()
         }
 
-        Logger.shared.info("Started memory monitoring with \(monitoringInterval)s interval", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Started memory monitoring with \(monitoringInterval)s interval",
+            component: "OptimizedMemoryManager"
+        )
     }
 
     public func stopMonitoring() {
@@ -273,85 +294,15 @@ public final class OptimizedMemoryManager {
         metricsLock.unlock()
 
         // Check if garbage collection is recommended
-        if currentUsage > UInt64(Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold) {
-            Logger.shared.warn("Memory usage approaching threshold: \(formatMemory(currentUsage))", component: "OptimizedMemoryManager")
+        let threshold = UInt64(
+            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+        )
+        if currentUsage > threshold {
+            Logger.shared.warn(
+                "Memory usage approaching threshold: \(formatMemory(currentUsage))",
+                component: "OptimizedMemoryManager"
+            )
             performOptimizedGarbageCollection()
-        }
-    }
-
-    // MARK: - Garbage Collection
-
-    public func performOptimizedGarbageCollection() {
-        Logger.shared.info("Performing optimized garbage collection", component: "OptimizedMemoryManager")
-
-        memoryQueue.async { [weak self] in
-            guard let self = self else { return }
-
-            let beforeGC = self.getCurrentMemoryUsage()
-
-            // Platform-specific GC optimizations
-            switch self.platformOptimizer.architecture {
-            case .appleSilicon:
-                self.performAppleSiliconGC()
-            case .intel:
-                self.performIntelGC()
-            case .unknown:
-                self.performConservativeGC()
-            }
-
-            let afterGC = self.getCurrentMemoryUsage()
-            let freed = beforeGC > afterGC ? beforeGC - afterGC : 0
-
-            Logger.shared.info("GC freed \(self.formatMemory(freed)) (\(beforeGC) -> \(afterGC))", component: "OptimizedMemoryManager")
-        }
-    }
-
-    private func performAppleSiliconGC() {
-        // Apple Silicon specific optimizations
-        // Unified memory allows for more aggressive cleanup
-
-        // Force autoreleasepool drain
-        autoreleasepool {
-            // Trigger system memory pressure relief
-            if #available(macOS 11.0, *) {
-                // Use memory pressure APIs if available
-            }
-        }
-
-        // Compact memory pools
-        compactMemoryPools()
-
-        // Suggest VM page cleanup
-        madvise(nil, 0, MADV_FREE)
-    }
-
-    private func performIntelGC() {
-        // Intel specific optimizations
-        // Traditional memory hierarchy requires different approach
-
-        autoreleasepool {
-            // Conservative cleanup for Intel systems
-        }
-
-        // More selective pool compaction
-        compactMemoryPools(aggressive: false)
-    }
-
-    private func performConservativeGC() {
-        autoreleasepool {
-            // Basic cleanup only
-        }
-    }
-
-    private func compactMemoryPools(aggressive: Bool = true) {
-        for (size, pool) in memoryPools {
-            if aggressive {
-                // On Apple Silicon, can afford more aggressive compaction
-                // Would implement pool defragmentation here
-            }
-
-            // Basic pool maintenance
-            memoryPools[size] = pool
         }
     }
 
@@ -364,7 +315,10 @@ public final class OptimizedMemoryManager {
         let currentUsage = getCurrentMemoryUsage()
         let poolUtilization = calculatePoolUtilization()
         let fragmentationRatio = calculateFragmentationRatio()
-        let gcRecommended = currentUsage > UInt64(Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold)
+        let threshold = UInt64(
+            Double(memoryConfig.maxMemoryUsage) * memoryConfig.garbageCollectionThreshold
+        )
+        let gcRecommended = currentUsage > threshold
 
         return MemoryMetrics(
             currentUsage: currentUsage,
@@ -412,6 +366,32 @@ public final class OptimizedMemoryManager {
         return squaredDiffs.reduce(0, +) / UInt64(squaredDiffs.count)
     }
 
+    public func logMemoryStatus() {
+        let metrics = getMemoryMetrics()
+
+        Logger.shared.info("=== Memory Status ===", component: "OptimizedMemoryManager")
+        Logger.shared.info(
+            "Current: \(formatMemory(metrics.currentUsage))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Peak: \(formatMemory(metrics.peakUsage))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Pool Utilization: \(String(format: "%.1f%%", metrics.poolUtilization * 100))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "Fragmentation: \(String(format: "%.3f", metrics.fragmentationRatio))",
+            component: "OptimizedMemoryManager"
+        )
+        Logger.shared.info(
+            "GC Recommended: \(metrics.gcRecommended)",
+            component: "OptimizedMemoryManager"
+        )
+    }
+
     // MARK: - Utilities
 
     private func getCurrentMemoryUsage() -> UInt64 {
@@ -438,17 +418,79 @@ public final class OptimizedMemoryManager {
         }
         memoryPools.removeAll()
     }
+}
 
-    // MARK: - Public Utilities
+// MARK: - Garbage Collection Extension
 
-    public func logMemoryStatus() {
-        let metrics = getMemoryMetrics()
+public extension OptimizedMemoryManager {
+    func performOptimizedGarbageCollection() {
+        Logger.shared.info(
+            "Performing optimized garbage collection",
+            component: "OptimizedMemoryManager"
+        )
 
-        Logger.shared.info("=== Memory Status ===", component: "OptimizedMemoryManager")
-        Logger.shared.info("Current: \(formatMemory(metrics.currentUsage))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Peak: \(formatMemory(metrics.peakUsage))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Pool Utilization: \(String(format: "%.1f%%", metrics.poolUtilization * 100))", component: "OptimizedMemoryManager")
-        Logger.shared.info("Fragmentation: \(String(format: "%.3f", metrics.fragmentationRatio))", component: "OptimizedMemoryManager")
-        Logger.shared.info("GC Recommended: \(metrics.gcRecommended)", component: "OptimizedMemoryManager")
+        memoryQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            let beforeGC = self.getCurrentMemoryUsage()
+
+            // Platform-specific GC optimizations
+            switch self.platformOptimizer.architecture {
+            case .appleSilicon:
+                self.performAppleSiliconGC()
+            case .intel:
+                self.performIntelGC()
+            case .unknown:
+                self.performConservativeGC()
+            }
+
+            let afterGC = self.getCurrentMemoryUsage()
+            let freed = beforeGC > afterGC ? beforeGC - afterGC : 0
+
+            Logger.shared.info(
+                "GC freed \(self.formatMemory(freed)) (\(beforeGC) -> \(afterGC))",
+                component: "OptimizedMemoryManager"
+            )
+        }
+    }
+}
+
+// MARK: - Private Garbage Collection Methods
+
+private extension OptimizedMemoryManager {
+    func performAppleSiliconGC() {
+        // Apple Silicon specific optimizations
+        autoreleasepool {
+            #if os(macOS) && canImport(Darwin)
+            // Use memory pressure APIs if available
+            #endif
+        }
+
+        compactMemoryPools()
+        madvise(nil, 0, MADV_FREE)
+    }
+
+    func performIntelGC() {
+        // Intel specific optimizations
+        autoreleasepool {
+            // Conservative cleanup for Intel systems
+        }
+        compactMemoryPools(aggressive: false)
+    }
+
+    func performConservativeGC() {
+        autoreleasepool {
+            // Basic cleanup only
+        }
+    }
+
+    func compactMemoryPools(aggressive: Bool = true) {
+        for (size, pool) in memoryPools {
+            if aggressive {
+                // On Apple Silicon, can afford more aggressive compaction
+                // Would implement pool defragmentation here
+            }
+            memoryPools[size] = pool
+        }
     }
 }

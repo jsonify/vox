@@ -224,10 +224,10 @@ final class LoggerTests: XCTestCase {
         let concurrentQueue = DispatchQueue(label: "test.logging", attributes: .concurrent)
         let group = DispatchGroup()
 
-        for i in 0..<100 {
+        for index in 0..<100 {
             group.enter()
             concurrentQueue.async {
-                Logger.shared.info("Concurrent message \(i)", component: "ConcurrentTest")
+                Logger.shared.info("Concurrent message \(index)", component: "ConcurrentTest")
                 group.leave()
             }
         }
@@ -244,11 +244,11 @@ final class LoggerTests: XCTestCase {
         let concurrentQueue = DispatchQueue(label: "test.config", attributes: .concurrent)
         let group = DispatchGroup()
 
-        for i in 0..<50 {
+        for index in 0..<50 {
             group.enter()
             concurrentQueue.async {
-                Logger.shared.configure(verbose: i % 2 == 0)
-                Logger.shared.info("Config test \(i)", component: "ConfigTest")
+                Logger.shared.configure(verbose: index % 2 == 0)
+                Logger.shared.info("Config test \(index)", component: "ConfigTest")
                 group.leave()
             }
         }
@@ -267,8 +267,8 @@ final class LoggerTests: XCTestCase {
         Logger.shared.configure(verbose: true)
 
         measure {
-            for i in 0..<1000 {
-                Logger.shared.info("Performance test message \(i)", component: "Performance")
+            for index in 0..<1000 {
+                Logger.shared.info("Performance test message \(index)", component: "Performance")
             }
         }
     }
@@ -277,8 +277,8 @@ final class LoggerTests: XCTestCase {
         Logger.shared.configure(verbose: true)
 
         measure {
-            for i in 0..<1000 {
-                Logger.shared.debug("Debug performance test \(i)", component: "Debug")
+            for index in 0..<1000 {
+                Logger.shared.debug("Debug performance test \(index)", component: "Debug")
             }
         }
     }
@@ -287,8 +287,8 @@ final class LoggerTests: XCTestCase {
         Logger.shared.configure(verbose: false)
 
         measure {
-            for i in 0..<1000 {
-                Logger.shared.debug("Debug message that might be filtered \(i)", component: "Debug")
+            for index in 0..<1000 {
+                Logger.shared.debug("Debug message that might be filtered \(index)", component: "Debug")
             }
         }
     }

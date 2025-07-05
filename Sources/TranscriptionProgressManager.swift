@@ -66,12 +66,18 @@ final class TranscriptionProgressManager {
         memoryQueue.async { [weak self] in
             guard let self = self else { return }
 
-            self.memoryTimer = Timer.scheduledTimer(withTimeInterval: self.speechConfig.memoryMonitoringInterval, repeats: true) { _ in
+            self.memoryTimer = Timer.scheduledTimer(
+                withTimeInterval: self.speechConfig.memoryMonitoringInterval, 
+                repeats: true
+            ) { _ in
                 guard self.isProcessing else { return }
 
                 let memoryUsage = self.memoryMonitor?.getCurrentUsage()
                 if let usage = memoryUsage, usage.currentBytes > self.memoryConfig.maxMemoryUsage {
-                    Logger.shared.warn("Memory usage exceeded threshold: \(usage.currentBytes / 1024 / 1024)MB", component: "TranscriptionProgressManager")
+                    Logger.shared.warn(
+                        "Memory usage exceeded threshold: \(usage.currentBytes / 1024 / 1024)MB", 
+                        component: "TranscriptionProgressManager"
+                    )
                 }
             }
 
@@ -83,7 +89,10 @@ final class TranscriptionProgressManager {
     }
 
     private func startProgressReporting(callback: @escaping (TranscriptionProgress) -> Void) {
-        progressTimer = Timer.scheduledTimer(withTimeInterval: speechConfig.progressReportingInterval, repeats: true) { [weak self] _ in
+        progressTimer = Timer.scheduledTimer(
+            withTimeInterval: speechConfig.progressReportingInterval, 
+            repeats: true
+        ) { [weak self] _ in
             self?.reportProgress(callback)
         }
     }

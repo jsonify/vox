@@ -18,7 +18,12 @@ final class CITests: XCTestCase {
     func testVoxErrorCreation() {
         let error = VoxError.invalidInputFile("test.mp4")
         XCTAssertNotNil(error.errorDescription)
-        XCTAssertTrue(error.errorDescription!.contains("test.mp4"))
+        
+        guard let errorDescription = error.errorDescription else {
+            XCTFail("Error description should not be nil")
+            return
+        }
+        XCTAssertTrue(errorDescription.contains("test.mp4"))
     }
 
     func testCommandConfiguration() {

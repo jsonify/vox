@@ -275,7 +275,6 @@ struct Vox: ParsableCommand {
             }
 
             Logger.shared.info("✓ Output saved to: \(outputPath)", component: "CLI")
-
         } catch {
             Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")
             Logger.shared.error("❌ Failed to save output: \(error.localizedDescription)", component: "CLI")

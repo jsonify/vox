@@ -202,8 +202,12 @@ class TextFormatter {
         }
 
         var footer = "STATISTICS\n"
-        footer += "Total Words: \(result.segments.reduce(0) { $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count })\n"
-        footer += "Average Confidence: \(String(format: "%.1f", result.segments.map { $0.confidence }.reduce(0, +) / Double(result.segments.count) * 100))%\n"
+        let totalWords = result.segments.reduce(0) { 
+            $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count 
+        }
+        footer += "Total Words: \(totalWords)\n"
+        let avgConfidence = result.segments.map { $0.confidence }.reduce(0, +) / Double(result.segments.count) * 100
+        footer += "Average Confidence: \(String(format: "%.1f", avgConfidence))%\n"
 
         let lowConfidenceSegments = result.segments.filter { $0.confidence < options.confidenceThreshold }
         if !lowConfidenceSegments.isEmpty {
