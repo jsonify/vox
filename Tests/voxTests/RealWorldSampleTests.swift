@@ -463,7 +463,7 @@ final class RealWorldSampleTests: XCTestCase {
             XCTAssertFalse(formattedOutput.isEmpty, "Formatted output should not be empty")
             
             // Write output file
-            try outputWriter.writeContent(formattedOutput, to: outputFile.path)
+            try outputWriter.writeContentSafely(formattedOutput, to: outputFile.path)
             
             // Verify file was created
             XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile.path), 

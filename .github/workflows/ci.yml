@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13]  # Try older macOS version
+        os: [macos-13, macos-14]  # Test both macOS versions
         swift-version: ['5.9']
     
     steps:

@@ -67,7 +67,7 @@ final class EndToEndIntegrationTests: XCTestCase {
         let outputFile = tempDirectory.appendingPathComponent("output.txt")
         
         // Create and configure CLI command
-        let voxCommand = Vox()
+        var voxCommand = Vox()
         voxCommand.inputFile = inputFile.path
         voxCommand.output = outputFile.path
         voxCommand.format = .txt
@@ -246,7 +246,7 @@ final class EndToEndIntegrationTests: XCTestCase {
             }
             
             // Write output file
-            try outputWriter.write(formattedOutput, to: outputFile.path)
+            try outputWriter.writeContentSafely(formattedOutput, to: outputFile.path)
             
             // Verify file was created and has content
             XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile.path), "Output file should exist")
@@ -274,7 +274,7 @@ final class EndToEndIntegrationTests: XCTestCase {
             case .success:
                 XCTFail("Should not succeed with invalid file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError, "Should return VoxError for invalid file")
+                // Error is already guaranteed to be VoxError by the Result type
                 
                 // Verify error contains useful information
                 let errorDescription = error.localizedDescription
@@ -296,8 +296,10 @@ final class EndToEndIntegrationTests: XCTestCase {
             switch result {
             case .success:
                 XCTFail("Should not succeed with empty file")
-            case .failure(let error):
-                XCTAssertTrue(error is VoxError, "Should return VoxError for empty file")
+            case .failure(_):
+                // Error is already guaranteed to be VoxError by the Result type
+                // Failure is expected for empty file
+                break
             }
             expectation.fulfill()
         }
@@ -315,8 +317,10 @@ final class EndToEndIntegrationTests: XCTestCase {
             switch result {
             case .success:
                 XCTFail("Should not succeed with corrupted file")
-            case .failure(let error):
-                XCTAssertTrue(error is VoxError, "Should return VoxError for corrupted file")
+            case .failure(_):
+                // Error is already guaranteed to be VoxError by the Result type
+                // Failure is expected for corrupted file
+                break
             }
             expectation.fulfill()
         }
@@ -338,7 +342,7 @@ final class EndToEndIntegrationTests: XCTestCase {
             case .success:
                 XCTFail("Should not succeed with video-only file")
             case .failure(let error):
-                XCTAssertTrue(error is VoxError, "Should return VoxError for video-only file")
+                // Error is already guaranteed to be VoxError by the Result type
                 
                 // Verify error indicates no audio track
                 let errorDescription = error.localizedDescription
@@ -373,9 +377,10 @@ final class EndToEndIntegrationTests: XCTestCase {
             case .success(let audioFile):
                 XCTAssertLessThan(processingTime, 120.0, "Large file processing should complete within 2 minutes")
                 XCTAssertGreaterThan(audioFile.format.duration, 0, "Audio file should have valid duration")
-            case .failure(let error):
+            case .failure(_):
                 // Large file processing may fail in test environment - that's acceptable
-                XCTAssertTrue(error is VoxError, "Should return VoxError")
+                // Error is already guaranteed to be VoxError by the Result type
+                break
             }
             expectation.fulfill()
         }

@@ -74,7 +74,7 @@ final class ResourceErrorTests: XCTestCase {
                 XCTAssertTrue(true, "Extraction succeeded despite read-only directory")
             case .failure(let error):
                 // Validate error handling
-                XCTAssertTrue(error is VoxError, "Should return VoxError")
+                // Error is already guaranteed to be VoxError by the Result type
                 
                 let errorDescription = error.localizedDescription
                 XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
@@ -134,7 +134,7 @@ final class ResourceErrorTests: XCTestCase {
                 
             case .failure(let error):
                 // If memory-related error, validate it's handled gracefully
-                XCTAssertTrue(error is VoxError, "Should return VoxError")
+                // Error is already guaranteed to be VoxError by the Result type
                 
                 let errorDescription = error.localizedDescription
                 XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
@@ -168,7 +168,7 @@ final class ResourceErrorTests: XCTestCase {
                     let mockResult = self.createMockTranscriptionResult(for: audioFile)
                     let formattedOutput = try outputFormatter.format(mockResult, as: .txt)
                     
-                    try outputWriter.writeContent(formattedOutput, to: outputFile.path)
+                    try outputWriter.writeContentSafely(formattedOutput, to: outputFile.path)
                     
                     // Success case
                     XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile.path),
@@ -210,7 +210,7 @@ final class ResourceErrorTests: XCTestCase {
                     let mockResult = self.createMockTranscriptionResult(for: audioFile)
                     let formattedOutput = try outputFormatter.format(mockResult, as: .txt)
                     
-                    try outputWriter.writeContent(formattedOutput, to: outputPath)
+                    try outputWriter.writeContentSafely(formattedOutput, to: outputPath)
                     XCTFail("Should not succeed with invalid output path")
                     
                 } catch {

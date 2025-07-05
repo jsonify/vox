@@ -315,7 +315,7 @@ final class PerformanceBenchmarkTests: XCTestCase {
         
         measure {
             do {
-                try outputWriter.writeContent(largeOutput, to: outputFile.path)
+                try outputWriter.writeContentSafely(largeOutput, to: outputFile.path)
             } catch {
                 XCTFail("Output writing failed: \(error)")
             }
@@ -408,7 +408,7 @@ final class PerformanceBenchmarkTests: XCTestCase {
     }
     
     func testProgressReportingPerformance() throws {
-        let progressManager = ProgressDisplayManager()
+        let _ = ProgressDisplayManager()
         
         measure {
             for i in 0..<100 {
