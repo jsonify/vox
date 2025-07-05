@@ -47,7 +47,7 @@ class OpenAIIntegrationTests: XCTestCase {
         // Verify that CLI parameters are properly passed to TranscriptionManager
         // This test validates the integration chain
 
-        let _ = "test.mp4" // Mock input file for validation
+        _ = "test.mp4" // Mock input file for validation
 
         // Create CLI instance (can't easily test run() without actual file)
         // But we can verify the parameter mapping exists
