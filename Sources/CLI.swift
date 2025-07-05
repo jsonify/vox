@@ -248,7 +248,7 @@ struct Vox: ParsableCommand {
         guard let outputPath = output else { return }
 
         do {
-            let formatter = OutputFormatter()
+            let outputWriter = OutputWriter()
 
             // Configure formatting options based on CLI flags
             if format == .txt {
@@ -263,21 +263,53 @@ struct Vox: ParsableCommand {
                     lineWidth: lineWidth
                 )
 
-                // Use detailed format if requested
-                let content = detailed ?
-                    formatter.formatAsDetailedText(result, options: textOptions) :
-                    formatter.formatAsEnhancedText(result, options: textOptions)
-
-                try content.write(toFile: outputPath, atomically: true, encoding: .utf8)
+                // Write with validation using OutputWriter
+                let successConfirmation = try outputWriter.writeTranscriptionResult(
+                    result, 
+                    to: outputPath, 
+                    format: format, 
+                    textOptions: textOptions
+                )
+                
+                displaySuccessConfirmation(successConfirmation)
             } else {
-                // Use standard formatting for SRT and JSON
-                try formatter.saveTranscriptionResult(result, to: outputPath, format: format)
+                // Use OutputWriter for SRT and JSON with validation
+                let successConfirmation = try outputWriter.writeTranscriptionResult(
+                    result, 
+                    to: outputPath, 
+                    format: format
+                )
+                
+                displaySuccessConfirmation(successConfirmation)
             }
-
-            Logger.shared.info("✓ Output saved to: \(outputPath)", component: "CLI")
         } catch {
             Logger.shared.error("Failed to save output: \(error.localizedDescription)", component: "CLI")
             Logger.shared.error("❌ Failed to save output: \(error.localizedDescription)", component: "CLI")
+        }
+    }
+
+    private func displaySuccessConfirmation(_ confirmation: SuccessConfirmation) {
+        // Display success message
+        Logger.shared.info("✓ \(confirmation.message)", component: "CLI")
+        
+        // Display validation status if verbose
+        if verbose {
+            let report = confirmation.validationReport
+            Logger.shared.info("  Validation Status: \(report.overallStatus.rawValue)", component: "CLI")
+            Logger.shared.info("  File Size: \(confirmation.fileSize) bytes", component: "CLI")
+            Logger.shared.info("  Processing Time: \(String(format: "%.3f", confirmation.processingTime))s", component: "CLI")
+            Logger.shared.info("  Validation Time: \(String(format: "%.3f", report.validationTime))s", component: "CLI")
+            
+            // Display any validation issues
+            if !report.formatValidation.issues.isEmpty {
+                Logger.shared.warn("  Format Issues: \(report.formatValidation.issues.joined(separator: ", "))", component: "CLI")
+            }
+            if !report.integrityValidation.issues.isEmpty {
+                Logger.shared.warn("  Integrity Issues: \(report.integrityValidation.issues.joined(separator: ", "))", component: "CLI")
+            }
+            if !report.encodingValidation.issues.isEmpty {
+                Logger.shared.warn("  Encoding Issues: \(report.encodingValidation.issues.joined(separator: ", "))", component: "CLI")
+            }
         }
     }
 

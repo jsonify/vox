@@ -3,7 +3,7 @@ import ArgumentParser
 
 // MARK: - Configuration Models
 
-enum OutputFormat: String, CaseIterable, ExpressibleByArgument {
+enum OutputFormat: String, CaseIterable, ExpressibleByArgument, Codable {
     case txt
     case srt
     case json
