@@ -24,11 +24,13 @@ class OutputWriter {
     private let options: OutputWriterOptions
     private let fileManager: FileManager
     private let logger: Logger
+    private let validator: OutputValidator
     
     init(options: OutputWriterOptions = .default) {
         self.options = options
         self.fileManager = FileManager.default
         self.logger = Logger.shared
+        self.validator = OutputValidator()
     }
     
     /// Main interface for writing transcription results with full error recovery
@@ -38,7 +40,8 @@ class OutputWriter {
         format: OutputFormat,
         textOptions: TextFormattingOptions? = nil,
         jsonOptions: JSONFormatter.JSONFormattingOptions? = nil
-    ) throws {
+    ) throws -> SuccessConfirmation {
+        let startTime = Date()
         logger.info("Writing transcription result to: \(path)", component: "OutputWriter")
         
         // Format the content
@@ -47,7 +50,26 @@ class OutputWriter {
         // Write with full error recovery
         try writeContentSafely(content, to: path)
         
-        logger.info("Successfully wrote transcription result (\(content.count) bytes)", component: "OutputWriter")
+        // Validate the written output
+        let url = URL(fileURLWithPath: path)
+        let validationReport = try validator.validateOutput(result, writtenTo: url, format: format)
+        
+        // Get file size for success confirmation
+        let attributes = try fileManager.attributesOfItem(atPath: path)
+        let fileSize = attributes[.size] as? Int64 ?? 0
+        
+        let processingTime = Date().timeIntervalSince(startTime)
+        let successConfirmation = SuccessConfirmation(
+            filePath: url,
+            fileSize: fileSize,
+            format: format,
+            validationReport: validationReport,
+            processingTime: processingTime
+        )
+        
+        logger.info("Successfully wrote and validated transcription result (\(content.count) bytes)", component: "OutputWriter")
+        
+        return successConfirmation
     }
     
     /// Safely write content with comprehensive error handling and recovery
