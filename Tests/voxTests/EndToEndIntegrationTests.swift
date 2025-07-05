@@ -399,7 +399,8 @@ final class EndToEndIntegrationTests: XCTestCase {
         }
         
         let expectation = XCTestExpectation(description: "Memory usage test")
-        let initialMemory = ProcessInfo.processInfo.physicalMemory
+        let memoryMonitor = MemoryMonitor()
+        let initialMemory = memoryMonitor.getCurrentUsage().currentBytes
         var processedCount = 0
         
         for testFile in testFiles {
@@ -408,7 +409,7 @@ final class EndToEndIntegrationTests: XCTestCase {
                 processedCount += 1
                 
                 if processedCount == testFiles.count {
-                    let currentMemory = ProcessInfo.processInfo.physicalMemory
+                    let currentMemory = memoryMonitor.getCurrentUsage().currentBytes
                     let memoryIncrease = currentMemory - initialMemory
                     
                     // Memory increase should be reasonable (less than 100MB for test files)
@@ -430,10 +431,11 @@ final class EndToEndIntegrationTests: XCTestCase {
         }
         
         let formats: [OutputFormat] = [.txt, .srt, .json]
-        let expectation = XCTestExpectation(description: "All output formats")
-        var completedFormats = 0
+        let expectations = formats.map { format in
+            XCTestExpectation(description: "Format \(format.rawValue)")
+        }
         
-        for format in formats {
+        for (index, format) in formats.enumerated() {
             let outputFile = tempDirectory.appendingPathComponent("test_output.\(format.rawValue)")
             
             testWorkflowComponents(
@@ -441,16 +443,11 @@ final class EndToEndIntegrationTests: XCTestCase {
                 outputFile: outputFile,
                 format: format,
                 includeTimestamps: format != .txt,
-                expectation: XCTestExpectation(description: "Format \(format.rawValue)")
+                expectation: expectations[index]
             )
-            
-            completedFormats += 1
-            if completedFormats == formats.count {
-                expectation.fulfill()
-            }
         }
         
-        wait(for: [expectation], timeout: 180.0)
+        wait(for: expectations, timeout: 180.0)
     }
     
     // MARK: - Helper Methods

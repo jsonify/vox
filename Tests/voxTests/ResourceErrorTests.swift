@@ -106,14 +106,14 @@ final class ResourceErrorTests: XCTestCase {
     
     // MARK: - Resource Exhaustion Error Scenarios
     
-    func testLowMemoryScenario() throws {
-        // This test simulates low memory conditions
+    func testMemoryUsageOnProcessing() throws {
+        // This test monitors memory usage during processing
         guard let testFile = testFileGenerator.createMockMP4File(duration: 10.0) else {
             XCTFail("Failed to create test file")
             return
         }
         
-        let expectation = XCTestExpectation(description: "Low memory scenario")
+        let expectation = XCTestExpectation(description: "Memory usage monitoring")
         
         // Monitor memory usage during processing
         let memoryMonitor = MemoryMonitor()
@@ -145,17 +145,17 @@ final class ResourceErrorTests: XCTestCase {
         wait(for: [expectation], timeout: 45.0)
     }
     
-    func testDiskSpaceError() throws {
-        // Test handling of insufficient disk space
+    func testCompleteWorkflowWithFileWriting() throws {
+        // Test complete workflow including file writing and error handling
         guard let testFile = testFileGenerator.createMockMP4File(duration: 5.0) else {
             XCTFail("Failed to create test file")
             return
         }
         
-        let outputFile = tempDirectory.appendingPathComponent("diskspace_test.txt")
-        let expectation = XCTestExpectation(description: "Disk space error")
+        let outputFile = tempDirectory.appendingPathComponent("workflow_test.txt")
+        let expectation = XCTestExpectation(description: "Complete workflow with file writing")
         
-        // Execute workflow and monitor disk space
+        // Execute complete workflow including file writing
         let audioProcessor = AudioProcessor()
         audioProcessor.extractAudio(from: testFile.path) { result in
             switch result {
