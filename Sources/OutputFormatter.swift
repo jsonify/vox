@@ -37,14 +37,14 @@ struct OutputFormatter {
     }
 
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat) throws {
-        let content = try self.format(result, as: format)
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
+        let outputWriter = OutputWriter()
+        try outputWriter.writeTranscriptionResult(result, to: path, format: format)
     }
 
     /// Save transcription result with full TextFormatter configuration options
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, options: TextFormattingOptions) throws {
-        let content = try self.format(result, as: format, options: options)
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
+        let outputWriter = OutputWriter()
+        try outputWriter.writeTranscriptionResult(result, to: path, format: format, textOptions: options)
     }
 
     /// Format transcription result with custom JSON formatting options
@@ -62,8 +62,8 @@ struct OutputFormatter {
 
     /// Save transcription result with custom JSON formatting options
     func saveTranscriptionResult(_ result: TranscriptionResult, to path: String, format: OutputFormat, jsonOptions: JSONFormatter.JSONFormattingOptions) throws {
-        let content = try self.format(result, as: format, jsonOptions: jsonOptions)
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
+        let outputWriter = OutputWriter()
+        try outputWriter.writeTranscriptionResult(result, to: path, format: format, jsonOptions: jsonOptions)
     }
 
     private func formatAsSRT(_ result: TranscriptionResult) -> String {

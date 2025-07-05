@@ -17,6 +17,12 @@ public enum VoxError: Error, LocalizedError {
     case temporaryFileCreationFailed(String)
     case temporaryFileCleanupFailed(String)
     case processingFailed(String)
+    case insufficientDiskSpace(required: UInt64, available: UInt64)
+    case invalidOutputPath(String)
+    case permissionDenied(String)
+    case backupFailed(String)
+    case atomicWriteFailed(String)
+    case pathCreationFailed(String)
     
     public var errorDescription: String? {
         switch self {
@@ -48,6 +54,22 @@ public enum VoxError: Error, LocalizedError {
             return "Speech recognition is not available"
         case .invalidAudioFile:
             return "Invalid audio file"
+        case let .insufficientDiskSpace(required, available):
+            let requiredMB = Double(required) / (1024 * 1024)
+            let availableMB = Double(available) / (1024 * 1024)
+            let reqStr = String(format: "%.2f", requiredMB)
+            let availStr = String(format: "%.2f", availableMB)
+            return "Insufficient disk space. Required: \(reqStr) MB, Available: \(availStr) MB"
+        case .invalidOutputPath(let path):
+            return "Invalid output path: \(path)"
+        case .permissionDenied(let path):
+            return "Permission denied: \(path)"
+        case .backupFailed(let reason):
+            return "Backup failed: \(reason)"
+        case .atomicWriteFailed(let reason):
+            return "Atomic write failed: \(reason)"
+        case .pathCreationFailed(let reason):
+            return "Path creation failed: \(reason)"
         }
     }
     
@@ -73,6 +95,9 @@ public enum VoxError: Error, LocalizedError {
             return "Processor"
         case .transcriptionInProgress, .speechRecognitionUnavailable, .invalidAudioFile:
             return "Transcription"
+        case .insufficientDiskSpace, .invalidOutputPath, .permissionDenied, .backupFailed, 
+             .atomicWriteFailed, .pathCreationFailed:
+            return "OutputWriter"
         }
     }
 }
