@@ -4,7 +4,6 @@ import Foundation
 public class WhisperAPIClient {
     // MARK: - Configuration
 
-
     private let apiKey: String
     private let baseURL = "https://api.openai.com/v1/audio/transcriptions"
     private let session: URLSession
@@ -14,12 +13,10 @@ public class WhisperAPIClient {
 
     // MARK: - Rate Limiting
 
-
     private var lastRequestTime = Date.distantPast
     private let minRequestInterval: TimeInterval = 1.0 // Minimum 1 second between requests
 
     // MARK: - Initialization
-
 
     public init(apiKey: String) {
         self.apiKey = apiKey
@@ -34,7 +31,6 @@ public class WhisperAPIClient {
     }
 
     // MARK: - Public API
-
 
     /// Transcribe audio file using OpenAI Whisper API
     /// - Parameters:
@@ -86,7 +82,6 @@ public class WhisperAPIClient {
     }
 
     // MARK: - Private Methods
-
 
     private func validateFileSize(_ audioFile: AudioFile) throws {
         guard let fileSize = audioFile.format.fileSize else {
@@ -430,7 +425,6 @@ public class WhisperAPIClient {
 }
 
 // MARK: - API Key Management
-
 
 extension WhisperAPIClient {
     /// Create WhisperAPIClient with API key from various sources

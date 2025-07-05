@@ -7,7 +7,6 @@ final class MemoryMonitorTests: XCTestCase {
     /// - Verifies usage percentage calculation matches expected value
     /// - Logs memory statistics via proper logging system
     func testMemoryUsageCalculation() {
-
         let monitor = MemoryMonitor()
         let usage = monitor.getCurrentUsage()
 

@@ -33,7 +33,6 @@ final class AudioProcessingErrorTests: XCTestCase {
 
     // MARK: - File System Error Tests
 
-
     func testExtractionWithNonexistentFile() {
         let nonexistentPath = "/this/path/absolutely/does/not/exist/video.mp4"
         let expectation = XCTestExpectation(description: "Nonexistent file error")
@@ -130,7 +129,6 @@ final class AudioProcessingErrorTests: XCTestCase {
     }
 
     // MARK: - Invalid File Content Tests
-
 
     func testExtractionWithInvalidMP4Content() {
         guard let generator = testFileGenerator else {
@@ -252,7 +250,6 @@ final class AudioProcessingErrorTests: XCTestCase {
     }
 
     // MARK: - FFmpeg-Specific Error Tests
-
 
     func testFFmpegUnavailableError() {
         // Create a processor and test when ffmpeg is not available
