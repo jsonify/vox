@@ -187,12 +187,12 @@ final class ResourceExhaustionValidationTests: XCTestCase {
         let expectation = XCTestExpectation(description: "Disk space exhaustion handling")
         
         // Check available disk space
-        let availableSpace = getAvailableDiskSpace()
+        let _ = getAvailableDiskSpace()
         
         let audioProcessor = AudioProcessor()
         audioProcessor.extractAudio(from: testFile.path) { result in
             switch result {
-            case .success(let audioFile):
+            case .success(_):
                 // Simulate disk space exhaustion
                 self.resourceSimulator.simulateDiskSpaceExhaustion()
                 
@@ -291,7 +291,7 @@ final class ResourceExhaustionValidationTests: XCTestCase {
         let concurrentCount = 10
         var testFiles: [URL] = []
         
-        for i in 0..<concurrentCount {
+        for _ in 0..<concurrentCount {
             if let file = testFileGenerator.createMockMP4File(duration: 5.0) {
                 testFiles.append(file)
             }

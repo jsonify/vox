@@ -52,7 +52,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         let concurrentCount = 8
         var testFiles: [URL] = []
         
-        for i in 0..<concurrentCount {
+        for _ in 0..<concurrentCount {
             if let file = testFileGenerator.createMockMP4File(duration: 5.0) {
                 testFiles.append(file)
             }
@@ -69,7 +69,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         let resultsLock = NSLock()
         
         // Test concurrent access to the same shared resource (TempFileManager)
-        for (index, testFile) in testFiles.enumerated() {
+        for (_, testFile) in testFiles.enumerated() {
             group.enter()
             
             DispatchQueue.global(qos: .userInitiated).async {
@@ -137,7 +137,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         var tempFileCountsAfter: [Int] = []
         let countsLock = NSLock()
         
-        for i in 0..<concurrentCount {
+        for _ in 0..<concurrentCount {
             group.enter()
             
             DispatchQueue.global(qos: .userInitiated).async {
@@ -200,7 +200,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         let concurrentCount = 12
         var testFiles: [URL] = []
         
-        for i in 0..<concurrentCount {
+        for _ in 0..<concurrentCount {
             if let file = testFileGenerator.createMockMP4File(duration: 8.0) {
                 testFiles.append(file)
             }
@@ -386,7 +386,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         let concurrentCount = 6
         var testFiles: [URL] = []
         
-        for i in 0..<concurrentCount {
+        for _ in 0..<concurrentCount {
             if let file = testFileGenerator.createMockMP4File(duration: 10.0) {
                 testFiles.append(file)
             }
@@ -428,7 +428,7 @@ final class ConcurrentErrorHandlingTests: XCTestCase {
         }
         
         group.notify(queue: .main) {
-            let finalMemoryUsage = self.getMemoryUsage()
+            let _ = self.getMemoryUsage()
             let peakMemoryUsage = memoryUsages.max() ?? 0
             
             // Validate memory management under concurrent pressure
@@ -500,7 +500,7 @@ class ConcurrencySimulator {
         
         if enabled {
             // Simulate resource pressure by creating background tasks
-            for i in 0..<4 {
+            for _ in 0..<4 {
                 DispatchQueue.global(qos: .background).async {
                     while self.resourcePressureEnabled {
                         // Simulate CPU load
