@@ -108,7 +108,7 @@ swift test --filter PerformanceRegressionTests
 swift build
 
 # Run performance validation (planned)
-./Sources/vox-performance
+swift run vox-performance
 
 # Or use the validator directly in code
 let validator = PerformanceValidator()

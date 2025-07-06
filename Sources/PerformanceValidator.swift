@@ -180,8 +180,6 @@ public final class PerformanceValidator {
         
         // Validate that optimizations are appropriate for the architecture
         let expectedConcurrentOps = min(8, platformOptimizer.processorCount)
-        _ = config.concurrentOperations >= expectedConcurrentOps / 2
-        
         let optimizationScore = calculateOptimizationScore(config: config, speechConfig: speechConfig)
         
         let passed = optimizationScore >= 0.7 // At least 70% optimization score
@@ -211,7 +209,7 @@ public final class PerformanceValidator {
         results.append(validatePlatformOptimizations())
         
         let passedTests = results.filter { $0.passed }.count
-        let failedTests = results.filter { !$0.passed }.count
+        let failedTests = results.count - passedTests
         
         let summary = ValidationSummary(
             totalTests: results.count,

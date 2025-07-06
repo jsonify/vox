@@ -346,8 +346,8 @@ final class EnhancedPerformanceTests: XCTestCase {
     private func createTestAudioFile(duration: TimeInterval) -> AudioFile? {
         guard let generator = testFileGenerator else { return nil }
         
-        // Use smaller duration for testing to avoid timeouts
-        let testDuration = min(duration, 30.0) // Cap at 30 seconds for testing
+        // Use the requested duration for accurate performance testing
+        let testDuration = duration
         
         guard let testURL = generator.createMockMP4File(duration: testDuration) else {
             return nil
@@ -506,6 +506,12 @@ private struct PerformanceBaseline: Codable {
     let peakMemoryMB: Double
     let averageMemoryMB: Double
     let leakMemoryMB: Double
+    let gcEvents: Int
+    // Efficiency metrics components
+    let processingTimeRatio: Double
+    let memoryEfficiency: Double
+    let energyEfficiency: Double
+    let concurrencyUtilization: Double
     let overallScore: Double
     let timestamp: Date
     
@@ -516,6 +522,12 @@ private struct PerformanceBaseline: Codable {
         self.peakMemoryMB = result.memoryUsage.peakMB
         self.averageMemoryMB = result.memoryUsage.averageMB
         self.leakMemoryMB = result.memoryUsage.leakMB
+        self.gcEvents = result.memoryUsage.gcEvents
+        // Store individual efficiency metrics
+        self.processingTimeRatio = result.efficiency.processingTimeRatio
+        self.memoryEfficiency = result.efficiency.memoryEfficiency
+        self.energyEfficiency = result.efficiency.energyEfficiency
+        self.concurrencyUtilization = result.efficiency.concurrencyUtilization
         self.overallScore = result.efficiency.overallScore
         self.timestamp = result.timestamp
     }
@@ -526,7 +538,7 @@ private struct PerformanceBaseline: Codable {
             peak: UInt64(peakMemoryMB * 1024 * 1024),
             average: UInt64(averageMemoryMB * 1024 * 1024),
             leak: UInt64(leakMemoryMB * 1024 * 1024),
-            gcEvents: 0
+            gcEvents: gcEvents
         )
         
         let thermalProfile = PerformanceBenchmark.ThermalProfile(
@@ -537,10 +549,10 @@ private struct PerformanceBaseline: Codable {
         )
         
         let efficiency = PerformanceBenchmark.EfficiencyMetrics(
-            processingTimeRatio: 1.0,
-            memoryEfficiency: 1.0,
-            energyEfficiency: 1.0,
-            concurrencyUtilization: 1.0
+            processingTimeRatio: processingTimeRatio,
+            memoryEfficiency: memoryEfficiency,
+            energyEfficiency: energyEfficiency,
+            concurrencyUtilization: concurrencyUtilization
         )
         
         return PerformanceBenchmark.BenchmarkResult(
