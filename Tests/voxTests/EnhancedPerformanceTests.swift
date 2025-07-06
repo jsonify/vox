@@ -259,7 +259,9 @@ final class EnhancedPerformanceTests: XCTestCase {
             let durationRatio = longest.duration / shortest.duration
             let memoryRatio = longest.profile.peakMB / shortest.profile.peakMB
             
-            Logger.shared.info("Memory scaling: \(String(format: "%.1f", durationRatio))x duration -> \(String(format: "%.1f", memoryRatio))x memory", component: "EnhancedPerformanceTests")
+            let durationRatioStr = String(format: "%.1f", durationRatio)
+            let memoryRatioStr = String(format: "%.1f", memoryRatio)
+            Logger.shared.info("Memory scaling: \(durationRatioStr)x duration -> \(memoryRatioStr)x memory", component: "EnhancedPerformanceTests")
             
             // Memory should scale sub-linearly with duration
             XCTAssertLessThan(memoryRatio, durationRatio, 
@@ -424,7 +426,10 @@ final class EnhancedPerformanceTests: XCTestCase {
         return report
     }
     
-    private func generateMemoryProfilingReport(_ profiles: [(duration: TimeInterval, profile: PerformanceBenchmark.MemoryProfile)], architecture: PlatformOptimizer.Architecture) -> String {
+    private func generateMemoryProfilingReport(
+        _ profiles: [(duration: TimeInterval, profile: PerformanceBenchmark.MemoryProfile)],
+        architecture: PlatformOptimizer.Architecture
+    ) -> String {
         var report = """
         ===== Memory Profiling Report =====
         Architecture: \(architecture.displayName)

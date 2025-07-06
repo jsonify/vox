@@ -189,10 +189,14 @@ class SpeechTranscriber {
         // Log detailed progress for verbose mode
         if !result.isFinal {
             let progress = Double(currentSegmentCount) / Double(estimatedTotalSegments)
-            let progressMessage = "DEBUG: Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed\n"
+            let progressPercent = String(format: "%.1f%%", progress * 100)
+            let audioProcessedStr = String(format: "%.1f", audioProcessed)
+            let progressMessage = "DEBUG: Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, \(audioProcessedStr)s processed\n"
             fputs(progressMessage, stderr)
             // TEMP DEBUG: Bypass Logger call
-            // Logger.shared.debug("Transcription progress: \(String(format: "%.1f%%", progress * 100)) - \(currentSegmentCount) segments, \(String(format: "%.1f", audioProcessed))s processed", component: "SpeechTranscriber")
+            // let progressPercent = String(format: "%.1f%%", progress * 100)
+            // let audioProcessedStr = String(format: "%.1f", audioProcessed)
+            // Logger.shared.debug("Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, \(audioProcessedStr)s processed", component: "SpeechTranscriber")
         }
 
         if result.isFinal {
@@ -214,7 +218,9 @@ class SpeechTranscriber {
             let completionMessage = "DEBUG: Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)\n"
             fputs(completionMessage, stderr)
             // TEMP DEBUG: Bypass Logger call
-            // Logger.shared.info("Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)", component: "SpeechTranscriber")
+            // let processingTimeStr = String(format: "%.2f", processingTime)
+            // let realTimeRatioStr = String(format: "%.2f", realTimeRatio)
+            // Logger.shared.info("Speech transcription completed in \(processingTimeStr)s (\(realTimeRatioStr)x real-time)", component: "SpeechTranscriber")
             context.continuation.resume(returning: transcriptionResult)
         }
     }
