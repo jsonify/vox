@@ -90,7 +90,8 @@ struct Vox: ParsableCommand {
         
         // Check file extension
         let fileExtension = URL(fileURLWithPath: inputFile).pathExtension.lowercased()
-        guard fileExtension == "mp4" || fileExtension == "m4v" || fileExtension == "mov" else {
+        let supportedExtensions = ["mp4", "m4v", "mov"]
+        guard supportedExtensions.contains(fileExtension) else {
             throw VoxError.unsupportedFormat(fileExtension)
         }
         
@@ -120,33 +121,7 @@ struct Vox: ParsableCommand {
     private func configureLogging() {
         Logger.shared.configure(verbose: verbose)
         
-        if verbose {
-            Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
-            Logger.shared.info("Input file: \(inputFile)", component: "CLI")
-            Logger.shared.info("Output format: \(format)", component: "CLI")
-
-            if let output = output {
-                Logger.shared.info("Output file: \(output)", component: "CLI")
-            }
-
-            if let language = language {
-                Logger.shared.info("Language: \(language)", component: "CLI")
-            }
-
-            if let fallbackApi = fallbackApi {
-                Logger.shared.info("Fallback API: \(fallbackApi)", component: "CLI")
-            }
-
-            if forceCloud {
-                Logger.shared.info("Using cloud transcription (forced)", component: "CLI")
-            } else {
-                Logger.shared.info("Using native transcription with fallback", component: "CLI")
-            }
-
-            if timestamps {
-                Logger.shared.info("Timestamps enabled", component: "CLI")
-            }
-        }
+        // Logging configuration is complete - startup info will be displayed separately
     }
 
     private func displayStartupInfo() {
