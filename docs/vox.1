@@ -1,0 +1,172 @@
+.\" Generated with Claude Code
+.\" This is a man page for the vox command
+.TH VOX 1 "2024-01-15" "vox 1.0.0" "User Commands"
+.SH NAME
+vox \- Fast, private MP4 audio transcription CLI for macOS
+.SH SYNOPSIS
+.B vox
+[\fIFILE\fR]
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B vox
+is a native macOS command-line interface application that extracts audio from MP4 video files and transcribes the audio content to text using Apple's native SpeechAnalyzer framework with fallback to cloud-based transcription services.
+
+The tool is designed with privacy-first principles, performing local processing by default and only using cloud services when explicitly requested or when fallback is necessary.
+.SH ARGUMENTS
+.TP
+.I FILE
+Input MP4 video file to transcribe. Required unless using batch processing with wildcards.
+.SH OPTIONS
+.TP
+.BR \-o ", " \-\-output " \fIFILE\fR"
+Specify output file path. Default is input filename with .txt extension.
+.TP
+.BR \-f ", " \-\-format " \fIFORMAT\fR"
+Output format: txt, srt, json. Default is txt.
+.TP
+.BR \-l ", " \-\-language " \fILANG\fR"
+Language code (e.g., en-US, es-ES, fr-FR). Auto-detect if not specified.
+.TP
+.BR \-v ", " \-\-verbose
+Enable verbose output with detailed processing information.
+.TP
+.BR \-h ", " \-\-help
+Show help message and exit.
+.TP
+.BR \-\-version
+Show version information and exit.
+.TP
+.BR \-\-timestamps
+Include timestamps in output (format depends on output type).
+.TP
+.BR \-\-force\-cloud
+Skip native transcription and force cloud service usage.
+.TP
+.BR \-\-fallback\-api " \fISERVICE\fR"
+Cloud service to use for fallback: openai, revai.
+.TP
+.BR \-\-api\-key " \fIKEY\fR"
+API key for cloud service. Can also be set via environment variables.
+.SH OUTPUT FORMATS
+.TP
+.B txt
+Plain text format with optional timestamps.
+.TP
+.B srt
+SubRip subtitle format with timing information.
+.TP
+.B json
+Structured JSON format with metadata and segments.
+.SH ENVIRONMENT VARIABLES
+.TP
+.B OPENAI_API_KEY
+API key for OpenAI Whisper service.
+.TP
+.B REVAI_API_KEY
+API key for Rev.ai transcription service.
+.TP
+.B VOX_VERBOSE
+Enable verbose logging by default (any non-empty value).
+.SH EXAMPLES
+.TP
+Basic transcription:
+.B vox video.mp4
+.TP
+Custom output file:
+.B vox video.mp4 -o transcript.txt
+.TP
+Generate SRT subtitles:
+.B vox video.mp4 --format srt
+.TP
+Include timestamps:
+.B vox video.mp4 --timestamps
+.TP
+Force specific language:
+.B vox video.mp4 --language en-US
+.TP
+Use cloud fallback:
+.B vox video.mp4 --fallback-api openai
+.TP
+JSON output with metadata:
+.B vox video.mp4 --format json --timestamps
+.TP
+Batch processing:
+.B vox *.mp4
+.TP
+Verbose processing:
+.B vox video.mp4 --verbose
+.SH PERFORMANCE
+.TP
+.B Apple Silicon (M1/M2)
+30-minute video processes in approximately 45 seconds (40x real-time).
+.TP
+.B Intel Macs
+30-minute video processes in approximately 75 seconds (24x real-time).
+.TP
+.B Memory Usage
+Typical usage: 200-500MB, peak usage under 1GB.
+.SH PRIVACY & SECURITY
+.B vox
+is designed with privacy-first principles:
+.RS
+.IP \(bu 4
+Local processing by default using Apple's SpeechAnalyzer
+.IP \(bu 4
+No persistent storage of audio or transcripts
+.IP \(bu 4
+Secure cleanup of temporary files
+.IP \(bu 4
+Cloud services require explicit consent
+.IP \(bu 4
+API keys are never stored persistently
+.RE
+.SH SYSTEM REQUIREMENTS
+.RS
+.IP \(bu 4
+macOS 12.0 (Monterey) or later
+.IP \(bu 4
+Intel x86_64 or Apple Silicon arm64 architecture
+.IP \(bu 4
+2GB+ RAM recommended
+.IP \(bu 4
+100MB+ free storage for temporary files
+.RE
+.SH TROUBLESHOOTING
+.TP
+.B Permission denied
+Ensure the binary has execute permissions:
+.B chmod +x /usr/local/bin/vox
+.TP
+.B Command not found
+Add to PATH:
+.B export PATH="/usr/local/bin:$PATH"
+.TP
+.B Audio extraction failed
+Install ffmpeg for additional format support:
+.B brew install ffmpeg
+.TP
+.B Low transcription quality
+Try cloud fallback for better accuracy:
+.B vox video.mp4 --fallback-api openai
+.SH EXIT STATUS
+.B vox
+exits with status 0 on success, and >0 if an error occurs.
+.SH FILES
+.TP
+.B ~/.vox/
+User configuration directory (if created).
+.TP
+.B /tmp/vox-*
+Temporary files during processing (automatically cleaned).
+.SH BUGS
+Report bugs at: https://github.com/jsonify/vox/issues
+.SH AUTHOR
+Written by the vox development team.
+.SH COPYRIGHT
+Copyright © 2024 vox project contributors.
+License MIT: https://opensource.org/licenses/MIT
+.SH SEE ALSO
+.BR ffmpeg (1),
+.BR swift (1)
+
+Full documentation: https://github.com/jsonify/vox/tree/main/docs
