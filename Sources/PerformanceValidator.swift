@@ -25,7 +25,9 @@ public final class PerformanceValidator {
         
         public var summary: String {
             let status = passed ? "✅ PASS" : "❌ FAIL"
-            return "\(status) \(testName): \(String(format: "%.2f", actualValue))\(unit) (target: \(String(format: "%.2f", targetValue))\(unit))"
+            let actualFormatted = String(format: "%.2f", actualValue)
+            let targetFormatted = String(format: "%.2f", targetValue)
+            return "\(status) \(testName): \(actualFormatted)\(unit) (target: \(targetFormatted)\(unit))"
         }
     }
     
@@ -113,8 +115,8 @@ public final class PerformanceValidator {
             defer { buffer.deallocate() }
             
             // Fill buffer with data
-            for i in 0..<bufferSize {
-                buffer[i] = UInt8(i % 256)
+            for index in 0..<bufferSize {
+                buffer[index] = UInt8(index % 256)
             }
             
             memoryReadings.append(getCurrentMemoryUsage())
@@ -178,7 +180,7 @@ public final class PerformanceValidator {
         
         // Validate that optimizations are appropriate for the architecture
         let expectedConcurrentOps = min(8, platformOptimizer.processorCount)
-        let hasOptimalConfig = config.concurrentOperations >= expectedConcurrentOps / 2
+        _ = config.concurrentOperations >= expectedConcurrentOps / 2
         
         let optimizationScore = calculateOptimizationScore(config: config, speechConfig: speechConfig)
         
@@ -282,12 +284,12 @@ public final class PerformanceValidator {
         score += concurrencyScore * 0.4
         
         // Memory buffer optimization (30% of score)
-        let optimalBufferSize = platformOptimizer.architecture == .appleSilicon ? 256 * 1024 : 128 * 1024
-        let bufferScore = min(1.0, Double(config.memoryBufferSize) / Double(optimalBufferSize))
+        let optimalBufferSize = platformOptimizer.architecture == .appleSilicon ? 8192 : 4096
+        let bufferScore = min(1.0, Double(config.bufferSize) / Double(optimalBufferSize))
         score += bufferScore * 0.3
         
         // Speech recognition optimization (20% of score)
-        let speechScore = speechConfig.requiresOnDeviceRecognition ? 1.0 : 0.5
+        let speechScore = speechConfig.useOnDeviceRecognition ? 1.0 : 0.5
         score += speechScore * 0.2
         
         // Architecture-specific optimization (10% of score)
@@ -367,7 +369,7 @@ public extension PerformanceValidator {
         let summary = validator.runComprehensiveValidation()
         let report = validator.generatePerformanceReport(summary)
         
-        print(report)
+        Logger.shared.info(report, component: "PerformanceValidator")
         
         // Save report
         validator.savePerformanceReport(report)

@@ -166,7 +166,8 @@ final class EnhancedPerformanceTests: XCTestCase {
             
             // Log results for this duration
             for result in results {
-                Logger.shared.info("  \(result.testName): \(String(format: "%.2f", result.processingTime))s (\(String(format: "%.2f", result.processingRatio))x)", component: "EnhancedPerformanceTests")
+                let processingInfo = "\(result.testName): \(String(format: "%.2f", result.processingTime))s (\(String(format: "%.2f", result.processingRatio))x)"
+            Logger.shared.info("  \(processingInfo)", component: "EnhancedPerformanceTests")
             }
         }
         
@@ -237,7 +238,10 @@ final class EnhancedPerformanceTests: XCTestCase {
         Logger.shared.info("=== Memory Usage Analysis ===", component: "EnhancedPerformanceTests")
         
         for (duration, profile) in memoryProfiles {
-            Logger.shared.info("  \(Int(duration/60))min: Peak \(String(format: "%.1f", profile.peakMB))MB, Avg \(String(format: "%.1f", profile.averageMB))MB, Leak \(String(format: "%.1f", profile.leakMB))MB", component: "EnhancedPerformanceTests")
+            let memoryInfo = "\(Int(duration/60))min: Peak \(String(format: "%.1f", profile.peakMB))MB, " +
+                           "Avg \(String(format: "%.1f", profile.averageMB))MB, " +
+                           "Leak \(String(format: "%.1f", profile.leakMB))MB"
+            Logger.shared.info("  \(memoryInfo)", component: "EnhancedPerformanceTests")
             
             // Validate memory constraints
             XCTAssertLessThan(profile.peakMB, 1024.0, 
@@ -307,13 +311,19 @@ final class EnhancedPerformanceTests: XCTestCase {
             
             // Regression detection thresholds
             XCTAssertLessThan(performanceRatio, 1.2, 
-                             "Processing time should not regress by > 20% (baseline: \(String(format: "%.2f", baseline.processingTime))s, current: \(String(format: "%.2f", standardResult.processingTime))s)")
+                             "Processing time should not regress by > 20% " +
+                             "(baseline: \(String(format: "%.2f", baseline.processingTime))s, " +
+                             "current: \(String(format: "%.2f", standardResult.processingTime))s)")
             
             XCTAssertLessThan(memoryRatio, 1.3, 
-                             "Memory usage should not regress by > 30% (baseline: \(String(format: "%.1f", baseline.memoryUsage.peakMB))MB, current: \(String(format: "%.1f", standardResult.memoryUsage.peakMB))MB)")
+                             "Memory usage should not regress by > 30% " +
+                             "(baseline: \(String(format: "%.1f", baseline.memoryUsage.peakMB))MB, " +
+                             "current: \(String(format: "%.1f", standardResult.memoryUsage.peakMB))MB)")
             
             XCTAssertGreaterThan(efficiencyRatio, 0.8, 
-                               "Efficiency should not regress by > 20% (baseline: \(String(format: "%.1f", baseline.efficiency.overallScore * 100))%, current: \(String(format: "%.1f", standardResult.efficiency.overallScore * 100))%)")
+                               "Efficiency should not regress by > 20% " +
+                               "(baseline: \(String(format: "%.1f", baseline.efficiency.overallScore * 100))%, " +
+                               "current: \(String(format: "%.1f", standardResult.efficiency.overallScore * 100))%)")
             
             // Flag significant improvements for validation
             if performanceRatio < 0.8 {
@@ -405,7 +415,10 @@ final class EnhancedPerformanceTests: XCTestCase {
         // Add individual test results
         report += "Individual Test Results:\n"
         for result in results {
-            report += "  \(result.testName): \(String(format: "%.2f", result.processingTime))s, \(String(format: "%.1f", result.memoryUsage.peakMB))MB, \(String(format: "%.1f", result.efficiency.overallScore * 100))%\n"
+            let resultLine = "  \(result.testName): \(String(format: "%.2f", result.processingTime))s, " +
+                           "\(String(format: "%.1f", result.memoryUsage.peakMB))MB, " +
+                           "\(String(format: "%.1f", result.efficiency.overallScore * 100))%\n"
+            report += resultLine
         }
         
         return report
