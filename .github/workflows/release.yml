@@ -42,26 +42,25 @@ jobs:
     - name: Run tests
       run: swift test --filter CITests --verbose
     
-    - name: Build release binaries
+    - name: Build optimized release binaries
       run: |
-        echo "Building for arm64..."
-        swift build -c release --arch arm64
+        # Use our optimized build script
+        ./build.sh
         
-        echo "Building for x86_64..."
-        swift build -c release --arch x86_64
+        # Additional optimizations
+        echo "Applying size optimizations..."
+        strip dist/vox
         
-        echo "Creating universal binary..."
-        mkdir -p dist
-        lipo -create -output dist/vox \
-          .build/arm64-apple-macosx/release/vox \
-          .build/x86_64-apple-macosx/release/vox
-        
-        # Verify universal binary
+        # Verify optimizations
+        echo "Final binary analysis:"
+        ls -la dist/vox
         file dist/vox
         lipo -info dist/vox
-        
-        # Make executable
-        chmod +x dist/vox
+    
+    - name: Validate release build
+      run: |
+        echo "Running comprehensive release validation..."
+        ./validate_release.sh
     
     - name: Create distribution package
       run: |
