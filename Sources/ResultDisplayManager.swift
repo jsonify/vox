@@ -15,21 +15,20 @@ struct ResultDisplayManager {
     func displayTranscriptionResult(_ result: TranscriptionResult) {
         Logger.shared.info("Transcription completed successfully")
         Logger.shared.info("  - Language: \(result.language)")
-        print("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))") // swiftlint:disable:this no_print
-        print("  - Duration: \(String(format: "%.2f", result.duration)) seconds") // swiftlint:disable:this no_print
-        print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") 
-        // swiftlint:disable:previous no_print
-        print("  - Engine: \(result.engine.rawValue)") // swiftlint:disable:this no_print
+        fputs("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))\n", stdout)
+        fputs("  - Duration: \(String(format: "%.2f", result.duration)) seconds\n", stdout)
+        fputs("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds\n", stdout)
+        fputs("  - Engine: \(result.engine.rawValue)\n", stdout)
 
         // Add comprehensive quality assessment
         let confidenceManager = ConfidenceManager()
         let qualityAssessment = confidenceManager.assessQuality(result: result)
         let qualityReport = confidenceManager.generateQualityReport(assessment: qualityAssessment)
-        print("\n\(qualityReport)") // swiftlint:disable:this no_print
+        fputs("\n\(qualityReport)\n", stdout)
 
         // Show fallback recommendation if applicable
         if qualityAssessment.shouldUseFallback && !forceCloud {
-            print("\n💡 Try running with --fallback-api openai for better accuracy") // swiftlint:disable:this no_print
+            fputs("\n💡 Try running with --fallback-api openai for better accuracy\n", stdout)
         }
 
         displayTranscript(result)
@@ -37,15 +36,15 @@ struct ResultDisplayManager {
 
     private func displayTranscript(_ result: TranscriptionResult) {
         if timestamps && !result.segments.isEmpty {
-            print("\n--- Transcript with timestamps ---") // swiftlint:disable:this no_print
+            fputs("\n--- Transcript with timestamps ---\n", stdout)
             for segment in result.segments {
                 let startTime = formatter.formatTime(segment.startTime)
                 let endTime = formatter.formatTime(segment.endTime)
-                print("[\(startTime) - \(endTime)] \(segment.text)") // swiftlint:disable:this no_print
+                fputs("[\(startTime) - \(endTime)] \(segment.text)\n", stdout)
             }
         } else {
-            print("\n--- Transcript ---") // swiftlint:disable:this no_print
-            print(result.text) // swiftlint:disable:this no_print
+            fputs("\n--- Transcript ---\n", stdout)
+            fputs("\(result.text)\n", stdout)
         }
     }
 }

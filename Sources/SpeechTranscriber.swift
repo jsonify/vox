@@ -115,7 +115,8 @@ class SpeechTranscriber {
                 if let error = error {
                     fputs("DEBUG: Speech recognition error: \(error.localizedDescription)\n", stderr)
                     // TEMP DEBUG: Bypass Logger call
-                    // Logger.shared.error("Speech recognition error: \(error.localizedDescription)", component: "SpeechTranscriber")
+                    // Logger.shared.error("Speech recognition error: \(error.localizedDescription)", 
+                    //                   component: "SpeechTranscriber")
                     continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
                     return
                 }
@@ -191,13 +192,14 @@ class SpeechTranscriber {
             let progress = Double(currentSegmentCount) / Double(estimatedTotalSegments)
             let progressPercent = String(format: "%.1f%%", progress * 100)
             let audioProcessedStr = String(format: "%.1f", audioProcessed)
-            let progressMessage = "DEBUG: Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, " +
-                "\(audioProcessedStr)s processed\n"
+            let progressMessage = "DEBUG: Transcription progress: \(progressPercent) - " +
+                "\(currentSegmentCount) segments, \(audioProcessedStr)s processed\n"
             fputs(progressMessage, stderr)
             // TEMP DEBUG: Bypass Logger call
             // let progressPercent = String(format: "%.1f%%", progress * 100)
             // let audioProcessedStr = String(format: "%.1f", audioProcessed)
-            // Logger.shared.debug("Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, \(audioProcessedStr)s processed", component: "SpeechTranscriber")
+            // Logger.shared.debug("Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, 
+            //                   \(audioProcessedStr)s processed", component: "SpeechTranscriber")
         }
 
         if result.isFinal {
@@ -216,12 +218,14 @@ class SpeechTranscriber {
                 audioFormat: context.audioFile.format
             )
 
-            let completionMessage = "DEBUG: Speech transcription completed in \(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)\n"
+            let completionMessage = "DEBUG: Speech transcription completed in " +
+                "\(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)\n"
             fputs(completionMessage, stderr)
             // TEMP DEBUG: Bypass Logger call
             // let processingTimeStr = String(format: "%.2f", processingTime)
             // let realTimeRatioStr = String(format: "%.2f", realTimeRatio)
-            // Logger.shared.info("Speech transcription completed in \(processingTimeStr)s (\(realTimeRatioStr)x real-time)", component: "SpeechTranscriber")
+            // Logger.shared.info("Speech transcription completed in \(processingTimeStr)s 
+            //                  (\(realTimeRatioStr)x real-time)", component: "SpeechTranscriber")
             context.continuation.resume(returning: transcriptionResult)
         }
     }
@@ -344,12 +348,11 @@ class SpeechTranscriber {
     }
 }
 
-
 // MARK: - Private Language Processing Extension
 
-private extension SpeechTranscriber {
+extension SpeechTranscriber {
     /// Attempt transcription with a list of validated languages
-    func attemptTranscriptionWithLanguages(
+    internal func attemptTranscriptionWithLanguages(
         audioFile: AudioFile,
         languages: [String],
         progressCallback: ProgressCallback?
@@ -399,7 +402,7 @@ private extension SpeechTranscriber {
         return try processBestResult(bestResult: bestResult, confidenceManager: confidenceManager, lastError: lastError)
     }
     
-    private func attemptTranscriptionWithLanguage(
+    internal func attemptTranscriptionWithLanguage(
         languageCode: String,
         index: Int,
         totalCount: Int,
@@ -416,7 +419,8 @@ private extension SpeechTranscriber {
             return nil
         }
 
-        let attemptMessage = "DEBUG: Attempting transcription with language: \(languageCode) (\(index + 1)/\(totalCount))\n"
+        let attemptMessage = "DEBUG: Attempting transcription with language: \(languageCode) " +
+            "(\(index + 1)/\(totalCount))\n"
         fputs(attemptMessage, stderr)
 
         fputs("DEBUG: About to create SpeechTranscriber with locale \(languageCode)\n", stderr)
@@ -436,7 +440,7 @@ private extension SpeechTranscriber {
         return logQualityAssessment(result: result, confidenceManager: confidenceManager)
     }
     
-    private func logQualityAssessment(result: TranscriptionResult, confidenceManager: ConfidenceManager) -> TranscriptionResult {
+    internal func logQualityAssessment(result: TranscriptionResult, confidenceManager: ConfidenceManager) -> TranscriptionResult {
         let qualityAssessment = confidenceManager.assessQuality(result: result)
 
         Logger.shared.info(
@@ -453,7 +457,7 @@ private extension SpeechTranscriber {
         return result
     }
     
-    private func processBestResult(
+    internal func processBestResult(
         bestResult: TranscriptionResult?,
         confidenceManager: ConfidenceManager,
         lastError: Error?
@@ -482,4 +486,5 @@ private extension SpeechTranscriber {
         }
     }
 }
+
 

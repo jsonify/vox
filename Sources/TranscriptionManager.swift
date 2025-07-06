@@ -38,7 +38,6 @@ class NetworkConfiguration {
     }
 }
 
-
 // MARK: - TranscriptionConfig
 
 private struct TranscriptionConfig {
@@ -75,7 +74,7 @@ public struct TranscriptionManager {
 
     func transcribeAudio(audioFile: AudioFile) throws -> TranscriptionResult {
         fputs("DEBUG: In TranscriptionManager.transcribeAudio\n", stderr)
-        print("Starting transcription...") // swiftlint:disable:this no_print
+        fputs("Starting transcription...\n", stdout)
 
         fputs("DEBUG: About to build language preferences\n", stderr)
         // Determine preferred languages based on user input and system preferences
@@ -267,16 +266,15 @@ public struct TranscriptionManager {
             return try await testClient.transcribe(
                 audioFile: audioFile,
                 language: preferredLanguage,
-                includeTimestamps: includeTimestamps,
-                progressCallback: { @Sendable progress in
-                    if verbose {
-                        fputs(
-                            "DEBUG: Cloud progress: \(String(format: "%.1f", progress.currentProgress * 100))%\n",
-                            stderr
-                        )
-                    }
+                includeTimestamps: includeTimestamps
+            ) { @Sendable progress in
+                if verbose {
+                    fputs(
+                        "DEBUG: Cloud progress: \(String(format: "%.1f", progress.currentProgress * 100))%\n",
+                        stderr
+                    )
                 }
-            )
+            }
         }
 
         switch selectedAPI {
