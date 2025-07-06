@@ -38,12 +38,15 @@ struct ProgressDisplayManager {
 
         // Show current status with more context for transcription
         let statusPrefix = progress.currentPhase == .extracting ? "🎤" : "⚙️"
-        print("\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)") // swiftlint:disable:this no_print
+        let progressLine = "\(statusPrefix) [\(progress.currentPhase.rawValue)] \(progress.formattedProgress) - \(progress.currentStatus)\(timeInfo)\(speedInfo)"
+        print(progressLine) // swiftlint:disable:this no_print
 
         // Show memory usage if available during transcription
         if progress.currentPhase == .extracting && progress.currentProgress > 0.1 {
             let memoryUsage = Self.memoryMonitor.getCurrentUsage()
-            print("   💾 Memory: \(String(format: "%.1f", memoryUsage.currentMB)) MB (\(String(format: "%.1f", memoryUsage.usagePercentage))%)") // swiftlint:disable:this no_print
+            let memoryCurrentStr = String(format: "%.1f", memoryUsage.currentMB)
+            let memoryPercentStr = String(format: "%.1f", memoryUsage.usagePercentage)
+            print("   💾 Memory: \(memoryCurrentStr) MB (\(memoryPercentStr)%)") // swiftlint:disable:this no_print
         }
     }
 

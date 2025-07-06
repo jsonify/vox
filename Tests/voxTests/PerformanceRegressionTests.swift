@@ -127,7 +127,8 @@ final class PerformanceRegressionTests: XCTestCase {
             
             // Flag significant improvements for validation
             if performanceRatio < 0.8 {
-                Logger.shared.info("⚠️  Significant performance improvement detected (\(String(format: "%.1f", (1.0 - performanceRatio) * 100))% faster)", component: "PerformanceRegressionTests")
+                let improvementPercent = String(format: "%.1f", (1.0 - performanceRatio) * 100)
+                Logger.shared.info("⚠️  Significant performance improvement detected (\(improvementPercent)% faster)", component: "PerformanceRegressionTests")
             }
         }
         

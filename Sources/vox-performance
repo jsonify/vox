@@ -1,0 +1,9 @@
+#!/usr/bin/env swift
+
+import Foundation
+
+// Import our performance validation module
+@testable import vox
+
+// Run the performance validation
+PerformanceValidator.runValidation()

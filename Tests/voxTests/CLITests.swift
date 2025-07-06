@@ -7,7 +7,7 @@ final class CLITests: XCTestCase {
 
     private func parseVoxCommand(_ arguments: [String]) throws -> Vox {
         guard let voxCommand = try Vox.parseAsRoot(arguments) as? Vox else {
-            fatalError("Failed to parse command as Vox")
+            throw VoxError.processingFailed("Failed to parse command as Vox")
         }
         return voxCommand
     }
