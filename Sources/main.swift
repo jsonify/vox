@@ -1,7 +1,7 @@
 import Foundation
 
 // Only execute main logic when running as an executable, not during test imports
-if CommandLine.arguments.count > 0 && CommandLine.arguments[0].contains("vox") {
+if !CommandLine.arguments.isEmpty && CommandLine.arguments[0].contains("vox") {
     Logger.shared.info("Starting main.swift", component: "main")
     Logger.shared.info("Vox CLI started", component: "main")
     Logger.shared.info("About to call Vox.main()", component: "main")
