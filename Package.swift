@@ -16,13 +16,17 @@ let package = Package(
             name: "vox",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            exclude: [
+                "vox-performance"
             ]
         ),
         .testTarget(
             name: "voxTests",
             dependencies: ["vox"],
             resources: [
-                .copy("Resources")
+                .copy("Resources"),
+                .copy("TESTING.md")
             ]
         )
     ]

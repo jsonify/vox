@@ -3,6 +3,21 @@ import Foundation
 // MARK: - Memory Monitoring
 
 class MemoryMonitor {
+    private var isMonitoring = false
+    private var peakMemoryUsage: UInt64 = 0
+    
+    func startMonitoring() {
+        isMonitoring = true
+    }
+    
+    func stopMonitoring() {
+        isMonitoring = false
+    }
+    
+    func getPeakMemoryUsage() -> UInt64 {
+        return peakMemoryUsage
+    }
+    
     func getCurrentUsage() -> MemoryUsage {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
