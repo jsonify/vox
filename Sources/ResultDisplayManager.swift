@@ -14,7 +14,7 @@ struct ResultDisplayManager {
 
     func displayTranscriptionResult(_ result: TranscriptionResult) {
         Logger.shared.info("Transcription completed successfully")
-        print("  - Language: \(result.language)") // swiftlint:disable:this no_print
+        Logger.shared.info("  - Language: \(result.language)")
         print("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))") // swiftlint:disable:this no_print
         print("  - Duration: \(String(format: "%.2f", result.duration)) seconds") // swiftlint:disable:this no_print
         print("  - Processing time: \(String(format: "%.2f", result.processingTime)) seconds") 

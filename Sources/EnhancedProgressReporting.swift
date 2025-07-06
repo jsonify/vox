@@ -48,7 +48,8 @@ class EnhancedProgressReporter: TranscriptionProgressReporting {
         // Calculate processing stats
         let elapsedTime = Date().timeIntervalSince(startTime)
         let processingRate = elapsedTime > 0 ? audioTimeProcessed / elapsedTime : 0
-        let averageConfidence = confidenceValues.isEmpty ? 0 : confidenceValues.reduce(0, +) / Double(confidenceValues.count)
+        let averageConfidence = confidenceValues.isEmpty ? 0 : 
+            confidenceValues.reduce(0, +) / Double(confidenceValues.count)
         let wordsProcessed = segmentText?.split(separator: " ").count ?? 0
         
         self.processingStats = ProcessingStats(

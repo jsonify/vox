@@ -2,7 +2,6 @@ import Foundation
 
 /// Advanced memory management with platform-specific optimizations
 public final class OptimizedMemoryManager {
-    
     // MARK: - Nested Types
     
     /// Memory pool for efficient buffer allocation
@@ -216,7 +215,9 @@ private extension OptimizedMemoryManager {
             self?.collectMetrics()
         }
         
-        RunLoop.current.add(monitoringTimer!, forMode: .default)
+        if let timer = monitoringTimer {
+            RunLoop.current.add(timer, forMode: .default)
+        }
         RunLoop.current.run()
     }
     
@@ -289,8 +290,8 @@ private extension OptimizedMemoryManager {
         let alignedSize = (byteCount + Int(pageSize) - 1) & ~(Int(pageSize) - 1)
         
         if alignedSize == byteCount {
-            var sourceVmAddress = vm_address_t(UInt(bitPattern: source))
-            var destVmAddress = vm_address_t(UInt(bitPattern: destination))
+            let sourceVmAddress = vm_address_t(UInt(bitPattern: source))
+            let destVmAddress = vm_address_t(UInt(bitPattern: destination))
             
             let result = vm_copy(
                 mach_task_self_,

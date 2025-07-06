@@ -102,7 +102,7 @@ public class Logger: @unchecked Sendable {
             self.writeToStderr(formattedMessage)
 
             // TEMP FIX: Disable os_log to prevent Swift runtime crashes
-            // FIXME: Investigate and fix os_log compatibility issues
+            // TODO: Investigate and fix os_log compatibility issues
             // os_log("%{public}@", log: self.osLog, type: level.osLogType, formattedMessage)
         }
     }
