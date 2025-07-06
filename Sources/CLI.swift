@@ -333,13 +333,16 @@ struct Vox: ParsableCommand {
             
             // Display any validation issues
             if !report.formatValidation.issues.isEmpty {
-                Logger.shared.warn("  Format Issues: \(report.formatValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Format Issues: \(report.formatValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
             if !report.integrityValidation.issues.isEmpty {
-                Logger.shared.warn("  Integrity Issues: \(report.integrityValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Integrity Issues: \(report.integrityValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
             if !report.encodingValidation.issues.isEmpty {
-                Logger.shared.warn("  Encoding Issues: \(report.encodingValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Encoding Issues: \(report.encodingValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
         }
     }
