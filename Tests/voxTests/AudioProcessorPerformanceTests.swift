@@ -372,12 +372,6 @@ final class AudioProcessorPerformanceTests: XCTestCase {
 // MARK: - Test File Generator Extensions
 
 extension TestAudioFileGenerator {
-    /// Creates a larger test file for performance testing
-    /// - Returns: URL to a 2-minute test file, or nil if creation fails
-    func createLargeMP4File() -> URL? {
-        return createMockMP4File(duration: 120.0)
-    }
-
     /// Creates a high quality test file for performance comparison
     /// - Returns: URL to a test file with standard duration and high quality settings
     func createHighQualityMP4File() -> URL? {
@@ -396,11 +390,5 @@ extension TestAudioFileGenerator {
             sampleRate: 22050,
             channels: 1
         )
-    }
-
-    /// Creates a minimal test file for quick performance tests
-    /// - Returns: URL to a short test file, or nil if creation fails
-    func createSmallMP4File() -> URL? {
-        return createMockMP4File(duration: 2.0)
     }
 }

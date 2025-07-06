@@ -109,9 +109,41 @@ public final class TestAudioFileGenerator {
 
     // MARK: - File Size Variants
 
-    // MARK: - File Size Variants
-
-    /// These methods are implemented in test-specific extensions for different testing scenarios
+    /// Creates a small MP4 file for quick testing (3 seconds)
+    /// - Returns: URL to the created file, or nil if creation fails
+    public func createSmallMP4File() -> URL? {
+        return createMockMP4File(
+            duration: 3.0,
+            hasAudio: true,
+            hasVideo: true,
+            sampleRate: 44100,
+            channels: 1
+        )
+    }
+    
+    /// Creates a large MP4 file for performance testing (60 seconds)
+    /// - Returns: URL to the created file, or nil if creation fails
+    public func createLargeMP4File() -> URL? {
+        return createMockMP4File(
+            duration: 60.0,
+            hasAudio: true,
+            hasVideo: true,
+            sampleRate: 44100,
+            channels: 2
+        )
+    }
+    
+    /// Creates a medium MP4 file for standard testing (10 seconds)
+    /// - Returns: URL to the created file, or nil if creation fails
+    public func createMediumMP4File() -> URL? {
+        return createMockMP4File(
+            duration: 10.0,
+            hasAudio: true,
+            hasVideo: true,
+            sampleRate: 44100,
+            channels: 2
+        )
+    }
 
     // MARK: - Cleanup
 
