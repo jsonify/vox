@@ -410,6 +410,7 @@ class NetworkFailureSimulator {
     init() {
         // Store original network configuration
         originalNetworkConfiguration = NetworkConfiguration.current
+        NetworkConfiguration.current.reset() // Start with clean configuration
     }
     
     func simulateTimeout() {
@@ -442,19 +443,6 @@ class NetworkFailureSimulator {
     }
 }
 
-// MARK: - Network Configuration (Mock)
-
-class NetworkConfiguration {
-    static var current = NetworkConfiguration()
-    
-    var requestTimeout: TimeInterval = 30.0
-    var resourceTimeout: TimeInterval = 60.0
-    var dnsServers: [String] = []
-    var maxRequestsPerSecond: Int = 10
-    var rateLimitingEnabled: Bool = false
-    var forceServiceUnavailable: Bool = false
-}
-
 // MARK: - TranscriptionManager Extensions for Testing
 
 extension TranscriptionManager {
@@ -463,8 +451,10 @@ extension TranscriptionManager {
         NetworkConfiguration.current.requestTimeout = seconds
     }
     
+    /// Sets a custom API endpoint for testing network scenarios
+    /// This allows tests to simulate various network conditions by directing
+    /// requests to specific endpoints (e.g., invalid domains, error-generating services)
     func setAPIEndpoint(_ endpoint: String) {
-        // Configure API endpoint for testing
-        // This would be implemented in the actual TranscriptionManager
+        NetworkConfiguration.current.customAPIEndpoint = endpoint
     }
 }

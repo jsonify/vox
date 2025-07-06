@@ -1,11 +1,23 @@
 import Foundation
 
+// MARK: - WhisperClientConfig
+
+public struct WhisperClientConfig {
+    let apiKey: String
+    let endpoint: String?
+    
+    public init(apiKey: String, endpoint: String? = nil) {
+        self.apiKey = apiKey
+        self.endpoint = endpoint
+    }
+}
+
 /// OpenAI Whisper API client for cloud-based transcription fallback
 public class WhisperAPIClient {
     // MARK: - Configuration
 
     private let apiKey: String
-    private let baseURL = "https://api.openai.com/v1/audio/transcriptions"
+    private let baseURL: String
     private let session: URLSession
     private let maxFileSize: Int64 = 25 * 1024 * 1024 // 25MB limit per OpenAI docs
     private let maxRetries = 3
@@ -17,9 +29,10 @@ public class WhisperAPIClient {
     private let minRequestInterval: TimeInterval = 1.0 // Minimum 1 second between requests
 
     // MARK: - Initialization
+public init(config: WhisperClientConfig) {
+    self.apiKey = config.apiKey
+    self.baseURL = config.endpoint ?? "https://api.openai.com/v1/audio/transcriptions"
 
-    public init(apiKey: String) {
-        self.apiKey = apiKey
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120.0 // 2 minutes for file upload
@@ -431,8 +444,8 @@ extension WhisperAPIClient {
     /// - Parameter providedKey: API key provided via command line
     /// - Returns: Configured WhisperAPIClient instance
     /// - Throws: VoxError if no API key is found
-    public static func create(with providedKey: String?) throws -> WhisperAPIClient {
-        let apiKey = providedKey
+    public static func create(with config: WhisperClientConfig?) throws -> WhisperAPIClient {
+        let apiKey = config?.apiKey
             ?? ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
             ?? ProcessInfo.processInfo.environment["VOX_OPENAI_API_KEY"]
 
@@ -446,8 +459,8 @@ extension WhisperAPIClient {
         }
 
         Logger.shared.debug("OpenAI API key configured", component: "OpenAI")
-
-        return WhisperAPIClient(apiKey: apiKey)
+        
+        return WhisperAPIClient(config: WhisperClientConfig(apiKey: apiKey))
     }
 }
 

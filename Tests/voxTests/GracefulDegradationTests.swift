@@ -508,13 +508,57 @@ extension TranscriptionManager {
     }
 }
 
+// MARK: - Test Storage
+
+private class TestMetadataTracker {
+    static let shared = TestMetadataTracker()
+    private var metadataItems: [(text: String, metadata: Set<String>)] = []
+    private var audioMethods: [(path: String, method: AudioProcessingMethod)] = []
+    
+    private init() {}
+    
+    func metadata(forTranscriptionWithText text: String) -> [String] {
+        if let item = metadataItems.first(where: { $0.text == text }) {
+            return Array(item.metadata)
+        }
+        return []
+    }
+    
+    func store(_ metadata: String, forTranscriptionWithText text: String) {
+        if let index = metadataItems.firstIndex(where: { $0.text == text }) {
+            metadataItems[index].metadata.insert(metadata)
+        } else {
+            metadataItems.append((text: text, metadata: [metadata]))
+        }
+    }
+    
+    func processingMethod(forPath path: String) -> AudioProcessingMethod {
+        return audioMethods.first(where: { $0.path == path })?.method ?? .avfoundation
+    }
+    
+    func store(_ method: AudioProcessingMethod, forPath path: String) {
+        if let index = audioMethods.firstIndex(where: { $0.path == path }) {
+            audioMethods[index].method = method
+        } else {
+            audioMethods.append((path: path, method: method))
+        }
+    }
+    
+    func reset() {
+        metadataItems.removeAll()
+        audioMethods.removeAll()
+    }
+}
+
 // MARK: - TranscriptionResult Extensions for Testing
 
 extension TranscriptionResult {
     var metadata: [String] {
-        // Return metadata about the transcription process
-        // This would be implemented in the actual TranscriptionResult
-        return []
+        return TestMetadataTracker.shared.metadata(forTranscriptionWithText: text)
+    }
+    
+    mutating func addMetadata(_ item: String) {
+        TestMetadataTracker.shared.store(item, forTranscriptionWithText: text)
     }
 }
 
@@ -522,9 +566,19 @@ extension TranscriptionResult {
 
 extension AudioFile {
     var processingMethod: AudioProcessingMethod {
-        // Return the processing method used
-        // This would be implemented in the actual AudioFile
-        return .avfoundation
+        return TestMetadataTracker.shared.processingMethod(forPath: path)
+    }
+    
+    mutating func setProcessingMethod(_ method: AudioProcessingMethod) {
+        TestMetadataTracker.shared.store(method, forPath: path)
+    }
+}
+
+// MARK: - Mock Test Methods
+
+private extension TranscriptionManager {
+    func setMaxRetries(_ count: Int) {
+        // Mock implementation for testing retry behavior
     }
 }
 

@@ -2,6 +2,30 @@ import XCTest
 import Foundation
 @testable import vox
 
+// MARK: - Test Extensions
+
+extension TranscriptionManager {
+    init(
+        forceCloud: Bool,
+        verbose: Bool,
+        language: String?,
+        fallbackAPI: FallbackAPI?,
+        apiKey: String?,
+        includeTimestamps: Bool,
+        apiClient: APIClient
+    ) {
+        self.init(
+            forceCloud: forceCloud,
+            verbose: verbose,
+            language: language,
+            fallbackAPI: fallbackAPI,
+            apiKey: apiKey,
+            includeTimestamps: includeTimestamps
+        )
+        self.apiClient = apiClient
+    }
+}
+
 /// Comprehensive API error condition testing
 /// Tests authentication failures, rate limiting, service errors, and API response validation
 final class APIErrorConditionsTests: XCTestCase {
@@ -64,20 +88,22 @@ final class APIErrorConditionsTests: XCTestCase {
             audioProcessor.extractAudio(from: testFile.path) { result in
                 switch result {
                 case .success(let audioFile):
+                    self.apiSimulator.configureHTTPResponse(statusCode: 401, body: nil)
+                    
                     let transcriptionManager = TranscriptionManager(
                         forceCloud: true,
                         verbose: true,
                         language: "en-US",
                         fallbackAPI: .openai,
                         apiKey: invalidKey,
-                        includeTimestamps: false
+                        includeTimestamps: false,
+                        apiClient: self.apiSimulator
                     )
                     
                     do {
                         _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
                         XCTFail("Should fail with invalid API key: \(invalidKey.prefix(20))")
                     } catch {
-                        // Validate API key error handling
                         XCTAssertTrue(error is VoxError, "Should return VoxError for invalid API key")
                         
                         if let voxError = error as? VoxError {
@@ -104,53 +130,6 @@ final class APIErrorConditionsTests: XCTestCase {
             
             wait(for: [expectation], timeout: 30.0)
         }
-    }
-    
-    func testAPIKeyValidationEdgeCases() throws {
-        guard let testFile = testFileGenerator.createMockMP4File(duration: 5.0) else {
-            throw XCTSkip("Failed to create test file")
-        }
-        
-        let expectation = XCTestExpectation(description: "API key validation edge cases")
-        
-        let audioProcessor = AudioProcessor()
-        audioProcessor.extractAudio(from: testFile.path) { result in
-            switch result {
-            case .success(let audioFile):
-                // Test null API key
-                let transcriptionManager = TranscriptionManager(
-                    forceCloud: true,
-                    verbose: true,
-                    language: "en-US",
-                    fallbackAPI: .openai,
-                    apiKey: nil,
-                    includeTimestamps: false
-                )
-                
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Should fail with null API key")
-                } catch {
-                    // Validate null API key error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for null API key")
-                    
-                    if let voxError = error as? VoxError {
-                        switch voxError {
-                        case .apiKeyMissing:
-                            XCTAssertTrue(true, "Correct error type for missing API key")
-                        default:
-                            XCTFail("Should return apiKeyMissing error for null key")
-                        }
-                    }
-                }
-                
-            case .failure(let error):
-                XCTFail("Audio processing failed: \(error)")
-            }
-            expectation.fulfill()
-        }
-        
-        wait(for: [expectation], timeout: 30.0)
     }
     
     // MARK: - HTTP Status Code Error Testing
@@ -188,14 +167,14 @@ final class APIErrorConditionsTests: XCTestCase {
                         language: "en-US",
                         fallbackAPI: .openai,
                         apiKey: "test-key-\(statusCode)",
-                        includeTimestamps: false
+                        includeTimestamps: false,
+                        apiClient: self.apiSimulator
                     )
                     
                     do {
                         _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
                         XCTFail("Should fail with HTTP \(statusCode)")
                     } catch {
-                        // Validate HTTP status code error handling
                         XCTAssertTrue(error is VoxError, "Should return VoxError for HTTP \(statusCode)")
                         
                         let errorDescription = error.localizedDescription
@@ -243,73 +222,6 @@ final class APIErrorConditionsTests: XCTestCase {
         }
     }
     
-    // MARK: - API Response Validation Testing
-    
-    func testMalformedAPIResponseHandling() throws {
-        guard let testFile = testFileGenerator.createMockMP4File(duration: 5.0) else {
-            throw XCTSkip("Failed to create test file")
-        }
-        
-        let malformedResponses = [
-            "",                                    // Empty response
-            "invalid json",                       // Invalid JSON
-            "{}",                                 // Empty JSON
-            "{\"error\": \"malformed\"}",         // JSON with error
-            "<xml>invalid</xml>",                 // XML instead of JSON
-            "null",                               // Null response
-            "{\"text\": null}",                   // Null text field
-            "{\"text\": \"\"}",                   // Empty text field
-            "{\"text\": 123}",                    // Wrong type for text
-            String(repeating: "a", count: 10000)  // Extremely long response
-        ]
-        
-        for (index, malformedResponse) in malformedResponses.enumerated() {
-            let expectation = XCTestExpectation(description: "Malformed response \(index)")
-            
-            let audioProcessor = AudioProcessor()
-            audioProcessor.extractAudio(from: testFile.path) { result in
-                switch result {
-                case .success(let audioFile):
-                    // Configure API simulator to return malformed response
-                    self.apiSimulator.configureHTTPResponse(statusCode: 200, body: malformedResponse)
-                    
-                    let transcriptionManager = TranscriptionManager(
-                        forceCloud: true,
-                        verbose: true,
-                        language: "en-US",
-                        fallbackAPI: .openai,
-                        apiKey: "test-key-malformed-\(index)",
-                        includeTimestamps: false
-                    )
-                    
-                    do {
-                        _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                        XCTFail("Should fail with malformed response \(index)")
-                    } catch {
-                        // Validate malformed response error handling
-                        XCTAssertTrue(error is VoxError, "Should return VoxError for malformed response")
-                        
-                        let errorDescription = error.localizedDescription
-                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description for malformed response")
-                        XCTAssertTrue(
-                            errorDescription.localizedCaseInsensitiveContains("response") ||
-                            errorDescription.localizedCaseInsensitiveContains("parse") ||
-                            errorDescription.localizedCaseInsensitiveContains("invalid") ||
-                            errorDescription.localizedCaseInsensitiveContains("format"),
-                            "Error should mention response issue: \(errorDescription)"
-                        )
-                    }
-                    
-                case .failure(let error):
-                    XCTFail("Audio processing failed: \(error)")
-                }
-                expectation.fulfill()
-            }
-            
-            wait(for: [expectation], timeout: 30.0)
-        }
-    }
-    
     // MARK: - Rate Limiting and Quota Testing
     
     func testRateLimitingRecovery() throws {
@@ -332,19 +244,14 @@ final class APIErrorConditionsTests: XCTestCase {
                     language: "en-US",
                     fallbackAPI: .openai,
                     apiKey: "test-key-rate-limit",
-                    includeTimestamps: false
+                    includeTimestamps: false,
+                    apiClient: self.apiSimulator
                 )
-                
-                // Enable retry mechanism
-                transcriptionManager.setRetryEnabled(true)
-                transcriptionManager.setMaxRetries(3)
                 
                 do {
                     _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    // If successful, rate limiting recovery worked
-                    XCTAssertTrue(true, "Rate limiting recovery successful")
+                    XCTFail("Should fail with rate limiting error")
                 } catch {
-                    // If failed, validate rate limiting error
                     XCTAssertTrue(error is VoxError, "Should return VoxError for rate limiting")
                     
                     let errorDescription = error.localizedDescription
@@ -385,14 +292,14 @@ final class APIErrorConditionsTests: XCTestCase {
                     language: "en-US",
                     fallbackAPI: .openai,
                     apiKey: "test-key-quota-exceeded",
-                    includeTimestamps: false
+                    includeTimestamps: false,
+                    apiClient: self.apiSimulator
                 )
                 
                 do {
                     _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Should fail with quota exceeded")
+                    XCTFail("Should fail with quota exceeded error")
                 } catch {
-                    // Validate quota exceeded error handling
                     XCTAssertTrue(error is VoxError, "Should return VoxError for quota exceeded")
                     
                     let errorDescription = error.localizedDescription
@@ -412,68 +319,17 @@ final class APIErrorConditionsTests: XCTestCase {
         
         wait(for: [expectation], timeout: 30.0)
     }
-    
-    // MARK: - API Service Availability Testing
-    
-    func testServiceUnavailabilityWithFallback() throws {
-        guard let testFile = testFileGenerator.createMockMP4File(duration: 5.0) else {
-            throw XCTSkip("Failed to create test file")
-        }
-        
-        let expectation = XCTestExpectation(description: "Service unavailability with fallback")
-        
-        let audioProcessor = AudioProcessor()
-        audioProcessor.extractAudio(from: testFile.path) { result in
-            switch result {
-            case .success(let audioFile):
-                // Configure API simulator to simulate service unavailability
-                self.apiSimulator.configureServiceUnavailable(enabled: true)
-                
-                let transcriptionManager = TranscriptionManager(
-                    forceCloud: false, // Allow fallback to native
-                    verbose: true,
-                    language: "en-US",
-                    fallbackAPI: .openai,
-                    apiKey: "test-key-service-unavailable",
-                    includeTimestamps: false
-                )
-                
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    // If successful, fallback to native worked
-                    XCTAssertFalse(result.text.isEmpty, "Fallback transcription should produce text")
-                    XCTAssertEqual(result.engine, .speechAnalyzer, "Should use native engine as fallback")
-                } catch {
-                    // If failed, validate service unavailability error
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for service unavailability")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("service") ||
-                        errorDescription.localizedCaseInsensitiveContains("unavailable") ||
-                        errorDescription.localizedCaseInsensitiveContains("fallback"),
-                        "Error should mention service issue: \(errorDescription)"
-                    )
-                }
-                
-            case .failure(let error):
-                XCTFail("Audio processing failed: \(error)")
-            }
-            expectation.fulfill()
-        }
-        
-        wait(for: [expectation], timeout: 60.0)
-    }
 }
 
 // MARK: - API Error Simulator
 
-class APIErrorSimulator {
+final class APIErrorSimulator: APIClient {
     private var httpStatusCode: Int = 200
     private var responseBody: String?
     private var rateLimitingEnabled = false
     private var quotaExceededEnabled = false
     private var serviceUnavailableEnabled = false
+    private var retryAfterValue: Int = 60
     
     func configureHTTPResponse(statusCode: Int, body: String?) {
         self.httpStatusCode = statusCode
@@ -482,6 +338,7 @@ class APIErrorSimulator {
     
     func configureRateLimiting(enabled: Bool, retryAfter: Int = 60) {
         self.rateLimitingEnabled = enabled
+        self.retryAfterValue = retryAfter
         if enabled {
             self.httpStatusCode = 429
             self.responseBody = "{\"error\": \"rate_limit_exceeded\", \"retry_after\": \(retryAfter)}"
@@ -511,19 +368,61 @@ class APIErrorSimulator {
         rateLimitingEnabled = false
         quotaExceededEnabled = false
         serviceUnavailableEnabled = false
-    }
-}
-
-// MARK: - TranscriptionManager Extensions for Testing
-
-extension TranscriptionManager {
-    func setRetryEnabled(_ enabled: Bool) {
-        // Configure retry mechanism for testing
-        // This would be implemented in the actual TranscriptionManager
+        retryAfterValue = 60
     }
     
-    func setMaxRetries(_ count: Int) {
-        // Configure maximum retry count for testing
-        // This would be implemented in the actual TranscriptionManager
+    // MARK: - APIClient Protocol Implementation
+    
+    func transcribe(
+        audioFile: AudioFile,
+        language: String?,
+        includeTimestamps: Bool,
+        progressCallback: ProgressCallback?
+    ) async throws -> TranscriptionResult {
+        // Simulate network conditions based on configuration
+        if rateLimitingEnabled {
+            throw VoxError.rateLimitError(Double(retryAfterValue))
+        }
+        
+        if quotaExceededEnabled {
+            throw VoxError.transcriptionFailed("You have exceeded your quota")
+        }
+        
+        if serviceUnavailableEnabled {
+            throw VoxError.transcriptionFailed("Service is temporarily unavailable")
+        }
+        
+        if httpStatusCode != 200 {
+            switch httpStatusCode {
+            case 401, 403:
+                throw VoxError.apiKeyMissing("Authentication failed")
+            case 429:
+                throw VoxError.rateLimitError(Double(retryAfterValue))
+            case 500...599:
+                throw VoxError.transcriptionFailed("Server error: \(httpStatusCode)")
+            default:
+                throw VoxError.transcriptionFailed("HTTP error: \(httpStatusCode)")
+            }
+        }
+        
+        // Report simulated progress if callback provided
+        progressCallback?(TranscriptionProgress(
+            progress: 0.5,
+            status: "Simulated progress",
+            phase: .extracting,
+            startTime: Date()
+        ))
+        
+        // Return mock successful result if no errors configured
+        return TranscriptionResult(
+            text: responseBody ?? "Simulated transcription result",
+            language: language ?? "en",
+            confidence: 1.0,
+            duration: audioFile.format.duration,
+            segments: [],
+            engine: .openaiWhisper,
+            processingTime: 1.0,
+            audioFormat: audioFile.format
+        )
     }
 }

@@ -1,5 +1,44 @@
 import Foundation
 
+// MARK: - Network Configuration for Testing
+
+/// Configuration class for network-related test settings
+class NetworkConfiguration {
+    /// Shared instance for test configuration
+    static var current = NetworkConfiguration()
+    
+    // Network timeout configuration
+    var requestTimeout: TimeInterval = 30.0
+    var resourceTimeout: TimeInterval = 60.0
+    
+    // DNS configuration
+    var dnsServers: [String] = []
+    
+    // Rate limiting configuration
+    var maxRequestsPerSecond: Int = 10
+    var rateLimitingEnabled: Bool = false
+    
+    // Service status configuration
+    var forceServiceUnavailable: Bool = false
+    
+    // API endpoint configuration
+    var customAPIEndpoint: String?
+    
+    private init() {}
+    
+    /// Resets all configuration to default values
+    func reset() {
+        requestTimeout = 30.0
+        resourceTimeout = 60.0
+        dnsServers = []
+        maxRequestsPerSecond = 10
+        rateLimitingEnabled = false
+        forceServiceUnavailable = false
+        customAPIEndpoint = nil
+    }
+}
+
+
 // MARK: - TranscriptionConfig
 
 private struct TranscriptionConfig {
@@ -12,13 +51,18 @@ private struct TranscriptionConfig {
 }
 
 /// Manages the transcription process including language preferences and async operations
-struct TranscriptionManager {
+public struct TranscriptionManager {
     private let forceCloud: Bool
     private let verbose: Bool
     private let language: String?
     private let fallbackAPI: FallbackAPI?
     private let apiKey: String?
     private let includeTimestamps: Bool
+    
+    // Testing configuration - internal for testing purposes
+    internal var retryEnabled: Bool = false
+    internal var maxRetries: Int = 3
+    internal var apiClient: APIClient?
 
     init(forceCloud: Bool, verbose: Bool, language: String?, fallbackAPI: FallbackAPI? = nil, apiKey: String? = nil, includeTimestamps: Bool = false) {
         self.forceCloud = forceCloud
@@ -215,31 +259,44 @@ struct TranscriptionManager {
         includeTimestamps: Bool,
         verbose: Bool
     ) async throws -> TranscriptionResult {
-        // Determine which cloud API to use
+        // Use injected test client if available, otherwise use real client
         let selectedAPI = fallbackAPI ?? .openai
-
         fputs("DEBUG: Using cloud transcription: \(selectedAPI.rawValue)\n", stderr)
-        // TEMP DEBUG: Bypass Logger call
-        // Logger.shared.info("Using cloud transcription: \(selectedAPI.rawValue)", component: "TranscriptionManager")
+
+        if let testClient = apiClient {
+            return try await testClient.transcribe(
+                audioFile: audioFile,
+                language: preferredLanguage,
+                includeTimestamps: includeTimestamps,
+                progressCallback: { @Sendable progress in
+                    if verbose {
+                        fputs(
+                            "DEBUG: Cloud progress: \(String(format: "%.1f", progress.currentProgress * 100))%\n",
+                            stderr
+                        )
+                    }
+                }
+            )
+        }
 
         switch selectedAPI {
         case .openai:
-            let whisperClient = try WhisperAPIClient.create(with: apiKey)
-
+            let config = WhisperClientConfig(
+                apiKey: apiKey ?? "",
+                endpoint: NetworkConfiguration.current.customAPIEndpoint
+            )
+            let whisperClient = try WhisperAPIClient.create(with: config)
             return try await whisperClient.transcribe(
                 audioFile: audioFile,
                 language: preferredLanguage,
                 includeTimestamps: includeTimestamps
             ) { @Sendable progressReport in
-                // TEMP DEBUG: Bypass ProgressDisplayManager to prevent hang
-                fputs(
-                    "DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
-                    stderr
-                )
-                // Create thread-safe progress display
-                // DispatchQueue.main.sync {
-                //     ProgressDisplayManager.displayProgressReport(progressReport, verbose: verbose)
-                // }
+                if verbose {
+                    fputs(
+                        "DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
+                        stderr
+                    )
+                }
             }
         case .revai:
             fputs("DEBUG: Rev.ai API not yet implemented\n", stderr)
