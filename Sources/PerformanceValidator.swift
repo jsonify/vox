@@ -3,7 +3,6 @@ import AVFoundation
 
 /// Standalone performance validation utility for validating CLAUDE.md targets
 public final class PerformanceValidator {
-    
     // MARK: - Performance Targets from CLAUDE.md
     
     public struct PerformanceTargets {
@@ -360,7 +359,6 @@ public final class PerformanceValidator {
 // MARK: - Command Line Interface
 
 public extension PerformanceValidator {
-    
     /// Run validation from command line
     static func runValidation() {
         let validator = PerformanceValidator()

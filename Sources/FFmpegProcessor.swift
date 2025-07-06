@@ -45,7 +45,11 @@ private class FFmpegProgressHandler {
             if adjustedProgress > lastProgress {
                 lastProgress = adjustedProgress
                 DispatchQueue.main.async { [weak self] in
-                    self?.processor?.reportProgress(adjustedProgress, phase: .extracting, callback: self?.progressCallback)
+                    self?.processor?.reportProgress(
+                        adjustedProgress,
+                        phase: .extracting,
+                        callback: self?.progressCallback
+                    )
                 }
             }
         }
@@ -188,7 +192,8 @@ class FFmpegProcessor {
                 progressCallback: progressCallback
             )
 
-            self?.executeFFmpegProcess(
+            guard let self = self else { return }
+            let config = FFmpegProcessConfig(
                 process: process,
                 progressHandler: progressHandler,
                 outputPipe: outputPipe,
@@ -197,6 +202,7 @@ class FFmpegProcessor {
                 outputPath: outputPath,
                 completion: completion
             )
+            self.executeFFmpegProcess(config: config)
         }
     }
 
@@ -238,35 +244,37 @@ class FFmpegProcessor {
         )
     }
 
-    private func executeFFmpegProcess(
-        process: Process,
-        progressHandler: FFmpegProgressHandler?,
-        outputPipe: Pipe,
-        errorPipe: Pipe,
-        ffmpegPath: String,
-        outputPath: String,
-        completion: @escaping (Result<AudioFormat, VoxError>) -> Void
-    ) {
+    private struct FFmpegProcessConfig {
+        let process: Process
+        let progressHandler: FFmpegProgressHandler?
+        let outputPipe: Pipe
+        let errorPipe: Pipe
+        let ffmpegPath: String
+        let outputPath: String
+        let completion: (Result<AudioFormat, VoxError>) -> Void
+    }
+    
+    private func executeFFmpegProcess(config: FFmpegProcessConfig) {
         do {
-            try process.run()
-            progressHandler?.start()
+            try config.process.run()
+            config.progressHandler?.start()
             
-            process.waitUntilExit()
-            progressHandler?.stop()
+            config.process.waitUntilExit()
+            config.progressHandler?.stop()
 
             handleFFmpegProcessCompletion(
-                process: process,
-                errorPipe: errorPipe,
-                ffmpegPath: ffmpegPath,
-                outputPath: outputPath,
-                completion: completion
+                process: config.process,
+                errorPipe: config.errorPipe,
+                ffmpegPath: config.ffmpegPath,
+                outputPath: config.outputPath,
+                completion: config.completion
             )
         } catch {
             let voxError = VoxError.audioExtractionFailed(
                 "Failed to start ffmpeg process: \(error.localizedDescription)"
             )
             logger.error(voxError.localizedDescription, component: "FFmpegProcessor")
-            completion(.failure(voxError))
+            config.completion(.failure(voxError))
         }
     }
 

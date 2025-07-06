@@ -41,9 +41,12 @@ public struct AudioFormat: Codable {
     }
     
     var description: String {
-        let sizeStr = fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "unknown"
+        let sizeStr = fileSize.map { 
+            "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))"
+        } ?? "unknown"
         let bitRateStr = bitRate.map { "\($0 / 1000) kbps" } ?? "unknown"
-        return "\(codec.uppercased()) - \(sampleRate)Hz, \(channels)ch, \(bitRateStr), \(String(format: "%.1f", duration))s, \(sizeStr)"
+        return "\(codec.uppercased()) - \(sampleRate)Hz, \(channels)ch, \(bitRateStr), " +
+            "\(String(format: "%.1f", duration))s, \(sizeStr)"
     }
 }
 
