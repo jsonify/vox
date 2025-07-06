@@ -79,11 +79,25 @@ struct ProgressDisplayManager {
                 "✅"
             }
 
-            print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
+            // Show phase name for better context
+            let phaseText = progress.currentPhase.rawValue
+            
+            print("\r\(phaseIcon) \(phaseText) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
 
             if progress.isComplete {
                 print() // New line after completion // swiftlint:disable:this no_print
             }
+        } else {
+            // Initial status before progress starts
+            let phaseIcon = switch progress.currentPhase {
+            case .initializing, .analyzing, .validating, .finalizing:
+                "⚙️"
+            case .extracting, .converting:
+                "🎤"
+            case .complete:
+                "✅"
+            }
+            print("\r\(phaseIcon) \(progress.currentPhase.rawValue)...", terminator: "") // swiftlint:disable:this no_print
         }
     }
 }
