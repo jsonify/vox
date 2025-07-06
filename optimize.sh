@@ -63,10 +63,14 @@ apply_strip_optimization() {
     if strip "$BINARY_PATH" 2>/dev/null; then
         local size_after=$(get_file_size "$BINARY_PATH")
         local savings=$((size_before - size_after))
-        local savings_percent=$(( (savings * 100) / size_before ))
         
         log_success "Strip optimization complete"
-        log_info "Size reduction: $(format_bytes $savings) (${savings_percent}%)"
+        if (( size_before > 0 )); then
+            local savings_percent=$(( (savings * 100) / size_before ))
+            log_info "Size reduction: $(format_bytes $savings) (${savings_percent}%)"
+        else
+            log_info "Size reduction: $(format_bytes $savings)"
+        fi
     else
         log_warning "Strip optimization failed or not applicable"
     fi
@@ -91,10 +95,14 @@ apply_upx_compression() {
     if upx --best --quiet "$temp_binary" 2>/dev/null; then
         local size_after=$(get_file_size "$temp_binary")
         local savings=$((size_before - size_after))
-        local savings_percent=$(( (savings * 100) / size_before ))
         
         log_success "UPX compression complete"
-        log_info "Size reduction: $(format_bytes $savings) (${savings_percent}%)"
+        if (( size_before > 0 )); then
+            local savings_percent=$(( (savings * 100) / size_before ))
+            log_info "Size reduction: $(format_bytes $savings) (${savings_percent}%)"
+        else
+            log_info "Size reduction: $(format_bytes $savings)"
+        fi
         
         # Test the compressed binary
         if timeout 5s "$temp_binary" --help > /dev/null 2>&1; then
@@ -188,7 +196,6 @@ print_optimization_summary() {
     local original_size=$(get_file_size "${BINARY_PATH}${BACKUP_SUFFIX}")
     local optimized_size=$(get_file_size "$BINARY_PATH")
     local total_savings=$((original_size - optimized_size))
-    local total_savings_percent=$(( (total_savings * 100) / original_size ))
     
     echo ""
     log_success "🎯 OPTIMIZATION COMPLETE!"
@@ -196,7 +203,12 @@ print_optimization_summary() {
     echo "📊 Optimization Summary:"
     echo "  • Original size: $(format_bytes $original_size)"
     echo "  • Optimized size: $(format_bytes $optimized_size)"
-    echo "  • Total savings: $(format_bytes $total_savings) (${total_savings_percent}%)"
+    if (( original_size > 0 )); then
+        local total_savings_percent=$(( (total_savings * 100) / original_size ))
+        echo "  • Total savings: $(format_bytes $total_savings) (${total_savings_percent}%)"
+    else
+        echo "  • Total savings: $(format_bytes $total_savings)"
+    fi
     echo ""
     echo "📝 Applied optimizations:"
     echo "  • Symbol stripping"

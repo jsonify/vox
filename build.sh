@@ -239,13 +239,14 @@ create_distribution_packages() {
     shasum -a 256 *.tar.gz *.zip > checksums.txt
     
     log_success "Distribution packages created:"
-    ls -la *.tar.gz *.zip *.txt
+    ls -la *.tar.gz *.zip *.txt 2>/dev/null || true
     
     cd ..
 }
 
 # Function to print build summary
 print_summary() {
+    local build_time_start=$1
     local binary="$DIST_DIR/$PROJECT_NAME"
     local build_time_end=$(date +%s)
     local build_duration=$((build_time_end - build_time_start))
@@ -323,7 +324,7 @@ main() {
     validate_binary
     create_distribution_packages
     
-    print_summary
+    print_summary "$build_time_start"
 }
 
 # Run main function
