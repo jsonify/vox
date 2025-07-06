@@ -4,168 +4,175 @@ import Foundation
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
-        abstract: "Audio transcription CLI for MP4 video files",
+        abstract: "Extract audio from MP4 videos and transcribe to text using Apple's native speech recognition",
+        usage: """
+        vox <input-file> [options]
+        
+        Examples:
+          vox video.mp4                              # Basic transcription to stdout
+          vox video.mp4 -o transcript.txt            # Save to file
+          vox video.mp4 --format srt                 # Generate SRT subtitles
+          vox video.mp4 --timestamps --verbose       # Show timestamps and details
+          vox presentation.mp4 --language en-US      # Specify language
+          vox lecture.mp4 --fallback-api openai      # Use OpenAI as fallback
+        """,
+        discussion: """
+        Vox prioritizes privacy by using Apple's native speech recognition when available,
+        falling back to cloud APIs only when specified or when native recognition fails.
+        
+        Supported output formats: txt (default), srt, json
+        Supported languages: en-US, en-GB, es-ES, fr-FR, de-DE, and more
+        
+        For more information, visit: https://github.com/jsonify/vox
+        """,
         version: "1.0.0"
     )
 
-    @Argument(help: "Input MP4 video file path")
+    @Argument(help: "Path to MP4 video file to transcribe")
     var inputFile: String
 
-    @Option(name: [.short, .long], help: "Output file path")
+    @Option(name: [.short, .long], help: "Save transcription to file (default: output to stdout)")
     var output: String?
 
-    @Option(name: [.short, .long], help: "Output format: txt, srt, json")
+    @Option(name: [.short, .long], help: "Output format: txt (plain text), srt (subtitles), json (structured data)")
     var format: OutputFormat = .txt
 
-    @Option(name: [.short, .long], help: "Language code (e.g., en-US, es-ES)")
+    @Option(name: [.short, .long], help: "Language code for transcription (e.g., en-US, es-ES, fr-FR)")
     var language: String?
 
-    @Option(help: "Fallback API: openai, revai")
+    @Option(help: "Cloud API to use when native transcription fails: openai, revai")
     var fallbackApi: FallbackAPI?
 
-    @Option(help: "API key for fallback service")
+    @Option(help: "API key for fallback cloud service (or set OPENAI_API_KEY/REVAI_API_KEY env var)")
     var apiKey: String?
 
-    @Flag(name: [.short, .long], help: "Enable verbose output")
+    @Flag(name: [.short, .long], help: "Show detailed progress and processing information")
     var verbose = false
 
-    @Flag(help: "Force cloud transcription (skip native)")
+    @Flag(help: "Skip native transcription and use cloud API directly")
     var forceCloud = false
 
-    @Flag(help: "Include timestamps in output")
+    @Flag(help: "Include timestamps in output (shows when each word/phrase was spoken)")
     var timestamps = false
   
-    @Flag(help: "Include speaker IDs in output")
+    @Flag(help: "Include speaker identification in output (when available)")
     var speakers = false
 
-    @Flag(help: "Include confidence scores in output")
+    @Flag(help: "Include confidence scores showing transcription accuracy")
     var confidence = false
 
-    @Flag(help: "Use detailed text format with metadata")
+    @Flag(help: "Use detailed text format with comprehensive metadata")
     var detailed = false
 
-    @Option(help: "Paragraph break threshold in seconds (default: 2.0)")
+    @Option(help: "Seconds of silence to create paragraph breaks (default: 2.0)")
     var paragraphBreak: Double = 2.0
 
-    @Option(help: "Line width for text wrapping (default: 80)")
+    @Option(help: "Maximum line width for text wrapping (default: 80)")
     var lineWidth: Int = 80
 
     func run() throws {
-        // TEMP DEBUG: Progressive debug to find crash point
-        fputs("DEBUG: Entered run() method\n", stderr)
-        fflush(stderr)
-        Logger.shared.debug("Entered run() method", component: "CLI")
-
-        fputs("DEBUG: About to call configureLogging()\n", stderr)
-        Logger.shared.debug("About to call configureLogging()", component: "CLI")
+        try validateInputs()
         configureLogging()
-        fputs("DEBUG: configureLogging() completed\n", stderr)
-        Logger.shared.debug("configureLogging() completed", component: "CLI")
-
-        fputs("DEBUG: About to call displayStartupInfo()\n", stderr)
-        Logger.shared.debug("About to call displayStartupInfo()", component: "CLI")
         displayStartupInfo()
-        fputs("DEBUG: displayStartupInfo() completed\n", stderr)
-        Logger.shared.debug("displayStartupInfo() completed", component: "CLI")
-
-        fputs("DEBUG: About to call processAudioFile()\n", stderr)
-        Logger.shared.debug("About to call processAudioFile()", component: "CLI")
         try processAudioFile()
-        fputs("DEBUG: processAudioFile() completed\n", stderr)
-        Logger.shared.debug("processAudioFile() completed", component: "CLI")
+    }
+
+    private func validateInputs() throws {
+        // Check if input file exists
+        guard FileManager.default.fileExists(atPath: inputFile) else {
+            throw VoxError.invalidInputFile(inputFile)
+        }
+        
+        // Check if input file is readable
+        guard FileManager.default.isReadableFile(atPath: inputFile) else {
+            throw VoxError.permissionDenied(inputFile)
+        }
+        
+        // Check file extension
+        let fileExtension = URL(fileURLWithPath: inputFile).pathExtension.lowercased()
+        let supportedExtensions = ["mp4", "m4v", "mov"]
+        guard supportedExtensions.contains(fileExtension) else {
+            throw VoxError.unsupportedFormat(fileExtension)
+        }
+        
+        // Check if output directory exists and is writable (if output is specified)
+        if let outputPath = output {
+            let outputURL = URL(fileURLWithPath: outputPath)
+            let outputDir = outputURL.deletingLastPathComponent()
+            
+            if !FileManager.default.fileExists(atPath: outputDir.path) {
+                throw VoxError.invalidOutputPath("Directory does not exist: \(outputDir.path)")
+            }
+            
+            if !FileManager.default.isWritableFile(atPath: outputDir.path) {
+                throw VoxError.permissionDenied(outputDir.path)
+            }
+        }
+        
+        // Check if API key is required but missing
+        if forceCloud && fallbackApi != nil && apiKey == nil {
+            let envKey = fallbackApi == .openai ? "OPENAI_API_KEY" : "REVAI_API_KEY"
+            if ProcessInfo.processInfo.environment[envKey] == nil {
+                throw VoxError.apiKeyMissing(fallbackApi?.rawValue ?? "cloud service")
+            }
+        }
     }
 
     private func configureLogging() {
-        fputs("DEBUG: In configureLogging(), about to access Logger.shared\n", stderr)
-        Logger.shared.debug("In configureLogging(), about to access Logger.shared", component: "CLI")
         Logger.shared.configure(verbose: verbose)
-        fputs("DEBUG: Logger.shared.configure() completed\n", stderr)
-        Logger.shared.debug("Logger.shared.configure() completed", component: "CLI")
-
-        fputs("DEBUG: About to call Logger.shared.info\n", stderr)
-        // TEMP DEBUG: Bypass Logger calls to isolate the issue
-        // Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
-        fputs("DEBUG: Logger.shared.info bypassed\n", stderr)
-        // Logger.shared.debug("Verbose logging enabled", component: "CLI")
-        fputs("DEBUG: Logger.shared.debug bypassed\n", stderr)
-
-        // TEMP DEBUG: Bypass all Logger calls to isolate the issue
-        fputs("DEBUG: Bypassing all remaining Logger calls in configureLogging\n", stderr)
-        /*
-         Logger.shared.info("Input file: \(inputFile)", component: "CLI")
-         Logger.shared.info("Output format: \(format)", component: "CLI")
-
-         if let output = output {
-         Logger.shared.info("Output file: \(output)", component: "CLI")
-         }
-
-         if let language = language {
-         Logger.shared.info("Language: \(language)", component: "CLI")
-         }
-
-         if let fallbackApi = fallbackApi {
-         Logger.shared.info("Fallback API: \(fallbackApi)", component: "CLI")
-         }
-
-         if forceCloud {
-         Logger.shared.info("Using cloud transcription (forced)", component: "CLI")
-         } else {
-         Logger.shared.info("Using native transcription with fallback", component: "CLI")
-         }
-
-         if timestamps {
-         Logger.shared.info("Timestamps enabled", component: "CLI")
-         }
-         */
+        
+        // Logging configuration is complete - startup info will be displayed separately
     }
 
     private func displayStartupInfo() {
-        Logger.shared.info("Vox CLI - Audio transcription tool", component: "CLI")
-        Logger.shared.info("Input file: \(inputFile)", component: "CLI")
-        Logger.shared.info("Output format: \(format)", component: "CLI")
-
-        if let output = output {
-            Logger.shared.info("Output file: \(output)", component: "CLI")
+        if !verbose {
+            print("🎤 Vox - Transcribing \(inputFile)...")
         }
-
-        if forceCloud {
-            Logger.shared.info("Using cloud transcription", component: "CLI")
-        } else {
-            Logger.shared.info("Using native transcription with fallback", component: "CLI")
+        
+        if verbose {
+            Logger.shared.info("🎤 Vox - Starting transcription", component: "CLI")
+            Logger.shared.info("Input: \(inputFile)", component: "CLI")
+            Logger.shared.info("Output: \(output ?? "stdout")", component: "CLI")
+            Logger.shared.info("Format: \(format)", component: "CLI")
+            
+            if let language = language {
+                Logger.shared.info("Language: \(language)", component: "CLI")
+            }
+            
+            if forceCloud {
+                Logger.shared.info("Mode: Cloud transcription (forced)", component: "CLI")
+            } else {
+                Logger.shared.info("Mode: Native transcription with cloud fallback", component: "CLI")
+            }
+            
+            if timestamps {
+                Logger.shared.info("Including timestamps", component: "CLI")
+            }
         }
     }
 
     private func processAudioFile() throws {
-        fputs("DEBUG: In processAudioFile(), about to call extractAudio()\n", stderr)
         let audioFile = try extractAudio()
-        fputs("DEBUG: extractAudio() completed successfully\n", stderr)
-
-        fputs("DEBUG: About to call transcribeAudio()\n", stderr)
         let transcriptionResult = try transcribeAudio(audioFile)
-        fputs("DEBUG: transcribeAudio() completed successfully\n", stderr)
+        
         displayResults(transcriptionResult)
         saveOutput(transcriptionResult)
         cleanup(audioFile)
 
-        Logger.shared.info("Audio processing completed successfully!", component: "CLI")
+        displayCompletionMessage(transcriptionResult)
     }
 
     private func extractAudio() throws -> AudioFile {
-        fputs("DEBUG: In extractAudio(), about to create AudioProcessor\n", stderr)
         let audioProcessor = AudioProcessor()
-        fputs("DEBUG: AudioProcessor created successfully\n", stderr)
-
-        fputs("DEBUG: About to create ProgressDisplayManager\n", stderr)
         let progressDisplay = ProgressDisplayManager(verbose: verbose)
-        fputs("DEBUG: ProgressDisplayManager created successfully\n", stderr)
 
         let semaphore = DispatchSemaphore(value: 0)
         var processingError: Error?
         var extractedAudioFile: AudioFile?
 
-        fputs("DEBUG: About to print 'Extracting audio from...'\n", stderr)
-        Logger.shared.info("Extracting audio from: \(inputFile)", component: "CLI")
-        fputs("DEBUG: Print completed, about to call audioProcessor.extractAudio\n", stderr)
+        if verbose {
+            Logger.shared.info("🎵 Extracting audio from: \(inputFile)", component: "CLI")
+        }
 
         audioProcessor.extractAudio(
             from: inputFile,
@@ -175,19 +182,14 @@ struct Vox: ParsableCommand {
             completion: { result in
                 switch result {
                 case .success(let audioFile):
-                    fputs("DEBUG: CLI extractAudio success callback received\n", stderr)
-                    // TEMP DEBUG: Bypass Logger call
-                    // Logger.shared.info("Audio extraction completed successfully", component: "CLI")
-                    fputs("DEBUG: About to call displayAudioExtractionSuccess\n", stderr)
+                    if self.verbose {
+                        Logger.shared.info("✅ Audio extraction completed successfully", component: "CLI")
+                    }
                     self.displayAudioExtractionSuccess(audioFile)
-                    fputs("DEBUG: displayAudioExtractionSuccess completed\n", stderr)
                     extractedAudioFile = audioFile
-                    fputs("DEBUG: extractedAudioFile set, about to signal semaphore\n", stderr)
 
                 case .failure(let error):
-                    fputs("DEBUG: CLI extractAudio failure callback received\n", stderr)
-                    // TEMP DEBUG: Bypass Logger call
-                    // Logger.shared.error("Audio extraction failed: \(error.localizedDescription)", component: "CLI")
+                    Logger.shared.error("❌ Audio extraction failed: \(error.localizedDescription)", component: "CLI")
                     processingError = error
                 }
 
@@ -209,23 +211,24 @@ struct Vox: ParsableCommand {
     }
 
     private func displayAudioExtractionSuccess(_ audioFile: AudioFile) {
-        Logger.shared.info("✓ Audio extracted successfully", component: "CLI")
-        Logger.shared.info("  - Format: \(audioFile.format.codec)", component: "CLI")
-        Logger.shared.info("  - Sample Rate: \(audioFile.format.sampleRate) Hz", component: "CLI")
-        Logger.shared.info("  - Channels: \(audioFile.format.channels)", component: "CLI")
-        Logger.shared.info("  - Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds", component: "CLI")
+        if verbose {
+            Logger.shared.info("✅ Audio extracted successfully", component: "CLI")
+            Logger.shared.info("  Format: \(audioFile.format.codec)", component: "CLI")
+            Logger.shared.info("  Sample Rate: \(audioFile.format.sampleRate) Hz", component: "CLI")
+            Logger.shared.info("  Channels: \(audioFile.format.channels)", component: "CLI")
+            Logger.shared.info("  Duration: \(String(format: "%.2f", audioFile.format.duration)) seconds", component: "CLI")
 
-        if let bitRate = audioFile.format.bitRate {
-            Logger.shared.info("  - Bit Rate: \(bitRate) bps", component: "CLI")
-        }
+            if let bitRate = audioFile.format.bitRate {
+                Logger.shared.info("  Bit Rate: \(bitRate) bps", component: "CLI")
+            }
 
-        if let tempPath = audioFile.temporaryPath {
-            Logger.shared.info("  - Temporary file: \(tempPath)", component: "CLI")
+            if let tempPath = audioFile.temporaryPath {
+                Logger.shared.info("  Temporary file: \(tempPath)", component: "CLI")
+            }
         }
     }
 
     private func transcribeAudio(_ audioFile: AudioFile) throws -> TranscriptionResult {
-        fputs("DEBUG: In transcribeAudio(), about to create TranscriptionManager\n", stderr)
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
@@ -234,7 +237,10 @@ struct Vox: ParsableCommand {
             apiKey: apiKey,
             includeTimestamps: timestamps
         )
-        fputs("DEBUG: TranscriptionManager created, about to call transcribeAudio\n", stderr)
+
+        if verbose {
+            Logger.shared.info("🗣️ Starting transcription...", component: "CLI")
+        }
 
         return try transcriptionManager.transcribeAudio(audioFile: audioFile)
     }
@@ -302,13 +308,16 @@ struct Vox: ParsableCommand {
             
             // Display any validation issues
             if !report.formatValidation.issues.isEmpty {
-                Logger.shared.warn("  Format Issues: \(report.formatValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Format Issues: \(report.formatValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
             if !report.integrityValidation.issues.isEmpty {
-                Logger.shared.warn("  Integrity Issues: \(report.integrityValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Integrity Issues: \(report.integrityValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
             if !report.encodingValidation.issues.isEmpty {
-                Logger.shared.warn("  Encoding Issues: \(report.encodingValidation.issues.joined(separator: ", "))", component: "CLI")
+                Logger.shared.warn("  Encoding Issues: \(report.encodingValidation.issues.joined(separator: ", "))", 
+                                   component: "CLI")
             }
         }
     }
@@ -316,5 +325,25 @@ struct Vox: ParsableCommand {
     private func cleanup(_ audioFile: AudioFile) {
         let audioProcessor = AudioProcessor()
         audioProcessor.cleanupTemporaryFiles(for: audioFile)
+    }
+    
+    private func displayCompletionMessage(_ result: TranscriptionResult) {
+        if verbose {
+            Logger.shared.info("✅ Transcription completed successfully!", component: "CLI")
+            Logger.shared.info("  Duration: \(String(format: "%.2f", result.duration)) seconds", component: "CLI")
+            Logger.shared.info("  Words: ~\(result.text.split(separator: " ").count)", component: "CLI")
+            Logger.shared.info("  Processing time: \(String(format: "%.2f", result.processingTime)) seconds", component: "CLI")
+            Logger.shared.info("  Engine: \(result.engine.rawValue)", component: "CLI")
+            
+            if let output = output {
+                Logger.shared.info("  Output saved to: \(output)", component: "CLI")
+            }
+        } else {
+            if let output = output {
+                print("✅ Transcription complete! Output saved to: \(output)")
+            } else {
+                print("✅ Transcription complete!")
+            }
+        }
     }
 }

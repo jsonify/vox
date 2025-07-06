@@ -17,7 +17,7 @@ final class CLITests: XCTestCase {
     func testCommandConfiguration() {
         let config = Vox.configuration
         XCTAssertEqual(config.commandName, "vox")
-        XCTAssertEqual(config.abstract, "Audio transcription CLI for MP4 video files")
+        XCTAssertEqual(config.abstract, "Extract audio from MP4 videos and transcribe to text using Apple's native speech recognition")
         XCTAssertEqual(config.version, "1.0.0")
     }
 

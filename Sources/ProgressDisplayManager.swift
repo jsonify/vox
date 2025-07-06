@@ -70,20 +70,31 @@ struct ProgressDisplayManager {
             }
 
             // Different icons for different phases
-            let phaseIcon = switch progress.currentPhase {
-            case .initializing, .analyzing, .validating, .finalizing:
-                "⚙️"
-            case .extracting, .converting:
-                "🎤"
-            case .complete:
-                "✅"
-            }
+            let phaseIcon = getPhaseIcon(for: progress.currentPhase)
 
-            print("\r\(phaseIcon) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
+            // Show phase name for better context
+            let phaseText = progress.currentPhase.rawValue
+            
+            print("\r\(phaseIcon) \(phaseText) [\(bar)] \(progress.formattedProgress)\(timeInfo)\(speedInfo)", terminator: "") // swiftlint:disable:this no_print
 
             if progress.isComplete {
                 print() // New line after completion // swiftlint:disable:this no_print
             }
+        } else {
+            // Initial status before progress starts
+            let phaseIcon = getPhaseIcon(for: progress.currentPhase)
+            print("\r\(phaseIcon) \(progress.currentPhase.rawValue)...", terminator: "") // swiftlint:disable:this no_print
+        }
+    }
+    
+    private func getPhaseIcon(for phase: ProcessingPhase) -> String {
+        switch phase {
+        case .initializing, .analyzing, .validating, .finalizing:
+            return "⚙️"
+        case .extracting, .converting:
+            return "🎤"
+        case .complete:
+            return "✅"
         }
     }
 }
