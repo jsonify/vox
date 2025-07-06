@@ -2,6 +2,11 @@ import XCTest
 @testable import vox
 
 class TextFormatterTests: XCTestCase {
+    // Basic setup or shared test utilities can go here
+}
+
+// MARK: - Basic Text Formatting Tests
+extension TextFormatterTests {
     func testBasicTextFormatting() {
         let segments = [
             TranscriptionSegment(
@@ -61,6 +66,62 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Speaker1:"))
     }
 
+    func testMultipleSpacesHandling() {
+        let segments = [
+            TranscriptionSegment(
+                text: "Hello    world   with    multiple     spaces",
+                startTime: 0.0,
+                endTime: 2.0,
+                confidence: 0.9,
+                speakerID: "Speaker1",
+                words: nil,
+                segmentType: .speech,
+                pauseDuration: nil
+            )
+        ]
+
+        let result = TranscriptionResult(
+            text: "Hello    world   with    multiple     spaces",
+            language: "en-US",
+            confidence: 0.9,
+            duration: 2.0,
+            segments: segments,
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 16000,
+                channels: 1,
+                bitRate: 256000,
+                duration: 3.0
+            )
+        )
+
+        let formatter = TextFormatter()
+        let detailedOutput = formatter.formatAsDetailedText(result)
+
+        XCTAssertTrue(detailedOutput.contains("Total Words: 5"))
+
+        let options = TextFormattingOptions(
+            includeTimestamps: false,
+            includeSpeakerIDs: false,
+            includeConfidenceScores: false,
+            paragraphBreakThreshold: 2.0,
+            sentenceBreakThreshold: 0.8,
+            timestampFormat: .hms,
+            confidenceThreshold: 0.5,
+            lineWidth: 20
+        )
+        let formatterWithWrapping = TextFormatter(options: options)
+        let wrappedOutput = formatterWithWrapping.formatAsText(result)
+
+        XCTAssertFalse(wrappedOutput.contains("  "))
+        XCTAssertTrue(wrappedOutput.contains("Hello world with"))
+    }
+}
+
+// MARK: - Speaker & Timestamp Tests
+extension TextFormatterTests {
     func testTimestampFormatting() {
         let segments = [
             TranscriptionSegment(
@@ -168,6 +229,71 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Speaker1: Hello"))
         XCTAssertTrue(output.contains("Speaker2: Hi there"))
     }
+}
+
+// MARK: - Configuration & Options Tests
+extension TextFormatterTests {
+    func testConfigurableOptionsInOutputFormatter() {
+        let segments = [
+            TranscriptionSegment(
+                text: "Hello world",
+                startTime: 0.0,
+                endTime: 1.0,
+                confidence: 0.3,
+                speakerID: "Speaker1",
+                words: nil,
+                segmentType: .speech,
+                pauseDuration: nil
+            )
+        ]
+
+        let result = TranscriptionResult(
+            text: "Hello world",
+            language: "en-US",
+            confidence: 0.3,
+            duration: 1.0,
+            segments: segments,
+            engine: .speechAnalyzer,
+            processingTime: 1.0,
+            audioFormat: AudioFormat(
+                codec: "wav",
+                sampleRate: 16000,
+                channels: 1,
+                bitRate: 256000,
+                duration: 3.0
+            )
+        )
+
+        let formatter = OutputFormatter()
+
+        let customOptions = TextFormattingOptions(
+            includeTimestamps: true,
+            includeSpeakerIDs: true,
+            includeConfidenceScores: true,
+            paragraphBreakThreshold: 2.0,
+            sentenceBreakThreshold: 0.8,
+            timestampFormat: .seconds,
+            confidenceThreshold: 0.5,
+            lineWidth: 40
+        )
+
+        do {
+            let outputWithOptions = try formatter.format(result, as: .txt, options: customOptions)
+            XCTAssertTrue(outputWithOptions.contains("[0.0s]"))
+            XCTAssertTrue(outputWithOptions.contains("Speaker1:"))
+            XCTAssertTrue(outputWithOptions.contains("[confidence: 30.0%]"))
+        } catch {
+            XCTFail("Failed to format with custom options: \(error)")
+        }
+
+        do {
+            let defaultOutput = try formatter.format(result, as: .txt, includeTimestamps: false)
+            XCTAssertFalse(defaultOutput.contains("[confidence:"))
+            XCTAssertTrue(defaultOutput.contains("Speaker1:"))
+        } catch {
+            XCTFail("Failed to format with default options: \(error)")
+        }
+    }
 
     func testConfidenceScoreAnnotation() {
         let segments = [
@@ -175,7 +301,7 @@ class TextFormatterTests: XCTestCase {
                 text: "Hello world",
                 startTime: 0.0,
                 endTime: 1.0,
-                confidence: 0.3, // Low confidence
+                confidence: 0.3,
                 speakerID: "Speaker1",
                 words: nil,
                 segmentType: .speech,
@@ -216,71 +342,17 @@ class TextFormatterTests: XCTestCase {
 
         XCTAssertTrue(output.contains("[confidence: 30.0%]"))
     }
+}
 
-    func testMultipleSpacesHandling() {
-        let segments = [
-            TranscriptionSegment(
-                text: "Hello    world   with    multiple     spaces",
-                startTime: 0.0,
-                endTime: 2.0,
-                confidence: 0.9,
-                speakerID: "Speaker1",
-                words: nil,
-                segmentType: .speech,
-                pauseDuration: nil
-            )
-        ]
-
-        let result = TranscriptionResult(
-            text: "Hello    world   with    multiple     spaces",
-            language: "en-US",
-            confidence: 0.9,
-            duration: 2.0,
-            segments: segments,
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 16000,
-                channels: 1,
-                bitRate: 256000,
-                duration: 3.0
-            )
-        )
-
-        let formatter = TextFormatter()
-        let detailedOutput = formatter.formatAsDetailedText(result)
-
-        // Should correctly count 5 words, not more due to empty strings from multiple spaces
-        XCTAssertTrue(detailedOutput.contains("Total Words: 5"))
-
-        // Test text wrapping with multiple spaces
-        let options = TextFormattingOptions(
-            includeTimestamps: false,
-            includeSpeakerIDs: false,
-            includeConfidenceScores: false,
-            paragraphBreakThreshold: 2.0,
-            sentenceBreakThreshold: 0.8,
-            timestampFormat: .hms,
-            confidenceThreshold: 0.5,
-            lineWidth: 20
-        )
-        let formatterWithWrapping = TextFormatter(options: options)
-        let wrappedOutput = formatterWithWrapping.formatAsText(result)
-
-        // Should not have extra spaces in wrapped output
-        XCTAssertFalse(wrappedOutput.contains("  ")) // No double spaces
-        XCTAssertTrue(wrappedOutput.contains("Hello world with"))
-    }
-
+// MARK: - Edge Cases & Validation Tests
+extension TextFormatterTests {
     func testEmptySegmentsHandling() {
-        // Test with empty segments array to verify no division-by-zero crash
         let result = TranscriptionResult(
             text: "",
             language: "en-US",
             confidence: 0.0,
             duration: 0.0,
-            segments: [], // Empty segments array
+            segments: [],
             engine: .speechAnalyzer,
             processingTime: 0.0,
             audioFormat: AudioFormat(
@@ -294,7 +366,6 @@ class TextFormatterTests: XCTestCase {
 
         let formatter = TextFormatter()
 
-        // Should not crash and should handle empty segments gracefully
         let basicOutput = formatter.formatAsText(result)
         XCTAssertEqual(basicOutput, "")
 
@@ -303,72 +374,6 @@ class TextFormatterTests: XCTestCase {
         XCTAssertTrue(detailedOutput.contains("STATISTICS"))
         XCTAssertTrue(detailedOutput.contains("No segments available"))
         XCTAssertTrue(detailedOutput.contains("Segments: 0"))
-    }
-
-    func testConfigurableOptionsInOutputFormatter() {
-        let segments = [
-            TranscriptionSegment(
-                text: "Hello world",
-                startTime: 0.0,
-                endTime: 1.0,
-                confidence: 0.3, // Low confidence
-                speakerID: "Speaker1",
-                words: nil,
-                segmentType: .speech,
-                pauseDuration: nil
-            )
-        ]
-
-        let result = TranscriptionResult(
-            text: "Hello world",
-            language: "en-US",
-            confidence: 0.3,
-            duration: 1.0,
-            segments: segments,
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: AudioFormat(
-                codec: "wav",
-                sampleRate: 16000,
-                channels: 1,
-                bitRate: 256000,
-                duration: 3.0
-            )
-        )
-
-        let formatter = OutputFormatter()
-
-        // Test with custom options that enable confidence scores and timestamps
-        let customOptions = TextFormattingOptions(
-            includeTimestamps: true,
-            includeSpeakerIDs: true,
-            includeConfidenceScores: true,
-            paragraphBreakThreshold: 2.0,
-            sentenceBreakThreshold: 0.8,
-            timestampFormat: .seconds,
-            confidenceThreshold: 0.5,
-            lineWidth: 40
-        )
-
-        do {
-            let outputWithOptions = try formatter.format(result, as: .txt, options: customOptions)
-
-            // Should include timestamps, speaker IDs, and confidence scores
-            XCTAssertTrue(outputWithOptions.contains("[0.0s]"))
-            XCTAssertTrue(outputWithOptions.contains("Speaker1:"))
-            XCTAssertTrue(outputWithOptions.contains("[confidence: 30.0%]"))
-        } catch {
-            XCTFail("Failed to format with custom options: \(error)")
-        }
-
-        // Test backward compatibility - default format should not include confidence scores
-        do {
-            let defaultOutput = try formatter.format(result, as: .txt, includeTimestamps: false)
-            XCTAssertFalse(defaultOutput.contains("[confidence:"))
-            XCTAssertTrue(defaultOutput.contains("Speaker1:"))
-        } catch {
-            XCTFail("Failed to format with default options: \(error)")
-        }
     }
 
     func testDetailedTextFormatting() {
@@ -413,10 +418,8 @@ class TextFormatterTests: XCTestCase {
     }
 }
 
-// MARK: - Extended Text Formatter Tests
-
+// MARK: - Extended Test Cases
 extension TextFormatterTests {
-    // Additional test methods can be added here to split the main class
     func testTextFormatterExtended() {
         // Test placeholder for future expansion
         XCTAssertTrue(true)
