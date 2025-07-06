@@ -142,29 +142,6 @@ class ComprehensiveIntegrationTestsBase: XCTestCase {
         return !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    func createMockTranscriptionResult(for audioFile: TestAudioFile) -> TranscriptionResult {
-        let words = ["Hello", "world", "this", "is", "a", "test", "transcription", "sample"]
-        let segments = words.enumerated().map { index, word in
-            TranscriptionSegment(
-                text: word,
-                startTime: TimeInterval(index) * 0.5,
-                endTime: TimeInterval(index + 1) * 0.5,
-                confidence: 0.9 + Double.random(in: -0.1...0.1),
-                speakerID: "speaker_1"
-            )
-        }
-        
-        let fullText = words.joined(separator: " ")
-        
-        return TranscriptionResult(
-            text: fullText,
-            language: "en-US",
-            confidence: segments.map { $0.confidence }.reduce(0, +) / Double(segments.count),
-            duration: audioFile.format.duration,
-            segments: segments,
-            engine: .speechAnalyzer,
-            processingTime: min(audioFile.format.duration / 5.0, 10.0), // Simulated processing time
-            audioFormat: audioFile.format
-        )
-    }
+    // Note: createMockTranscriptionResult method removed due to missing TestAudioFile type
+    // This method was not used in CI tests, so removing it to fix compilation issues
 }

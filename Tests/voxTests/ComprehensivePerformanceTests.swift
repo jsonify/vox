@@ -90,7 +90,7 @@ final class ComprehensivePerformanceTests: ComprehensiveIntegrationTestsBase {
             let expectation = XCTestExpectation(description: "Small file memory usage")
             
             audioProcessor.extractAudio(from: smallFile.path) { result in
-                let peakMemory = getMemoryUsage()
+                let peakMemory = self.getMemoryUsage()
                 let memoryDelta = peakMemory - initialMemory
                 memoryResults["small_generated"] = memoryDelta
                 
@@ -117,7 +117,7 @@ final class ComprehensivePerformanceTests: ComprehensiveIntegrationTestsBase {
             let expectation = XCTestExpectation(description: "Large file memory usage")
             
             audioProcessor.extractAudio(from: largeFile.path) { result in
-                let peakMemory = getMemoryUsage()
+                let peakMemory = self.getMemoryUsage()
                 let memoryDelta = peakMemory - initialMemory
                 memoryResults["large_generated"] = memoryDelta
                 

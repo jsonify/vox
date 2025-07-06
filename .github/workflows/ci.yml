@@ -32,13 +32,15 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-swift-
     
-    - name: Build
-      run: swift build --verbose
+    - name: Build project
+      run: |
+        # First ensure the project builds successfully
+        swift build --verbose
     
     - name: Run CI-safe tests
       run: |
         # Run only CI-safe tests that don't require file system operations
-        swift test --filter CITests
+        swift test --filter CITests --verbose
 
   lint:
     name: SwiftLint
