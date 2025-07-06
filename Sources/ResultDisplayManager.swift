@@ -13,7 +13,7 @@ struct ResultDisplayManager {
     }
 
     func displayTranscriptionResult(_ result: TranscriptionResult) {
-        print("\n✓ Transcription completed successfully") // swiftlint:disable:this no_print
+        Logger.shared.info("Transcription completed successfully")
         print("  - Language: \(result.language)") // swiftlint:disable:this no_print
         print("  - Confidence: \(String(format: "%.1f%%", result.confidence * 100))") // swiftlint:disable:this no_print
         print("  - Duration: \(String(format: "%.2f", result.duration)) seconds") // swiftlint:disable:this no_print

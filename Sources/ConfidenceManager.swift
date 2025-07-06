@@ -178,7 +178,8 @@ class ConfidenceManager {
         report.append("  - Overall Confidence: \(String(format: "%.1f%%", assessment.overallConfidence * 100))")
 
         if !assessment.lowConfidenceSegments.isEmpty {
-            report.append("  - Low Confidence Segments: \(assessment.lowConfidenceSegments.count) (\(String(format: "%.1f%%", assessment.lowConfidencePercentage * 100)))")
+            let percentage = String(format: "%.1f%%", assessment.lowConfidencePercentage * 100)
+            report.append("  - Low Confidence Segments: \(assessment.lowConfidenceSegments.count) (\(percentage))")
         }
 
         if assessment.shouldUseFallback {
@@ -306,7 +307,8 @@ class ConfidenceManager {
         }
 
         if lowConfidencePercentage > config.maxLowConfidenceSegmentPercentage {
-            warnings.append("\(String(format: "%.1f%%", lowConfidencePercentage * 100)) of segments have low confidence")
+            let percentage = String(format: "%.1f%%", lowConfidencePercentage * 100)
+            warnings.append("\(percentage) of segments have low confidence")
         }
 
         if shouldUseFallback {
