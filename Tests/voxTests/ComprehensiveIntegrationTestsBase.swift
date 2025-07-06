@@ -139,7 +139,7 @@ class ComprehensiveIntegrationTestsBase: XCTestCase {
     
     func validateTextOutput(_ content: String) -> Bool {
         // Text output should contain actual words and not just whitespace
-        return content.trimmingCharacters(in: .whitespacesAndNewlines).count > 0
+        return !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     func createMockTranscriptionResult(for audioFile: TestAudioFile) -> TranscriptionResult {

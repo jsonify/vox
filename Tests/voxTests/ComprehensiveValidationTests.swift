@@ -79,7 +79,10 @@ final class ComprehensiveValidationTests: ComprehensiveIntegrationTestsBase {
         )
         
         let jsonData = jsonResult.output.data(using: .utf8)!
-        let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+        guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            XCTFail("JSON result should be valid dictionary")
+            return
+        }
         
         if let segments = json["segments"] as? [[String: Any]] {
             for segment in segments {
@@ -128,8 +131,11 @@ final class ComprehensiveValidationTests: ComprehensiveIntegrationTestsBase {
         }
         
         for i in 1..<jsonResults.count {
-            let firstJson = try JSONSerialization.jsonObject(with: jsonResults[0].data(using: .utf8)!) as! [String: Any]
-            let secondJson = try JSONSerialization.jsonObject(with: jsonResults[i].data(using: .utf8)!) as! [String: Any]
+            guard let firstJson = try JSONSerialization.jsonObject(with: jsonResults[0].data(using: .utf8)!) as? [String: Any],
+                  let secondJson = try JSONSerialization.jsonObject(with: jsonResults[i].data(using: .utf8)!) as? [String: Any] else {
+                XCTFail("JSON results should be valid dictionaries")
+                continue
+            }
             
             let firstText = firstJson["text"] as? String ?? ""
             let secondText = secondJson["text"] as? String ?? ""
@@ -212,7 +218,10 @@ final class ComprehensiveValidationTests: ComprehensiveIntegrationTestsBase {
             )
             
             let jsonData = result.output.data(using: .utf8)!
-            let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+            guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+                XCTFail("Short file should produce valid JSON dictionary")
+                return
+            }
             
             // Even very short files should have valid structure
             XCTAssertNotNil(json["text"], "Short file should have text field")
@@ -252,7 +261,10 @@ final class ComprehensiveValidationTests: ComprehensiveIntegrationTestsBase {
         )
         
         let jsonData = result.output.data(using: .utf8)!
-        let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+        guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            XCTFail("Language detection test should produce valid JSON dictionary")
+            return
+        }
         
         if let language = json["language"] as? String {
             XCTAssertFalse(language.isEmpty, "Language field should not be empty")

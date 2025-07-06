@@ -158,13 +158,14 @@ final class ComprehensiveWorkflowTests: ComprehensiveIntegrationTestsBase {
         
         // JSON should be valid JSON with expected structure
         let jsonData = jsonResult.output.data(using: .utf8)!
-        let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+        let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        XCTAssertNotNil(json, "JSON should be valid dictionary")
         
-        XCTAssertNotNil(json["text"], "JSON should contain text field")
-        XCTAssertNotNil(json["language"], "JSON should contain language field")
-        XCTAssertNotNil(json["confidence"], "JSON should contain confidence field")
-        XCTAssertNotNil(json["duration"], "JSON should contain duration field")
-        XCTAssertNotNil(json["segments"], "JSON should contain segments field")
+        XCTAssertNotNil(json?["text"], "JSON should contain text field")
+        XCTAssertNotNil(json?["language"], "JSON should contain language field")
+        XCTAssertNotNil(json?["confidence"], "JSON should contain confidence field")
+        XCTAssertNotNil(json?["duration"], "JSON should contain duration field")
+        XCTAssertNotNil(json?["segments"], "JSON should contain segments field")
     }
     
     func testLargeFileHandling() throws {
@@ -191,8 +192,11 @@ final class ComprehensiveWorkflowTests: ComprehensiveIntegrationTestsBase {
         
         // Parse JSON and validate segments
         let jsonData = result.output.data(using: .utf8)!
-        let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
-        let segments = json["segments"] as! [[String: Any]]
+        guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              let segments = json["segments"] as? [[String: Any]] else {
+            XCTFail("Large file should produce valid JSON with segments array")
+            return
+        }
         
         XCTAssertGreaterThan(segments.count, 0, "Large file should produce multiple segments")
         
