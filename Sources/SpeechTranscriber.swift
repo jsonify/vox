@@ -486,5 +486,3 @@ extension SpeechTranscriber {
         }
     }
 }
-
-

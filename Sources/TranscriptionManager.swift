@@ -212,7 +212,6 @@ public struct TranscriptionManager {
         )
     }
 
-
     private func performCloudTranscription(
         audioFile: AudioFile,
         preferredLanguage: String?,
