@@ -384,7 +384,27 @@ jobs:
           echo ""
           echo "All executable files in .build/:"
           find .build -type f -executable 2>/dev/null || echo "No executable files found"
-          exit 1
+          echo ""
+          echo "=== Attempting to rebuild manually ==="
+          echo "Trying to rebuild with swift build -c release..."
+          if swift build -c release --verbose 2>&1 | tee manual-rebuild.log; then
+            echo "Manual rebuild completed successfully"
+            # Try searching again
+            VOX_BINARY=$(find .build -name "vox" -type f 2>/dev/null | head -1)
+            if [ -n "$VOX_BINARY" ] && [ -f "$VOX_BINARY" ]; then
+              echo "✅ Found binary after manual rebuild: $VOX_BINARY"
+            else
+              echo "❌ Still no binary found after manual rebuild"
+              echo "Manual rebuild log (last 20 lines):"
+              tail -20 manual-rebuild.log || echo "Could not read manual rebuild log"
+              exit 1
+            fi
+          else
+            echo "❌ Manual rebuild failed"
+            echo "Manual rebuild log (last 20 lines):"
+            tail -20 manual-rebuild.log || echo "Could not read manual rebuild log"
+            exit 1
+          fi
         fi
         
         echo ""
