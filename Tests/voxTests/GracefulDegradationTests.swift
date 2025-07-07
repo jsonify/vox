@@ -64,34 +64,37 @@ final class GracefulDegradationTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate fallback to cloud worked
-                    XCTAssertFalse(result.text.isEmpty, "Fallback transcription should produce text")
-                    XCTAssertEqual(result.engine, .openaiWhisper, "Should use cloud engine after native failure")
-                    
-                    // Validate degradation handling
-                    XCTAssertGreaterThan(result.processingTime, 0, "Should have processing time")
-                    XCTAssertTrue(result.confidence >= 0 && result.confidence <= 1, "Should have valid confidence")
-                    
-                } catch {
-                    // If both native and cloud fail, validate comprehensive error
-                    XCTAssertTrue(error is VoxError, "Should return VoxError after fallback failure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("fallback") ||
-                        errorDescription.localizedCaseInsensitiveContains("cloud") ||
-                        errorDescription.localizedCaseInsensitiveContains("native"),
-                        "Error should mention fallback attempt: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate fallback to cloud worked
+                        XCTAssertFalse(result.text.isEmpty, "Fallback transcription should produce text")
+                        XCTAssertEqual(result.engine, .openaiWhisper, "Should use cloud engine after native failure")
+                        
+                        // Validate degradation handling
+                        XCTAssertGreaterThan(result.processingTime, 0, "Should have processing time")
+                        XCTAssertTrue(result.confidence >= 0 && result.confidence <= 1, "Should have valid confidence")
+                        
+                    } catch {
+                        // If both native and cloud fail, validate comprehensive error
+                        XCTAssertTrue(error is VoxError, "Should return VoxError after fallback failure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("fallback") ||
+                            errorDescription.localizedCaseInsensitiveContains("cloud") ||
+                            errorDescription.localizedCaseInsensitiveContains("native"),
+                            "Error should mention fallback attempt: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 90.0)
@@ -123,33 +126,36 @@ final class GracefulDegradationTests: XCTestCase {
                 // Configure multiple fallback APIs
                 transcriptionManager.setFallbackAPIs([.openai, .revai])
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate fallback to alternative API worked
-                    XCTAssertFalse(result.text.isEmpty, "Alternative API should produce text")
-                    XCTAssertEqual(result.engine, .openaiWhisper, "Should use cloud engine")
-                    
-                    // Validate fallback metadata
-                    XCTAssertTrue(result.metadata.contains("fallback"), "Should indicate fallback was used")
-                    
-                } catch {
-                    // If all APIs fail, validate comprehensive error
-                    XCTAssertTrue(error is VoxError, "Should return VoxError after all API failures")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("api") ||
-                        errorDescription.localizedCaseInsensitiveContains("fallback") ||
-                        errorDescription.localizedCaseInsensitiveContains("unavailable"),
-                        "Error should mention API fallback failure: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate fallback to alternative API worked
+                        XCTAssertFalse(result.text.isEmpty, "Alternative API should produce text")
+                        XCTAssertEqual(result.engine, .openaiWhisper, "Should use cloud engine")
+                        
+                        // Validate fallback metadata
+                        XCTAssertTrue(result.metadata.contains("fallback"), "Should indicate fallback was used")
+                        
+                    } catch {
+                        // If all APIs fail, validate comprehensive error
+                        XCTAssertTrue(error is VoxError, "Should return VoxError after all API failures")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("api") ||
+                            errorDescription.localizedCaseInsensitiveContains("fallback") ||
+                            errorDescription.localizedCaseInsensitiveContains("unavailable"),
+                            "Error should mention API fallback failure: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 120.0)
@@ -225,32 +231,35 @@ final class GracefulDegradationTests: XCTestCase {
                 // Enable quality degradation
                 transcriptionManager.setQualityDegradationEnabled(true)
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate graceful quality degradation
-                    XCTAssertFalse(result.text.isEmpty, "Should still produce text with degraded quality")
-                    
-                    // Check for quality degradation indicators
-                    if result.confidence < 0.8 {
-                        XCTAssertTrue(result.metadata.contains("quality_degraded"), 
-                            "Should indicate quality degradation occurred")
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate graceful quality degradation
+                        XCTAssertFalse(result.text.isEmpty, "Should still produce text with degraded quality")
+                        
+                        // Check for quality degradation indicators
+                        if result.confidence < 0.8 {
+                            XCTAssertTrue(result.metadata.contains("quality_degraded"), 
+                                "Should indicate quality degradation occurred")
+                        }
+                        
+                        // Validate segments might be reduced for performance
+                        if result.segments.count < Int(audioFile.format.duration) / 2 {
+                            XCTAssertTrue(result.metadata.contains("segments_reduced"), 
+                                "Should indicate segments were reduced")
+                        }
+                        
+                    } catch {
+                        XCTFail("Quality degradation should not cause complete failure: \(error)")
                     }
-                    
-                    // Validate segments might be reduced for performance
-                    if result.segments.count < Int(audioFile.format.duration) / 2 {
-                        XCTAssertTrue(result.metadata.contains("segments_reduced"), 
-                            "Should indicate segments were reduced")
-                    }
-                    
-                } catch {
-                    XCTFail("Quality degradation should not cause complete failure: \(error)")
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 90.0)
@@ -279,26 +288,29 @@ final class GracefulDegradationTests: XCTestCase {
                     includeTimestamps: true
                 )
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate text is still provided even if timestamps fail
-                    XCTAssertFalse(result.text.isEmpty, "Should still provide text without timestamps")
-                    
-                    // Check timestamp degradation handling
-                    if result.segments.isEmpty || result.segments.allSatisfy({ $0.startTime == 0 && $0.endTime == 0 }) {
-                        XCTAssertTrue(result.metadata.contains("timestamps_unavailable"), 
-                            "Should indicate timestamps are unavailable")
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate text is still provided even if timestamps fail
+                        XCTAssertFalse(result.text.isEmpty, "Should still provide text without timestamps")
+                        
+                        // Check timestamp degradation handling
+                        if result.segments.isEmpty || result.segments.allSatisfy({ $0.startTime == 0 && $0.endTime == 0 }) {
+                            XCTAssertTrue(result.metadata.contains("timestamps_unavailable"), 
+                                "Should indicate timestamps are unavailable")
+                        }
+                        
+                    } catch {
+                        XCTFail("Timestamp failure should not cause complete transcription failure: \(error)")
                     }
-                    
-                } catch {
-                    XCTFail("Timestamp failure should not cause complete transcription failure: \(error)")
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 60.0)
@@ -329,35 +341,38 @@ final class GracefulDegradationTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate partial service degradation
-                    XCTAssertFalse(result.text.isEmpty, "Should provide text despite partial unavailability")
-                    
-                    // Check for service degradation indicators
-                    if result.confidence < 0.9 {
-                        XCTAssertTrue(result.metadata.contains("service_degraded"), 
-                            "Should indicate service degradation")
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate partial service degradation
+                        XCTAssertFalse(result.text.isEmpty, "Should provide text despite partial unavailability")
+                        
+                        // Check for service degradation indicators
+                        if result.confidence < 0.9 {
+                            XCTAssertTrue(result.metadata.contains("service_degraded"), 
+                                "Should indicate service degradation")
+                        }
+                        
+                    } catch {
+                        // If complete failure, validate appropriate error
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for service unavailability")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("service") ||
+                            errorDescription.localizedCaseInsensitiveContains("unavailable") ||
+                            errorDescription.localizedCaseInsensitiveContains("partial"),
+                            "Error should mention service unavailability: \(errorDescription)"
+                        )
                     }
-                    
-                } catch {
-                    // If complete failure, validate appropriate error
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for service unavailability")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("service") ||
-                        errorDescription.localizedCaseInsensitiveContains("unavailable") ||
-                        errorDescription.localizedCaseInsensitiveContains("partial"),
-                        "Error should mention service unavailability: \(errorDescription)"
-                    )
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 60.0)
@@ -393,31 +408,34 @@ final class GracefulDegradationTests: XCTestCase {
                 transcriptionManager.setMaxRetries(3)
                 transcriptionManager.setRetryDelay(2.0)
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate service recovery worked
-                    XCTAssertFalse(result.text.isEmpty, "Should provide text after service recovery")
-                    XCTAssertTrue(result.metadata.contains("recovery_successful"), 
-                        "Should indicate recovery was successful")
-                    
-                } catch {
-                    // If recovery failed, validate appropriate error
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for recovery failure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("recovery") ||
-                        errorDescription.localizedCaseInsensitiveContains("retry") ||
-                        errorDescription.localizedCaseInsensitiveContains("failed"),
-                        "Error should mention recovery failure: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate service recovery worked
+                        XCTAssertFalse(result.text.isEmpty, "Should provide text after service recovery")
+                        XCTAssertTrue(result.metadata.contains("recovery_successful"), 
+                            "Should indicate recovery was successful")
+                        
+                    } catch {
+                        // If recovery failed, validate appropriate error
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for recovery failure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("recovery") ||
+                            errorDescription.localizedCaseInsensitiveContains("retry") ||
+                            errorDescription.localizedCaseInsensitiveContains("failed"),
+                            "Error should mention recovery failure: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 120.0)

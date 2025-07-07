@@ -75,29 +75,31 @@ final class ResourceExhaustionValidationTests: XCTestCase {
                 // Simulate memory pressure by allocating large amounts of memory
                 self.resourceSimulator.simulateMemoryPressure()
                 
-                do {
-                    let result = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // If successful, validate memory usage remained reasonable
-                    let finalMemoryUsage = self.getMemoryUsage()
-                    let memoryIncrease = finalMemoryUsage - initialMemoryUsage
-                    
-                    XCTAssertLessThan(memoryIncrease, 1024 * 1024 * 1024, 
-                        "Memory usage should not increase by more than 1GB")
-                    
-                    XCTAssertFalse(result.text.isEmpty, "Transcription should produce text")
-                    
-                } catch {
-                    // If failed due to memory pressure, validate proper error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for memory pressure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("memory") ||
-                        errorDescription.localizedCaseInsensitiveContains("resource") ||
-                        errorDescription.localizedCaseInsensitiveContains("pressure"),
-                        "Error should mention memory issue: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        let result = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // If successful, validate memory usage remained reasonable
+                        let finalMemoryUsage = self.getMemoryUsage()
+                        let memoryIncrease = finalMemoryUsage - initialMemoryUsage
+                        
+                        XCTAssertLessThan(memoryIncrease, 1024 * 1024 * 1024, 
+                            "Memory usage should not increase by more than 1GB")
+                        
+                        XCTAssertFalse(result.text.isEmpty, "Transcription should produce text")
+                        
+                    } catch {
+                        // If failed due to memory pressure, validate proper error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for memory pressure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("memory") ||
+                            errorDescription.localizedCaseInsensitiveContains("resource") ||
+                            errorDescription.localizedCaseInsensitiveContains("pressure"),
+                            "Error should mention memory issue: \(errorDescription)"
+                        )
+                    }
                 }
                 
             case .failure(let error):
@@ -140,21 +142,23 @@ final class ResourceExhaustionValidationTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    
-                    // Validate memory was managed properly
-                    let peakMemory = memoryMonitor.getPeakMemoryUsage()
-                    XCTAssertLessThan(peakMemory, 2048 * 1024 * 1024,
-                        "Peak memory usage should be less than 2GB")
-                    
-                } catch {
-                    // Large file processing might fail gracefully
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for large file")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertFalse(errorDescription.isEmpty,
-                        "Error should have description for large file")
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        
+                        // Validate memory was managed properly
+                        let peakMemory = memoryMonitor.getPeakMemoryUsage()
+                        XCTAssertLessThan(peakMemory, 2048 * 1024 * 1024,
+                            "Peak memory usage should be less than 2GB")
+                        
+                    } catch {
+                        // Large file processing might fail gracefully
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for large file")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertFalse(errorDescription.isEmpty,
+                            "Error should have description for large file")
+                    }
                 }
                 
                 memoryMonitor.stopMonitoring()
@@ -261,11 +265,13 @@ final class ResourceExhaustionValidationTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                } catch {
-                    // Processing might fail under resource pressure
-                    XCTAssertTrue(error is VoxError, "Should return VoxError under resource pressure")
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                    } catch {
+                        // Processing might fail under resource pressure
+                        XCTAssertTrue(error is VoxError, "Should return VoxError under resource pressure")
+                    }
                 }
                 
                 // Validate temp files are cleaned up even under pressure

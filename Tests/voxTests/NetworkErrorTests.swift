@@ -59,27 +59,30 @@ final class NetworkErrorTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Should not succeed with invalid API key")
-                } catch {
-                    // Validate API error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for API failure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("api") ||
-                        errorDescription.localizedCaseInsensitiveContains("key") ||
-                        errorDescription.localizedCaseInsensitiveContains("auth"),
-                        "Error should mention API issue: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Should not succeed with invalid API key")
+                    } catch {
+                        // Validate API error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for API failure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("api") ||
+                            errorDescription.localizedCaseInsensitiveContains("key") ||
+                            errorDescription.localizedCaseInsensitiveContains("auth"),
+                            "Error should mention API issue: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -108,21 +111,24 @@ final class NetworkErrorTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Should not succeed with timeout configuration")
-                } catch {
-                    // Validate timeout error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for timeout")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Should not succeed with timeout configuration")
+                    } catch {
+                        // Validate timeout error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for timeout")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 45.0)
@@ -148,29 +154,32 @@ final class NetworkErrorTests: XCTestCase {
                     "not-a-real-key"
                 ]
                 
-                for apiKey in invalidAPIKeys {
-                    let transcriptionManager = TranscriptionManager(
-                        forceCloud: true,
-                        verbose: false,
-                        language: "en-US",
-                        fallbackAPI: .openai,
-                        apiKey: apiKey,
-                        includeTimestamps: false
-                    )
-                    
-                    do {
-                        _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                        // If it doesn't throw, that's fine - some validation may be deferred
-                    } catch {
-                        // Validate error is appropriate
-                        XCTAssertTrue(error is VoxError, "Should return VoxError for invalid API key")
+                Task {
+                    for apiKey in invalidAPIKeys {
+                        let transcriptionManager = TranscriptionManager(
+                            forceCloud: true,
+                            verbose: false,
+                            language: "en-US",
+                            fallbackAPI: .openai,
+                            apiKey: apiKey,
+                            includeTimestamps: false
+                        )
+                        
+                        do {
+                            _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                            // If it doesn't throw, that's fine - some validation may be deferred
+                        } catch {
+                            // Validate error is appropriate
+                            XCTAssertTrue(error is VoxError, "Should return VoxError for invalid API key")
+                        }
                     }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -191,32 +200,35 @@ final class NetworkErrorTests: XCTestCase {
                 // Test different fallback services
                 let fallbackAPIs: [FallbackAPI] = [.openai, .revai]
                 
-                for fallbackAPI in fallbackAPIs {
-                    let transcriptionManager = TranscriptionManager(
-                        forceCloud: true,
-                        verbose: false,
-                        language: "en-US",
-                        fallbackAPI: fallbackAPI,
-                        apiKey: "test-key",
-                        includeTimestamps: false
-                    )
-                    
-                    do {
-                        _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                        // If it doesn't throw, that's fine
-                    } catch {
-                        // Validate error is appropriate for the service
-                        XCTAssertTrue(error is VoxError, "Should return VoxError")
+                Task {
+                    for fallbackAPI in fallbackAPIs {
+                        let transcriptionManager = TranscriptionManager(
+                            forceCloud: true,
+                            verbose: false,
+                            language: "en-US",
+                            fallbackAPI: fallbackAPI,
+                            apiKey: "test-key",
+                            includeTimestamps: false
+                        )
                         
-                        let errorDescription = error.localizedDescription
-                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                        do {
+                            _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                            // If it doesn't throw, that's fine
+                        } catch {
+                            // Validate error is appropriate for the service
+                            XCTAssertTrue(error is VoxError, "Should return VoxError")
+                            
+                            let errorDescription = error.localizedDescription
+                            XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                        }
                     }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -244,21 +256,24 @@ final class NetworkErrorTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    // Success or failure both acceptable - testing retry mechanism
-                } catch {
-                    // Validate that retry was attempted (if possible to detect)
-                    XCTAssertTrue(error is VoxError, "Should return VoxError")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        // Success or failure both acceptable - testing retry mechanism
+                    } catch {
+                        // Validate that retry was attempted (if possible to detect)
+                        XCTAssertTrue(error is VoxError, "Should return VoxError")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description")
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 45.0)

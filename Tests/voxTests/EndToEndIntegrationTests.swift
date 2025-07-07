@@ -149,13 +149,15 @@ final class EndToEndIntegrationTests: XCTestCase {
         audioProcessor.extractAudio(from: inputFile.path) { [weak self] audioResult in
             switch audioResult {
             case .success(let audioFile):
-                self?.testTranscriptionStep(
-                    audioFile: audioFile,
-                    outputFile: outputFile,
-                    format: format,
-                    includeTimestamps: includeTimestamps,
-                    expectation: expectation
-                )
+                Task {
+                    await self?.testTranscriptionStep(
+                        audioFile: audioFile,
+                        outputFile: outputFile,
+                        format: format,
+                        includeTimestamps: includeTimestamps,
+                        expectation: expectation
+                    )
+                }
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
                 expectation.fulfill()
@@ -169,7 +171,7 @@ final class EndToEndIntegrationTests: XCTestCase {
         format: OutputFormat,
         includeTimestamps: Bool,
         expectation: XCTestExpectation
-    ) {
+    ) async {
         // Step 2: Transcription
         let transcriptionManager = TranscriptionManager(
             forceCloud: false,
@@ -181,7 +183,7 @@ final class EndToEndIntegrationTests: XCTestCase {
         )
         
         do {
-            let transcriptionResult = try transcriptionManager.transcribeAudio(audioFile: audioFile)
+            let transcriptionResult = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
             testOutputStep(
                 result: transcriptionResult,
                 outputFile: outputFile,
