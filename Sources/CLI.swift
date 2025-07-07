@@ -29,7 +29,7 @@ struct Vox: ParsableCommand {
     )
 
     @Argument(help: "Path to MP4 video file to transcribe")
-    var inputFile: String
+    var inputFile: String?
 
     @Option(name: [.short, .long], help: "Save transcription to file (default: output to stdout)")
     var output: String?
@@ -71,13 +71,18 @@ struct Vox: ParsableCommand {
     var lineWidth: Int = 80
 
     func run() throws {
-        try validateInputs()
+        // Check if input file is provided
+        guard let inputFile = inputFile else {
+            throw VoxError.missingInputFile
+        }
+        
+        try validateInputs(inputFile: inputFile)
         configureLogging()
-        displayStartupInfo()
-        try processAudioFile()
+        displayStartupInfo(inputFile: inputFile)
+        try processAudioFile(inputFile: inputFile)
     }
 
-    private func validateInputs() throws {
+    private func validateInputs(inputFile: String) throws {
         // Check if input file exists
         guard FileManager.default.fileExists(atPath: inputFile) else {
             throw VoxError.invalidInputFile(inputFile)
@@ -124,7 +129,7 @@ struct Vox: ParsableCommand {
         // Logging configuration is complete - startup info will be displayed separately
     }
 
-    private func displayStartupInfo() {
+    private func displayStartupInfo(inputFile: String) {
         if !verbose {
             print("🎤 Vox - Transcribing \(inputFile)...")
         }
@@ -151,8 +156,8 @@ struct Vox: ParsableCommand {
         }
     }
 
-    private func processAudioFile() throws {
-        let audioFile = try extractAudio()
+    private func processAudioFile(inputFile: String) throws {
+        let audioFile = try extractAudio(inputFile: inputFile)
         let transcriptionResult = try transcribeAudio(audioFile)
         
         displayResults(transcriptionResult)
@@ -162,7 +167,7 @@ struct Vox: ParsableCommand {
         displayCompletionMessage(transcriptionResult)
     }
 
-    private func extractAudio() throws -> AudioFile {
+    private func extractAudio(inputFile: String) throws -> AudioFile {
         let audioProcessor = AudioProcessor()
         let progressDisplay = ProgressDisplayManager(verbose: verbose)
 

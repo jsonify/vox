@@ -3,6 +3,7 @@ import Foundation
 // MARK: - Error Models
 
 public enum VoxError: Error, LocalizedError {
+    case missingInputFile
     case invalidInputFile(String)
     case audioExtractionFailed(String)
     case transcriptionFailed(String)
@@ -26,6 +27,10 @@ public enum VoxError: Error, LocalizedError {
     
     public var errorDescription: String? {
         switch self {
+        case .missingInputFile:
+            return "❌ Missing input file\n" +
+                   "   💡 Usage: vox <input-file> [options]\n" +
+                   "   📖 Example: vox video.mp4 -o transcript.txt"
         case .invalidInputFile(let path):
             return "❌ Invalid input file: \(path)\n" +
                    "   💡 Please check that the file exists and is a valid MP4 video file."
@@ -109,7 +114,7 @@ public enum VoxError: Error, LocalizedError {
     
     private var componentName: String {
         switch self {
-        case .invalidInputFile, .unsupportedFormat:
+        case .missingInputFile, .invalidInputFile, .unsupportedFormat:
             return "FileProcessor"
         case .audioExtractionFailed, .audioFormatValidationFailed, 
              .incompatibleAudioProperties:
