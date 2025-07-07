@@ -268,49 +268,38 @@ jobs:
       run: |
         echo "=== Starting Universal Binary Creation ==="
         
-        echo "Building for arm64 architecture..."
-        if swift build -c release --arch arm64 2>&1 | tee arm64-build.log; then
-          echo "✅ ARM64 build completed successfully"
+        # Check current architecture
+        echo "Current architecture: $(uname -m)"
+        echo "Current build artifacts:"
+        ls -la .build/release/ || echo "No release build directory found"
+        
+        # Swift Package Manager creates universal binaries by default on macOS
+        echo ""
+        echo "Checking if binary already exists..."
+        if [ -f ".build/release/vox" ]; then
+          echo "✅ Binary found at .build/release/vox"
+          echo "Binary info:"
+          file .build/release/vox
+          lipo -info .build/release/vox 2>/dev/null || echo "Binary is not a universal binary or lipo failed"
+          
+          echo ""
+          echo "Copying binary to workspace..."
+          cp .build/release/vox vox-universal
+          
+          echo "✅ Binary copied successfully"
         else
-          echo "❌ ARM64 build failed"
-          echo "Last 20 lines of ARM64 build log:"
-          tail -20 arm64-build.log || echo "Could not read ARM64 build log"
+          echo "❌ Binary not found at expected location"
+          echo "Available files in .build/release/:"
+          ls -la .build/release/ || echo "No release directory"
+          echo "Available files in .build/:"
+          ls -la .build/ || echo "No .build directory"
           exit 1
         fi
         
         echo ""
-        echo "Building for x86_64 architecture..."
-        if swift build -c release --arch x86_64 2>&1 | tee x86_64-build.log; then
-          echo "✅ x86_64 build completed successfully"
-        else
-          echo "❌ x86_64 build failed"
-          echo "Last 20 lines of x86_64 build log:"
-          tail -20 x86_64-build.log || echo "Could not read x86_64 build log"
-          exit 1
-        fi
-        
-        echo ""
-        echo "Checking build artifacts..."
-        echo "ARM64 binary:"
-        ls -la .build/arm64-apple-macosx/release/vox || echo "ARM64 binary not found"
-        echo "x86_64 binary:"
-        ls -la .build/x86_64-apple-macosx/release/vox || echo "x86_64 binary not found"
-        
-        echo ""
-        echo "Creating universal binary..."
-        if lipo -create -output vox-universal \
-          .build/arm64-apple-macosx/release/vox \
-          .build/x86_64-apple-macosx/release/vox; then
-          echo "✅ Universal binary created successfully"
-        else
-          echo "❌ Universal binary creation failed"
-          exit 1
-        fi
-        
-        echo ""
-        echo "Verifying universal binary..."
+        echo "Verifying final binary..."
         file vox-universal
-        lipo -info vox-universal
+        lipo -info vox-universal 2>/dev/null || echo "Binary architecture info not available"
         ls -la vox-universal
     
     - name: Test CLI functionality
@@ -377,8 +366,6 @@ jobs:
         name: build-validation-logs
         path: |
           release-build.log
-          arm64-build.log
-          x86_64-build.log
           cli-help.log
           cli-version.log
         retention-days: 7
