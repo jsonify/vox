@@ -1,9 +1,8 @@
 import ArgumentParser
 import Foundation
 
-@available(macOS 12.0, *)
-@main
-struct Vox: AsyncParsableCommand {
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
         abstract: "Extract audio from MP4 videos and transcribe to text using Apple's native speech recognition",
@@ -72,7 +71,7 @@ struct Vox: AsyncParsableCommand {
     @Option(help: "Maximum line width for text wrapping (default: 80)")
     var lineWidth: Int = 80
 
-    func run() async throws {
+    func run() throws {
         // Check if input file is provided
         guard let inputFile = inputFile else {
             throw VoxError.missingInputFile
@@ -81,7 +80,26 @@ struct Vox: AsyncParsableCommand {
         try validateInputs(inputFile: inputFile)
         configureLogging()
         displayStartupInfo(inputFile: inputFile)
-        try await processAudioFile(inputFile: inputFile)
+        
+        // Run async code in a blocking manner - this is safe at the top level
+        let group = DispatchGroup()
+        var processingError: Error?
+        
+        group.enter()
+        Task {
+            do {
+                try await processAudioFile(inputFile: inputFile)
+            } catch {
+                processingError = error
+            }
+            group.leave()
+        }
+        
+        group.wait()
+        
+        if let error = processingError {
+            throw error
+        }
     }
 
     private func validateInputs(inputFile: String) throws {
