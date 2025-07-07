@@ -198,36 +198,193 @@ jobs:
       with:
         swift-version: '5.9'
     
+    - name: Verify Build Environment
+      run: |
+        echo "=== Build Validation Environment Check ==="
+        swift --version
+        swiftc --version
+        which swift
+        which swiftc
+        echo "Platform: $(uname -a)"
+        echo "Xcode version: $(xcode-select --print-path)"
+        xcodebuild -version || echo "xcodebuild not available"
+        echo "Working directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo "Build validation environment verified"
+    
+    - name: Debug Release Dependencies
+      run: |
+        echo "=== Release Build Dependencies Debug ==="
+        echo "Checking Package.swift for release build..."
+        cat Package.swift
+        echo ""
+        echo "Resolving dependencies for release build..."
+        swift package resolve || echo "Package resolve failed"
+        echo ""
+        echo "Package describe for release build:"
+        swift package describe || echo "Package describe failed"
+    
     - name: Build release configuration
-      run: swift build -c release --verbose
+      run: |
+        echo "=== Starting Release Build Process ==="
+        echo "Building with release configuration and verbose output..."
+        if swift build -c release --verbose 2>&1 | tee release-build.log; then
+          echo ""
+          echo "=== Release build completed successfully ==="
+        else
+          echo ""
+          echo "=== RELEASE BUILD FAILED ==="
+          echo "Exit code: $?"
+          echo "Last 50 lines of release build log:"
+          tail -50 release-build.log || echo "Could not read release build log"
+          echo ""
+          echo "Checking for common release build issues..."
+          
+          # Check for specific error patterns
+          if grep -i "error.*not found" release-build.log; then
+            echo "❌ Missing dependency detected in release build"
+          fi
+          if grep -i "permission denied" release-build.log; then
+            echo "❌ Permission issue detected in release build"
+          fi
+          if grep -i "unavailable" release-build.log; then
+            echo "❌ API unavailability detected in release build"
+          fi
+          if grep -i "optimization" release-build.log; then
+            echo "⚠️  Optimization issue detected in release build"
+          fi
+          if grep -i "linking" release-build.log; then
+            echo "❌ Linking issue detected in release build"
+          fi
+          if grep -i "architecture" release-build.log; then
+            echo "❌ Architecture issue detected in release build"
+          fi
+          
+          exit 1
+        fi
     
     - name: Create universal binary (if on macOS)
       run: |
-        # Build for both architectures
-        swift build -c release --arch arm64
-        swift build -c release --arch x86_64
+        echo "=== Starting Universal Binary Creation ==="
         
-        # Create universal binary
-        lipo -create -output vox-universal \
+        echo "Building for arm64 architecture..."
+        if swift build -c release --arch arm64 2>&1 | tee arm64-build.log; then
+          echo "✅ ARM64 build completed successfully"
+        else
+          echo "❌ ARM64 build failed"
+          echo "Last 20 lines of ARM64 build log:"
+          tail -20 arm64-build.log || echo "Could not read ARM64 build log"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Building for x86_64 architecture..."
+        if swift build -c release --arch x86_64 2>&1 | tee x86_64-build.log; then
+          echo "✅ x86_64 build completed successfully"
+        else
+          echo "❌ x86_64 build failed"
+          echo "Last 20 lines of x86_64 build log:"
+          tail -20 x86_64-build.log || echo "Could not read x86_64 build log"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Checking build artifacts..."
+        echo "ARM64 binary:"
+        ls -la .build/arm64-apple-macosx/release/vox || echo "ARM64 binary not found"
+        echo "x86_64 binary:"
+        ls -la .build/x86_64-apple-macosx/release/vox || echo "x86_64 binary not found"
+        
+        echo ""
+        echo "Creating universal binary..."
+        if lipo -create -output vox-universal \
           .build/arm64-apple-macosx/release/vox \
-          .build/x86_64-apple-macosx/release/vox
+          .build/x86_64-apple-macosx/release/vox; then
+          echo "✅ Universal binary created successfully"
+        else
+          echo "❌ Universal binary creation failed"
+          exit 1
+        fi
         
-        # Verify universal binary
+        echo ""
+        echo "Verifying universal binary..."
         file vox-universal
         lipo -info vox-universal
+        ls -la vox-universal
     
     - name: Test CLI functionality
       run: |
-        # Make binary executable
+        echo "=== Testing CLI Functionality ==="
+        
+        echo "Making binary executable..."
         chmod +x vox-universal
         
-        # Test basic CLI functionality
-        ./vox-universal --help || echo "Help command test completed"
+        echo "Checking binary permissions and properties..."
+        ls -la vox-universal
+        file vox-universal
         
-        # Test version if available
-        ./vox-universal --version || echo "Version test completed"
+        echo ""
+        echo "Testing help command..."
+        if ./vox-universal --help 2>&1 | tee cli-help.log; then
+          echo "✅ Help command executed successfully"
+        else
+          echo "⚠️ Help command returned non-zero exit code (this may be normal)"
+          echo "Help output:"
+          cat cli-help.log || echo "Could not read help output"
+        fi
+        
+        echo ""
+        echo "Testing version command..."
+        if ./vox-universal --version 2>&1 | tee cli-version.log; then
+          echo "✅ Version command executed successfully"
+        else
+          echo "⚠️ Version command returned non-zero exit code (this may be normal)"
+          echo "Version output:"
+          cat cli-version.log || echo "Could not read version output"
+        fi
+        
+        echo ""
+        echo "CLI functionality testing completed"
+    
+    - name: Build Validation Debug (on failure)
+      if: failure()
+      run: |
+        echo "=== BUILD VALIDATION FAILURE DEBUG ==="
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo ""
+        echo "Build directory contents:"
+        ls -la .build/ || echo "No .build directory"
+        echo ""
+        echo "Release build directory:"
+        ls -la .build/x86_64-apple-macosx/release/ || echo "No release directory"
+        echo ""
+        echo "Environment variables:"
+        env | grep -E "(SWIFT|XCODE|PATH)" || echo "No relevant env vars found"
+        echo ""
+        echo "Available disk space:"
+        df -h
+        echo ""
+        echo "Memory usage:"
+        vm_stat || echo "vm_stat not available"
+    
+    - name: Upload build validation logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-validation-logs
+        path: |
+          release-build.log
+          arm64-build.log
+          x86_64-build.log
+          cli-help.log
+          cli-version.log
+        retention-days: 7
     
     - name: Upload build artifacts
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: vox-universal-binary
