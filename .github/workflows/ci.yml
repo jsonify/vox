@@ -229,9 +229,29 @@ jobs:
       run: |
         echo "=== Starting Release Build Process ==="
         echo "Building with release configuration and verbose output..."
+        echo "Build command: swift build -c release --verbose"
+        echo "Working directory: $(pwd)"
+        
         if swift build -c release --verbose 2>&1 | tee release-build.log; then
           echo ""
           echo "=== Release build completed successfully ==="
+          echo "Build exit code: $?"
+          
+          # Check if the build log indicates any issues
+          if grep -i "error" release-build.log; then
+            echo "⚠️  Build completed but contained errors"
+          fi
+          if grep -i "warning" release-build.log; then
+            echo "⚠️  Build completed but contained warnings"
+          fi
+          if grep -i "failed" release-build.log; then
+            echo "⚠️  Build completed but had failures"
+          fi
+          
+          # Show the end of the build log
+          echo ""
+          echo "Last 10 lines of build log:"
+          tail -10 release-build.log || echo "Could not read build log"
           
           echo ""
           echo "=== Debugging Build Output Structure ==="
@@ -242,14 +262,17 @@ jobs:
           echo "Contents of .build directory:"
           ls -la .build/ || echo "No .build directory found"
           echo ""
-          echo "All subdirectories in .build:"
-          find .build -type d -maxdepth 3 2>/dev/null | sort || echo "Could not list .build subdirectories"
+          echo "All subdirectories in .build (detailed):"
+          find .build -type d 2>/dev/null | sort || echo "Could not list .build subdirectories"
           echo ""
           echo "All executables in .build:"
           find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
           echo ""
-          echo "All files in .build (first 20):"
-          find .build -type f | head -20 || echo "Could not list .build files"
+          echo "All executable files in .build:"
+          find .build -type f -executable 2>/dev/null || echo "No executable files found"
+          echo ""
+          echo "All files in .build (with details):"
+          find .build -type f -ls 2>/dev/null | head -30 || echo "Could not list .build files"
           
         else
           echo ""
@@ -305,7 +328,9 @@ jobs:
           ".build/arm64-apple-macosx/release/vox" \
           ".build/x86_64-apple-macosx/release/vox" \
           ".build/arm64-apple-macosx/debug/vox" \
-          ".build/x86_64-apple-macosx/debug/vox"; do
+          ".build/x86_64-apple-macosx/debug/vox" \
+          ".build/arm64-apple-macosx/vox" \
+          ".build/x86_64-apple-macosx/vox"; do
           
           if [ -f "$location" ]; then
             echo "✅ Found binary at: $location"
@@ -320,16 +345,33 @@ jobs:
         if [ -z "$VOX_BINARY" ]; then
           echo ""
           echo "Searching for any vox executable in .build..."
-          FOUND_BINARIES=$(find .build -name "vox" -type f -executable 2>/dev/null || true)
+          FOUND_BINARIES=$(find .build -name "vox" -type f 2>/dev/null || true)
           
           if [ -n "$FOUND_BINARIES" ]; then
-            echo "Found vox executables:"
+            echo "Found vox files:"
             echo "$FOUND_BINARIES"
             # Use the first one found
             VOX_BINARY=$(echo "$FOUND_BINARIES" | head -1)
             echo "Using: $VOX_BINARY"
           else
-            echo "No vox executables found in .build directory"
+            echo "No vox files found in .build directory"
+            echo ""
+            echo "Searching for any executable files..."
+            FOUND_EXECUTABLES=$(find .build -type f -executable 2>/dev/null || true)
+            if [ -n "$FOUND_EXECUTABLES" ]; then
+              echo "Found executable files:"
+              echo "$FOUND_EXECUTABLES"
+              # Look for anything that might be our binary
+              for exec in $FOUND_EXECUTABLES; do
+                if echo "$exec" | grep -q -E "(vox|main)" 2>/dev/null; then
+                  echo "Potential binary: $exec"
+                  VOX_BINARY="$exec"
+                  break
+                fi
+              done
+            else
+              echo "No executable files found in .build directory"
+            fi
           fi
         fi
         
