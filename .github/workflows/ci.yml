@@ -232,6 +232,25 @@ jobs:
         if swift build -c release --verbose 2>&1 | tee release-build.log; then
           echo ""
           echo "=== Release build completed successfully ==="
+          
+          echo ""
+          echo "=== Debugging Build Output Structure ==="
+          echo "Current working directory: $(pwd)"
+          echo "Contents of current directory:"
+          ls -la
+          echo ""
+          echo "Contents of .build directory:"
+          ls -la .build/ || echo "No .build directory found"
+          echo ""
+          echo "All subdirectories in .build:"
+          find .build -type d -maxdepth 3 2>/dev/null | sort || echo "Could not list .build subdirectories"
+          echo ""
+          echo "All executables in .build:"
+          find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
+          echo ""
+          echo "All files in .build (first 20):"
+          find .build -type f | head -20 || echo "Could not list .build files"
+          
         else
           echo ""
           echo "=== RELEASE BUILD FAILED ==="
@@ -271,30 +290,75 @@ jobs:
         # Check current architecture
         echo "Current architecture: $(uname -m)"
         echo "Current build artifacts:"
-        ls -la .build/release/ || echo "No release build directory found"
+        ls -la .build/ || echo "No .build directory found"
         
-        # Swift Package Manager creates universal binaries by default on macOS
         echo ""
-        echo "Checking if binary already exists..."
-        if [ -f ".build/release/vox" ]; then
-          echo "✅ Binary found at .build/release/vox"
-          echo "Binary info:"
-          file .build/release/vox
-          lipo -info .build/release/vox 2>/dev/null || echo "Binary is not a universal binary or lipo failed"
+        echo "=== Searching for Binary ==="
+        # Search for the vox binary in various possible locations
+        echo "Searching for vox executable..."
+        VOX_BINARY=""
+        
+        # Check common locations
+        for location in \
+          ".build/release/vox" \
+          ".build/debug/vox" \
+          ".build/arm64-apple-macosx/release/vox" \
+          ".build/x86_64-apple-macosx/release/vox" \
+          ".build/arm64-apple-macosx/debug/vox" \
+          ".build/x86_64-apple-macosx/debug/vox"; do
           
+          if [ -f "$location" ]; then
+            echo "✅ Found binary at: $location"
+            VOX_BINARY="$location"
+            break
+          else
+            echo "❌ Not found at: $location"
+          fi
+        done
+        
+        # If not found in standard locations, search more broadly
+        if [ -z "$VOX_BINARY" ]; then
           echo ""
-          echo "Copying binary to workspace..."
-          cp .build/release/vox vox-universal
+          echo "Searching for any vox executable in .build..."
+          FOUND_BINARIES=$(find .build -name "vox" -type f -executable 2>/dev/null || true)
           
-          echo "✅ Binary copied successfully"
-        else
-          echo "❌ Binary not found at expected location"
-          echo "Available files in .build/release/:"
-          ls -la .build/release/ || echo "No release directory"
+          if [ -n "$FOUND_BINARIES" ]; then
+            echo "Found vox executables:"
+            echo "$FOUND_BINARIES"
+            # Use the first one found
+            VOX_BINARY=$(echo "$FOUND_BINARIES" | head -1)
+            echo "Using: $VOX_BINARY"
+          else
+            echo "No vox executables found in .build directory"
+          fi
+        fi
+        
+        # Verify we found a binary
+        if [ -z "$VOX_BINARY" ] || [ ! -f "$VOX_BINARY" ]; then
+          echo ""
+          echo "❌ Binary not found at any expected location"
           echo "Available files in .build/:"
-          ls -la .build/ || echo "No .build directory"
+          find .build -name "*vox*" -type f 2>/dev/null || echo "No vox-related files found"
+          echo ""
+          echo "All executable files in .build/:"
+          find .build -type f -executable 2>/dev/null || echo "No executable files found"
           exit 1
         fi
+        
+        echo ""
+        echo "=== Processing Found Binary ==="
+        echo "Using binary: $VOX_BINARY"
+        echo "Binary info:"
+        file "$VOX_BINARY"
+        lipo -info "$VOX_BINARY" 2>/dev/null || echo "Binary architecture info not available"
+        ls -la "$VOX_BINARY"
+        
+        echo ""
+        echo "Copying binary to workspace..."
+        cp "$VOX_BINARY" vox-universal
+        chmod +x vox-universal
+        
+        echo "✅ Binary copied successfully"
         
         echo ""
         echo "Verifying final binary..."
