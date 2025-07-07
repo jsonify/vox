@@ -19,7 +19,7 @@ let package = Package(
             ],
             exclude: [
                 "vox-performance"
-            ],
+            ]
         ),
         .testTarget(
             name: "voxTests",
