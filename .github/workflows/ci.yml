@@ -234,24 +234,59 @@ jobs:
         
         if swift build -c release --verbose 2>&1 | tee release-build.log; then
           echo ""
-          echo "=== Release build completed successfully ==="
+          echo "=== Release build command completed ==="
           echo "Build exit code: $?"
           
           # Check if the build log indicates any issues
+          HAS_ERRORS=false
           if grep -i "error" release-build.log; then
             echo "⚠️  Build completed but contained errors"
+            HAS_ERRORS=true
           fi
           if grep -i "warning" release-build.log; then
             echo "⚠️  Build completed but contained warnings"
           fi
           if grep -i "failed" release-build.log; then
             echo "⚠️  Build completed but had failures"
+            HAS_ERRORS=true
           fi
           
           # Show the end of the build log
           echo ""
           echo "Last 10 lines of build log:"
           tail -10 release-build.log || echo "Could not read build log"
+          
+          # Check if release directory was actually created
+          echo ""
+          echo "=== Verifying Release Build Output ==="
+          RELEASE_DIR=""
+          for dir in ".build/arm64-apple-macosx/release" ".build/x86_64-apple-macosx/release" ".build/release"; do
+            if [ -d "$dir" ]; then
+              echo "✅ Found release directory: $dir"
+              RELEASE_DIR="$dir"
+              break
+            else
+              echo "❌ No release directory at: $dir"
+            fi
+          done
+          
+          if [ -z "$RELEASE_DIR" ] || [ "$HAS_ERRORS" = "true" ]; then
+            echo ""
+            echo "❌ Release build failed or produced no output directory"
+            echo "Attempting debug build as fallback..."
+            
+            if swift build -c debug --verbose 2>&1 | tee debug-build.log; then
+              echo "✅ Debug build completed successfully"
+              echo "Debug build will be used instead of release build"
+            else
+              echo "❌ Debug build also failed"
+              echo "Last 20 lines of debug build log:"
+              tail -20 debug-build.log || echo "Could not read debug build log"
+              exit 1
+            fi
+          else
+            echo "✅ Release build completed successfully"
+          fi
           
           echo ""
           echo "=== Debugging Build Output Structure ==="
@@ -321,12 +356,12 @@ jobs:
         echo "Searching for vox executable..."
         VOX_BINARY=""
         
-        # Check common locations
+        # Check common locations (prioritize release over debug)
         for location in \
           ".build/release/vox" \
-          ".build/debug/vox" \
           ".build/arm64-apple-macosx/release/vox" \
           ".build/x86_64-apple-macosx/release/vox" \
+          ".build/debug/vox" \
           ".build/arm64-apple-macosx/debug/vox" \
           ".build/x86_64-apple-macosx/debug/vox" \
           ".build/arm64-apple-macosx/vox" \
@@ -492,6 +527,8 @@ jobs:
         name: build-validation-logs
         path: |
           release-build.log
+          debug-build.log
+          manual-rebuild.log
           cli-help.log
           cli-version.log
         retention-days: 7
