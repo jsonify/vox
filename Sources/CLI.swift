@@ -82,24 +82,21 @@ struct Vox: ParsableCommand {
         displayStartupInfo(inputFile: inputFile)
         
         // Run async code in a blocking manner - this is safe at the top level
-        let group = DispatchGroup()
-        var processingError: Error?
+        let semaphore = DispatchSemaphore(value: 0)
+        let resultBox = ResultBox<Void>()
         
-        group.enter()
         Task {
             do {
                 try await processAudioFile(inputFile: inputFile)
+                resultBox.setValue(())
             } catch {
-                processingError = error
+                resultBox.setError(error)
             }
-            group.leave()
+            semaphore.signal()
         }
         
-        group.wait()
-        
-        if let error = processingError {
-            throw error
-        }
+        semaphore.wait()
+        try resultBox.getResult()
     }
 
     private func validateInputs(inputFile: String) throws {
