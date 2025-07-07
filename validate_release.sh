@@ -374,7 +374,8 @@ validate_security() {
     
     # Check for obvious security issues in strings
     if command -v strings &> /dev/null; then
-        local suspicious_strings=$(strings "$binary" | grep -iE "(password|secret|key|token)" | head -5)
+        # More targeted search to avoid false positives from Swift/system frameworks
+        local suspicious_strings=$(strings "$binary" | grep -iE "(hardcoded_password|secret_key|api_key.*=|token.*=)" | grep -v -E "(PublicKey|PrivateKey|keyPath|keyWindow)" | head -5)
         if [[ -n "$suspicious_strings" ]]; then
             record_warning "Potentially sensitive strings found in binary"
             echo "$suspicious_strings" | while read -r line; do
@@ -382,6 +383,15 @@ validate_security() {
             done
         else
             log_success "No obvious sensitive strings found"
+        fi
+        
+        # Additional check for more concerning patterns
+        local concerning_strings=$(strings "$binary" | grep -iE "(password.*=|secret.*=)" | head -3)
+        if [[ -n "$concerning_strings" ]]; then
+            log_warning "Additional security review recommended for:"
+            echo "$concerning_strings" | while read -r line; do
+                log_warning "  Review: $line"
+            done
         fi
     fi
 }
