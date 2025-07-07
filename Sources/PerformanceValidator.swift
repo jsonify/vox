@@ -178,7 +178,6 @@ public final class PerformanceValidator {
         let speechConfig = platformOptimizer.getSpeechRecognitionConfig()
         
         // Validate that optimizations are appropriate for the architecture
-        let expectedConcurrentOps = min(8, platformOptimizer.processorCount)
         let optimizationScore = calculateOptimizationScore(config: config, speechConfig: speechConfig)
         
         let passed = optimizationScore >= 0.7 // At least 70% optimization score
