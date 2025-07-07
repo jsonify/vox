@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jsonify/vox/actions/workflows/ci.yml/badge.svg)](https://github.com/jsonify/vox/actions/workflows/ci.yml)
 [![Release](https://github.com/jsonify/vox/actions/workflows/release.yml/badge.svg)](https://github.com/jsonify/vox/actions/workflows/release.yml)
-[![macOS](https://img.shields.io/badge/macOS-12.0+-blue.svg)](https://support.apple.com/macos)
+[![macOS](https://img.shields.io/badge/macOS-14.0+-blue.svg)](https://support.apple.com/macos)
 [![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 

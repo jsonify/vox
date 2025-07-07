@@ -12,24 +12,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, macos-14]  # Test both macOS versions
+        os: [macos-14]  # Target macOS 14+ only
         swift-version: ['5.9']
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Check System Swift
-      run: |
-        swift --version
-        echo "System Swift version checked for ${{ matrix.os }}"
-    
-    - name: Setup Swift (if needed)
+    - name: Setup Swift
       uses: swift-actions/setup-swift@v2
       with:
         swift-version: ${{ matrix.swift-version }}
-      # Only setup Swift if system Swift is insufficient
-      if: matrix.os == 'macos-14'
     
     - name: Cache Swift dependencies
       uses: actions/cache@v3

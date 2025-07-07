@@ -8,7 +8,7 @@ Vox is a native macOS command-line interface (CLI) application that extracts aud
 
 ## Key Technologies
 - **Language**: Swift 5.9+
-- **Target**: macOS 12.0+ (Monterey and later)
+- **Target**: macOS 14.0+ (Sonoma and later)
 - **CLI Framework**: Swift ArgumentParser
 - **Audio Processing**: AVFoundation + ffmpeg fallback
 - **Transcription**: Apple SpeechAnalyzer (primary), cloud APIs (fallback)
@@ -155,7 +155,7 @@ case .failure(let error):
 # Universal Binary Setup
 ARCHS = arm64 x86_64
 VALID_ARCHS = arm64 x86_64
-MACOSX_DEPLOYMENT_TARGET = 12.0
+MACOSX_DEPLOYMENT_TARGET = 14.0
 SWIFT_VERSION = 5.9
 
 # Development Commands
