@@ -24,6 +24,35 @@ jobs:
       with:
         swift-version: ${{ matrix.swift-version }}
     
+    - name: Verify Swift installation
+      run: |
+        echo "=== Swift Environment Check ==="
+        swift --version
+        swiftc --version
+        which swift
+        which swiftc
+        echo "Platform: $(uname -a)"
+        echo "Xcode version: $(xcode-select --print-path)"
+        xcodebuild -version || echo "xcodebuild not available"
+        echo "Swift setup completed successfully"
+    
+    - name: Debug Package Dependencies
+      run: |
+        echo "=== Package Dependencies Debug ==="
+        echo "Checking Package.swift dependencies..."
+        swift package describe || echo "Package describe failed"
+        echo ""
+        echo "Checking for Package.resolved:"
+        if [ -f Package.resolved ]; then
+          echo "Package.resolved exists:"
+          cat Package.resolved
+        else
+          echo "Package.resolved does not exist"
+        fi
+        echo ""
+        echo "Resolving dependencies..."
+        swift package resolve || echo "Package resolve failed"
+    
     - name: Cache Swift dependencies
       uses: actions/cache@v3
       with:
@@ -34,13 +63,111 @@ jobs:
     
     - name: Build project
       run: |
+        echo "=== Starting Build Process ==="
+        echo "Working directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo ""
+        echo "Package.swift contents:"
+        cat Package.swift
+        echo ""
+        echo "Starting swift build with verbose output..."
         # First ensure the project builds successfully
-        swift build --verbose
+        if swift build --verbose 2>&1 | tee build.log; then
+          echo ""
+          echo "=== Build completed successfully ==="
+        else
+          echo ""
+          echo "=== BUILD FAILED ==="
+          echo "Exit code: $?"
+          echo "Last 50 lines of build log:"
+          tail -50 build.log || echo "Could not read build log"
+          echo ""
+          echo "Checking for common build issues..."
+          
+          # Check for specific error patterns
+          if grep -i "error.*not found" build.log; then
+            echo "❌ Missing dependency detected"
+          fi
+          if grep -i "permission denied" build.log; then
+            echo "❌ Permission issue detected"
+          fi
+          if grep -i "unavailable" build.log; then
+            echo "❌ API unavailability detected"
+          fi
+          if grep -i "deprecated" build.log; then
+            echo "⚠️  Deprecated API usage detected"
+          fi
+          
+          exit 1
+        fi
     
     - name: Run CI-safe tests
       run: |
+        echo "=== Starting CI-safe Tests ==="
+        echo "Available test targets:"
+        swift test --list-tests || echo "Could not list tests"
+        echo ""
+        echo "Running CITests with verbose output..."
         # Run only CI-safe tests that don't require file system operations
-        swift test --filter CITests --verbose
+        if swift test --filter CITests --verbose 2>&1 | tee test.log; then
+          echo ""
+          echo "=== CI tests completed successfully ==="
+        else
+          echo ""
+          echo "=== TESTS FAILED ==="
+          echo "Exit code: $?"
+          echo "Last 50 lines of test log:"
+          tail -50 test.log || echo "Could not read test log"
+          echo ""
+          echo "Checking for common test issues..."
+          
+          # Check for specific test error patterns
+          if grep -i "test.*failed" test.log; then
+            echo "❌ Test failures detected"
+          fi
+          if grep -i "compilation failed" test.log; then
+            echo "❌ Test compilation failed"
+          fi
+          if grep -i "no tests ran" test.log; then
+            echo "❌ No tests executed"
+          fi
+          
+          exit 1
+        fi
+    
+    - name: Environment Debug (on failure)
+      if: failure()
+      run: |
+        echo "=== FAILURE ENVIRONMENT DEBUG ==="
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo ""
+        echo "Build directory contents:"
+        ls -la .build/ || echo "No .build directory"
+        echo ""
+        echo "Environment variables:"
+        env | grep -E "(SWIFT|XCODE|PATH)" || echo "No relevant env vars found"
+        echo ""
+        echo "Process list (Swift related):"
+        ps aux | grep -i swift || echo "No Swift processes"
+        echo ""
+        echo "Available disk space:"
+        df -h
+        echo ""
+        echo "Memory usage:"
+        vm_stat || echo "vm_stat not available"
+    
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-logs-${{ matrix.os }}
+        path: |
+          build.log
+          test.log
+        retention-days: 7
 
   lint:
     name: SwiftLint
