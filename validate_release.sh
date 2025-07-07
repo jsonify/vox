@@ -153,25 +153,65 @@ validate_functionality() {
     local binary="$DIST_DIR/$PROJECT_NAME"
     
     # Test help command
-    if timeout 10s "$binary" --help > /dev/null 2>&1; then
-        log_success "Help command executes successfully"
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout 10s "$binary" --help > /dev/null 2>&1; then
+            log_success "Help command executes successfully"
+        else
+            record_warning "Help command failed or timed out (may be CI environment specific)"
+            log_info "This is non-fatal as the binary is functional and local testing passes"
+        fi
     else
-        record_warning "Help command failed or timed out (may be CI environment specific)"
-        log_info "This is non-fatal as the binary is functional and local testing passes"
+        # Fallback test without timeout (risky but necessary for CI)
+        if "$binary" --help > /dev/null 2>&1 & 
+        then
+            local help_pid=$!
+            sleep 2
+            if kill -0 $help_pid 2>/dev/null; then
+                kill $help_pid 2>/dev/null
+                record_warning "Help command appears to hang (killed after 2s)"
+            else
+                wait $help_pid
+                if [[ $? -eq 0 ]]; then
+                    log_success "Help command executes successfully (no timeout available)"
+                else
+                    record_warning "Help command failed (no timeout available)"
+                fi
+            fi
+        else
+            record_warning "Could not test help command (no timeout available)"
+        fi
     fi
     
     # Test version command (if available)
-    if timeout 10s "$binary" --version > /dev/null 2>&1; then
-        log_success "Version command executes successfully"
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout 10s "$binary" --version > /dev/null 2>&1; then
+            log_success "Version command executes successfully"
+        else
+            log_info "Version command not available or failed (this may be expected)"
+        fi
     else
-        log_info "Version command not available or failed (this may be expected)"
+        # Simple test without timeout
+        if "$binary" --version > /dev/null 2>&1; then
+            log_success "Version command executes successfully (no timeout available)"
+        else
+            log_info "Version command not available or failed (this may be expected)"
+        fi
     fi
     
     # Test invalid command (should fail gracefully)
-    if timeout 10s "$binary" --invalid-command > /dev/null 2>&1; then
-        record_warning "Binary accepts invalid commands (should show error)"
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout 10s "$binary" --invalid-command > /dev/null 2>&1; then
+            record_warning "Binary accepts invalid commands (should show error)"
+        else
+            log_success "Binary properly rejects invalid commands"
+        fi
     else
-        log_success "Binary properly rejects invalid commands"
+        # Simple test without timeout
+        if "$binary" --invalid-command > /dev/null 2>&1; then
+            record_warning "Binary accepts invalid commands (should show error)"
+        else
+            log_success "Binary properly rejects invalid commands (no timeout available)"
+        fi
     fi
 }
 
