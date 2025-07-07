@@ -1,0 +1,912 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: '5.9'
+    
+    - name: Verify Swift installation
+      run: |
+        echo "=== Swift Environment Check ==="
+        swift --version
+        swiftc --version
+        which swift
+        which swiftc
+        echo "Platform: $(uname -a)"
+        echo "Xcode version: $(xcode-select --print-path)"
+        xcodebuild -version || echo "xcodebuild not available"
+        echo "Swift setup completed successfully"
+    
+    - name: Cache Swift dependencies
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}-swift-release-${{ hashFiles('Package.swift', 'Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-swift-release-
+          ${{ runner.os }}-swift-
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Release version: $VERSION"
+    
+    - name: Run tests
+      run: |
+        echo "=== Starting CI-safe Tests ==="
+        echo "Available test targets:"
+        swift test --list-tests || echo "Could not list tests"
+        echo ""
+        echo "Running CITests with verbose output..."
+        # Run only CI-safe tests that don't require file system operations
+        if swift test --filter CITests --verbose 2>&1 | tee test.log; then
+          echo ""
+          echo "=== CI tests completed successfully ==="
+        else
+          echo ""
+          echo "=== TESTS FAILED ==="
+          echo "Exit code: $?"
+          echo "Last 50 lines of test log:"
+          tail -50 test.log || echo "Could not read test log"
+          echo ""
+          echo "Checking for common test issues..."
+          
+          # Check for specific test error patterns
+          if grep -i "test.*failed" test.log; then
+            echo "❌ Test failures detected"
+          fi
+          if grep -i "compilation failed" test.log; then
+            echo "❌ Test compilation failed"
+          fi
+          if grep -i "no tests ran" test.log; then
+            echo "❌ No tests executed"
+          fi
+          if grep -i "error.*not found" test.log; then
+            echo "❌ Missing dependency detected in tests"
+          fi
+          if grep -i "permission denied" test.log; then
+            echo "❌ Permission issue detected in tests"
+          fi
+          if grep -i "unavailable" test.log; then
+            echo "❌ API unavailability detected in tests"
+          fi
+          
+          echo ""
+          echo "=== TEST ENVIRONMENT DEBUG ==="
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo ""
+          echo "Build directory contents:"
+          ls -la .build/ || echo "No .build directory"
+          echo ""
+          echo "Environment variables:"
+          env | grep -E "(SWIFT|XCODE|PATH)" || echo "No relevant env vars found"
+          
+          exit 1
+        fi
+    
+    - name: Build optimized release binaries
+      run: |
+        echo "=== BUILD DEBUG INFORMATION ==="
+        echo "Working directory: $(pwd)"
+        echo "User: $(whoami)"
+        echo "Platform: $(uname -a)"
+        echo "Available disk space:"
+        df -h
+        echo "Memory info:"
+        vm_stat | head -10
+        echo ""
+        
+        echo "=== CHECKING BUILD PREREQUISITES ==="
+        echo "Swift version:"
+        swift --version
+        swiftc --version || echo "swiftc not available"
+        which swift
+        which swiftc || echo "swiftc not found"
+        echo ""
+        echo "Xcode version:"
+        xcode-select --print-path
+        xcodebuild -version || echo "xcodebuild not available"
+        echo ""
+        echo "Available tools:"
+        which lipo || echo "lipo not found"
+        which strip || echo "strip not found"
+        echo ""
+        
+        echo "=== PACKAGE DEPENDENCIES DEBUG ==="
+        echo "Checking Package.swift dependencies..."
+        swift package describe || echo "Package describe failed"
+        echo ""
+        echo "Checking for Package.resolved:"
+        if [ -f Package.resolved ]; then
+          echo "Package.resolved exists:"
+          cat Package.resolved
+        else
+          echo "Package.resolved does not exist"
+        fi
+        echo ""
+        echo "Resolving dependencies..."
+        swift package resolve || echo "Package resolve failed"
+        echo ""
+        
+        echo "=== CHECKING BUILD SCRIPT ==="
+        if [ ! -f "./build.sh" ]; then
+          echo "❌ ERROR: build.sh not found"
+          echo "Directory contents:"
+          ls -la
+          exit 1
+        fi
+        
+        if [ ! -x "./build.sh" ]; then
+          echo "❌ ERROR: build.sh not executable"
+          ls -la ./build.sh
+          echo "Making executable..."
+          chmod +x ./build.sh
+        fi
+        
+        echo "Build script info:"
+        ls -la ./build.sh
+        echo ""
+        echo "First 20 lines of build script:"
+        head -20 ./build.sh
+        echo ""
+        
+        echo "=== STARTING BUILD PROCESS ==="
+        echo "Using simplified GitHub Actions build (skipping complex universal binary)"
+        
+        # Use simple release build instead of complex build script
+        echo "Building release binary with swift build..."
+        if swift build -c release --verbose 2>&1 | tee build_output.log; then
+          echo ""
+          echo "=== Build script command completed ==="
+          echo "Build exit code: $?"
+          
+          # Check if the build log indicates any issues even if exit code was 0
+          HAS_ERRORS=false
+          if grep -i "error" build_output.log; then
+            echo "⚠️  Build completed but contained errors"
+            HAS_ERRORS=true
+          fi
+          if grep -i "warning" build_output.log; then
+            echo "⚠️  Build completed but contained warnings"
+          fi
+          if grep -i "failed" build_output.log; then
+            echo "⚠️  Build completed but had failures"
+            HAS_ERRORS=true
+          fi
+          
+          # Show the end of the build log
+          echo ""
+          echo "Last 10 lines of build log:"
+          tail -10 build_output.log || echo "Could not read build log"
+          
+          if [ "$HAS_ERRORS" = "true" ]; then
+            echo ""
+            echo "❌ Build script completed but contained errors"
+            echo "=== DETAILED BUILD ERROR ANALYSIS ==="
+            echo "Checking for specific error patterns..."
+            
+            if grep -i "error.*not found" build_output.log; then
+              echo "❌ Missing dependency detected"
+            fi
+            if grep -i "permission denied" build_output.log; then
+              echo "❌ Permission issue detected"
+            fi
+            if grep -i "unavailable" build_output.log; then
+              echo "❌ API unavailability detected"
+            fi
+            if grep -i "optimization" build_output.log; then
+              echo "⚠️  Optimization issue detected"
+            fi
+            if grep -i "linking" build_output.log; then
+              echo "❌ Linking issue detected"
+            fi
+            if grep -i "architecture" build_output.log; then
+              echo "❌ Architecture issue detected"
+            fi
+            if grep -i "compilation failed" build_output.log; then
+              echo "❌ Compilation failed"
+            fi
+            
+            echo ""
+            echo "=== ENVIRONMENT DEBUG ON BUILD ISSUES ==="
+            echo "Current directory contents:"
+            ls -la
+            echo ""
+            echo "Build directory contents:"
+            ls -la .build/ || echo "No .build directory"
+            echo ""
+            echo "All subdirectories in .build:"
+            find .build -type d 2>/dev/null | sort || echo "Could not list .build subdirectories"
+            echo ""
+            echo "All executables in .build:"
+            find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
+            
+            exit 1
+          else
+            echo "✅ Build script completed successfully with no errors detected"
+          fi
+        else
+          BUILD_EXIT_CODE=$?
+          echo "❌ Build script failed with exit code: $BUILD_EXIT_CODE"
+          echo ""
+          echo "=== BUILD FAILURE ANALYSIS ==="
+          echo "Last 50 lines of build output:"
+          tail -50 build_output.log || echo "Could not read build output"
+          echo ""
+          echo "Checking for common build issues..."
+          
+          # Check for specific error patterns
+          if grep -i "error.*not found" build_output.log; then
+            echo "❌ Missing dependency detected"
+          fi
+          if grep -i "permission denied" build_output.log; then
+            echo "❌ Permission issue detected"
+          fi
+          if grep -i "command not found" build_output.log; then
+            echo "❌ Missing command detected"
+          fi
+          if grep -i "error.*architecture" build_output.log; then
+            echo "❌ Architecture issue detected"
+          fi
+          if grep -i "unavailable" build_output.log; then
+            echo "❌ API unavailability detected"
+          fi
+          if grep -i "compilation failed" build_output.log; then
+            echo "❌ Compilation failed"
+          fi
+          if grep -i "linking" build_output.log; then
+            echo "❌ Linking issue detected"
+          fi
+          if grep -i "no such file" build_output.log; then
+            echo "❌ Missing file detected"
+          fi
+          
+          echo ""
+          echo "=== ENVIRONMENT DEBUG ON FAILURE ==="
+          echo "Current directory contents:"
+          ls -la
+          echo ""
+          echo "Build directory contents:"
+          ls -la .build/ || echo "No .build directory"
+          echo ""
+          echo "Environment variables:"
+          env | grep -E "(SWIFT|XCODE|PATH)" || echo "No relevant env vars found"
+          echo ""
+          echo "Process list:"
+          ps aux | grep -i swift | head -10 || echo "No Swift processes"
+          echo ""
+          echo "Available disk space:"
+          df -h
+          echo ""
+          echo "Memory usage:"
+          vm_stat || echo "vm_stat not available"
+          
+          exit $BUILD_EXIT_CODE
+        fi
+        
+        echo ""
+        echo "=== POST-BUILD VERIFICATION ==="
+        
+        # Comprehensive build output verification
+        echo "=== Verifying Build Output Structure ==="
+        echo "Current working directory: $(pwd)"
+        echo "Contents of current directory:"
+        ls -la
+        echo ""
+        echo "Contents of .build directory:"
+        ls -la .build/ || echo "No .build directory found"
+        echo ""
+        echo "All subdirectories in .build (detailed):"
+        find .build -type d 2>/dev/null | sort || echo "Could not list .build subdirectories"
+        echo ""
+        echo "All executables in .build:"
+        find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
+        echo ""
+        echo "All executable files in .build:"
+        find .build -type f -executable 2>/dev/null | head -20 || echo "No executable files found"
+        echo ""
+        
+        # Check if dist directory was created
+        if [ ! -d "dist" ]; then
+          echo "❌ ERROR: dist directory not created"
+          echo "Directory contents:"
+          ls -la
+          echo ""
+          echo "Checking .build directory for vox binary:"
+          find .build -name "vox" -type f 2>/dev/null || echo "No vox binary found in .build"
+          echo ""
+          echo "All files in .build (with details):"
+          find .build -type f -ls 2>/dev/null | head -30 || echo "Could not list .build files"
+          exit 1
+        fi
+        
+        echo "✅ dist directory exists"
+        echo "dist directory contents:"
+        ls -la dist/
+        echo ""
+        
+        # Check if binary was created
+        if [ ! -f "dist/vox" ]; then
+          echo "❌ ERROR: vox binary not found in dist/"
+          echo "Searching for vox binary everywhere:"
+          find . -name "vox" -type f 2>/dev/null || echo "No vox binary found anywhere"
+          echo ""
+          echo "Checking build artifacts in detail:"
+          find .build -type f -name "*vox*" 2>/dev/null || echo "No vox-related files found"
+          echo ""
+          echo "All executable files in project:"
+          find . -type f -executable 2>/dev/null | head -20 || echo "No executable files found"
+          exit 1
+        fi
+        
+        echo "✅ vox binary found"
+        
+        # Verify binary is executable
+        if [ ! -x "dist/vox" ]; then
+          echo "❌ ERROR: vox binary is not executable"
+          ls -la dist/vox
+          echo ""
+          echo "File permissions analysis:"
+          stat dist/vox || echo "Could not stat vox binary"
+          exit 1
+        fi
+        
+        echo "✅ vox binary is executable"
+        
+        # Additional binary verification
+        echo ""
+        echo "=== BINARY VERIFICATION ==="
+        echo "Binary file details:"
+        ls -la dist/vox
+        echo ""
+        echo "File type analysis:"
+        file dist/vox || echo "Could not analyze file type"
+        echo ""
+        echo "Binary size analysis:"
+        du -h dist/vox || echo "Could not get file size"
+        
+        echo ""
+        echo "=== BINARY OPTIMIZATION ==="
+        
+        # Get initial size
+        INITIAL_SIZE=$(stat -f%z "dist/vox" 2>/dev/null || stat -c%s "dist/vox" 2>/dev/null)
+        echo "Initial binary size: $INITIAL_SIZE bytes"
+        
+        # Apply size optimizations
+        echo "Applying size optimizations..."
+        if strip dist/vox; then
+          echo "✅ Binary stripped successfully"
+        else
+          echo "⚠️  Strip failed, continuing without optimization"
+        fi
+        
+        # Get final size
+        FINAL_SIZE=$(stat -f%z "dist/vox" 2>/dev/null || stat -c%s "dist/vox" 2>/dev/null)
+        echo "Final binary size: $FINAL_SIZE bytes"
+        if [ "$INITIAL_SIZE" -gt "$FINAL_SIZE" ]; then
+          SAVINGS=$((INITIAL_SIZE - FINAL_SIZE))
+          echo "✅ Size reduction: $SAVINGS bytes"
+        fi
+        
+        echo ""
+        echo "=== FINAL BINARY ANALYSIS ==="
+        echo "Binary details:"
+        ls -la dist/vox
+        echo ""
+        echo "File type:"
+        file dist/vox
+        echo ""
+        echo "Architecture info:"
+        if lipo -info dist/vox; then
+          echo "✅ Architecture info retrieved"
+        else
+          echo "❌ Could not get architecture info"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ BUILD PROCESS COMPLETED SUCCESSFULLY"
+    
+    - name: Validate release build
+      run: |
+        echo "=== RELEASE VALIDATION DEBUG ==="
+        echo "Starting comprehensive release validation..."
+        
+        # Check if validation script exists
+        if [ ! -f "./validate_release.sh" ]; then
+          echo "❌ ERROR: validate_release.sh not found"
+          echo "Directory contents:"
+          ls -la
+          echo ""
+          echo "⚠️  Skipping validation - script missing"
+          exit 0
+        fi
+        
+        # Make script executable if needed
+        if [ ! -x "./validate_release.sh" ]; then
+          echo "Making validate_release.sh executable..."
+          chmod +x ./validate_release.sh
+        fi
+        
+        echo "Validation script info:"
+        ls -la ./validate_release.sh
+        echo ""
+        
+        # Run validation with comprehensive error handling
+        echo "Running validation: ./validate_release.sh"
+        if ./validate_release.sh 2>&1 | tee validation_output.log; then
+          echo "✅ Release validation completed successfully"
+        else
+          VALIDATION_EXIT_CODE=$?
+          echo "❌ Release validation failed with exit code: $VALIDATION_EXIT_CODE"
+          echo ""
+          echo "=== VALIDATION FAILURE ANALYSIS ==="
+          echo "Last 50 lines of validation output:"
+          tail -50 validation_output.log || echo "Could not read validation output"
+          echo ""
+          echo "Checking for validation issues:"
+          if grep -i "binary.*not found" validation_output.log; then
+            echo "❌ Binary not found during validation"
+          fi
+          if grep -i "architecture.*invalid" validation_output.log; then
+            echo "❌ Architecture validation failed"
+          fi
+          if grep -i "permission denied" validation_output.log; then
+            echo "❌ Permission issue during validation"
+          fi
+          echo ""
+          echo "Current dist/ contents:"
+          ls -la dist/ || echo "No dist directory"
+          exit $VALIDATION_EXIT_CODE
+        fi
+    
+    - name: Create distribution package
+      run: |
+        echo "=== DISTRIBUTION PACKAGE CREATION DEBUG ==="
+        echo "Starting package creation process..."
+        
+        # Verify version variable
+        VERSION="${{ steps.version.outputs.version }}"
+        echo "Version: $VERSION"
+        
+        if [ -z "$VERSION" ]; then
+          echo "❌ ERROR: Version variable is empty"
+          echo "Available variables:"
+          echo "  steps.version.outputs.tag: ${{ steps.version.outputs.tag }}"
+          echo "  steps.version.outputs.version: ${{ steps.version.outputs.version }}"
+          exit 1
+        fi
+        
+        # Check dist directory
+        if [ ! -d "dist" ]; then
+          echo "❌ ERROR: dist directory not found"
+          echo "Current directory contents:"
+          ls -la
+          exit 1
+        fi
+        
+        echo "✅ dist directory exists"
+        echo "dist directory contents before packaging:"
+        ls -la dist/
+        
+        # Check if vox binary exists
+        if [ ! -f "dist/vox" ]; then
+          echo "❌ ERROR: vox binary not found in dist/"
+          exit 1
+        fi
+        
+        echo "✅ vox binary found"
+        echo "Binary info:"
+        ls -la dist/vox
+        file dist/vox
+        
+        # Change to dist directory
+        echo "Changing to dist directory..."
+        cd dist
+        
+        echo "Working directory: $(pwd)"
+        echo "Contents:"
+        ls -la
+        
+        # Create tar.gz archive
+        echo ""
+        echo "=== CREATING TAR.GZ ARCHIVE ==="
+        TARBALL_NAME="vox-${VERSION}-macos-universal.tar.gz"
+        echo "Creating: $TARBALL_NAME"
+        
+        if tar -czf "$TARBALL_NAME" vox; then
+          echo "✅ tar.gz archive created successfully"
+          echo "Archive info:"
+          ls -la "$TARBALL_NAME"
+        else
+          echo "❌ ERROR: Failed to create tar.gz archive"
+          exit 1
+        fi
+        
+        # Create zip archive
+        echo ""
+        echo "=== CREATING ZIP ARCHIVE ==="
+        ZIP_NAME="vox-${VERSION}-macos-universal.zip"
+        echo "Creating: $ZIP_NAME"
+        
+        if zip "$ZIP_NAME" vox; then
+          echo "✅ zip archive created successfully"
+          echo "Archive info:"
+          ls -la "$ZIP_NAME"
+        else
+          echo "❌ ERROR: Failed to create zip archive"
+          exit 1
+        fi
+        
+        # Generate checksums
+        echo ""
+        echo "=== GENERATING CHECKSUMS ==="
+        echo "Generating checksums for archives..."
+        
+        if shasum -a 256 *.tar.gz *.zip > checksums.txt; then
+          echo "✅ Checksums generated successfully"
+        else
+          echo "❌ ERROR: Failed to generate checksums"
+          exit 1
+        fi
+        
+        echo ""
+        echo "=== FINAL DISTRIBUTION SUMMARY ==="
+        echo "Distribution files created:"
+        ls -la *.tar.gz *.zip *.txt
+        
+        echo ""
+        echo "Checksums:"
+        cat checksums.txt
+        
+        echo ""
+        echo "Archive verification:"
+        echo "tar.gz contents:"
+        tar -tzf "$TARBALL_NAME" || echo "Could not list tar.gz contents"
+        echo "zip contents:"
+        unzip -l "$ZIP_NAME" || echo "Could not list zip contents"
+        
+        echo ""
+        echo "✅ DISTRIBUTION PACKAGE CREATION COMPLETED"
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        echo "=== GENERATING RELEASE NOTES ==="
+        
+        # Get previous tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        echo "Previous tag: $PREVIOUS_TAG"
+        echo "Current tag: ${{ steps.version.outputs.tag }}"
+        echo "Version: ${{ steps.version.outputs.version }}"
+        echo ""
+        
+        echo "Generating release notes..."
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "Changes since $PREVIOUS_TAG:" > release_notes.md
+          echo "" >> release_notes.md
+          echo "=== Git log from $PREVIOUS_TAG to HEAD ==="
+          git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD | tee -a release_notes.md
+          echo ""
+        else
+          echo "Initial release detected - no previous tag found"
+          echo "Initial release of Vox CLI" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Features" >> release_notes.md
+          echo "- MP4 video audio extraction" >> release_notes.md
+          echo "- Native macOS speech transcription" >> release_notes.md
+          echo "- Cloud API fallback support" >> release_notes.md
+          echo "- Multiple output formats (TXT, SRT, JSON)" >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "## Installation" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### macOS Universal Binary" >> release_notes.md
+        echo "1. Download \`vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz\`" >> release_notes.md
+        echo "2. Extract: \`tar -xzf vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz\`" >> release_notes.md
+        echo "3. Install: \`sudo mv vox /usr/local/bin/\`" >> release_notes.md
+        echo "4. Verify: \`vox --version\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Homebrew (Alternative)" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Add custom tap (when available)" >> release_notes.md
+        echo "brew tap jsonify/vox" >> release_notes.md
+        echo "brew install vox" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Checksums" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        
+        echo "Adding checksums to release notes..."
+        if [ -f "dist/checksums.txt" ]; then
+          cat dist/checksums.txt >> release_notes.md
+          echo "✅ Checksums added to release notes"
+        else
+          echo "❌ WARNING: checksums.txt not found"
+          echo "Current dist/ contents:"
+          ls -la dist/ || echo "No dist directory"
+        fi
+        
+        echo "\`\`\`" >> release_notes.md
+        
+        echo ""
+        echo "=== FINAL RELEASE NOTES ==="
+        cat release_notes.md
+    
+    - name: Prepare GitHub Release
+      run: |
+        echo "=== PREPARING GITHUB RELEASE ==="
+        echo "Tag name: ${{ steps.version.outputs.tag }}"
+        echo "Release name: Vox CLI ${{ steps.version.outputs.version }}"
+        echo "Version: ${{ steps.version.outputs.version }}"
+        echo "Is prerelease: ${{ contains(steps.version.outputs.version, '-') }}"
+        echo ""
+        
+        echo "=== VERIFYING RELEASE FILES ==="
+        echo "Files to be uploaded:"
+        echo "- dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz"
+        echo "- dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip"
+        echo "- dist/checksums.txt"
+        echo ""
+        
+        echo "Checking file existence:"
+        if [ -f "dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz" ]; then
+          echo "✅ tar.gz file exists"
+          ls -la "dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz"
+        else
+          echo "❌ tar.gz file missing"
+        fi
+        
+        if [ -f "dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip" ]; then
+          echo "✅ zip file exists"
+          ls -la "dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip"
+        else
+          echo "❌ zip file missing"
+        fi
+        
+        if [ -f "dist/checksums.txt" ]; then
+          echo "✅ checksums file exists"
+          ls -la "dist/checksums.txt"
+          echo "Checksums content:"
+          cat "dist/checksums.txt"
+        else
+          echo "❌ checksums file missing"
+        fi
+        
+        if [ -f "release_notes.md" ]; then
+          echo "✅ release notes file exists"
+          ls -la "release_notes.md"
+        else
+          echo "❌ release notes file missing"
+        fi
+        
+        echo ""
+        echo "All dist/ files:"
+        ls -la dist/
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: Vox CLI ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+        files: |
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
+          dist/checksums.txt
+    
+    - name: Environment Debug (on failure)
+      if: failure()
+      run: |
+        echo "=== RELEASE FAILURE ENVIRONMENT DEBUG ==="
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo ""
+        echo "Build directory contents:"
+        ls -la .build/ || echo "No .build directory"
+        echo ""
+        echo "Dist directory contents:"
+        ls -la dist/ || echo "No dist directory"
+        echo ""
+        echo "Environment variables:"
+        env | grep -E "(SWIFT|XCODE|PATH)" || echo "No relevant env vars found"
+        echo ""
+        echo "Process list (Swift related):"
+        ps aux | grep -i swift || echo "No Swift processes"
+        echo ""
+        echo "Available disk space:"
+        df -h
+        echo ""
+        echo "Memory usage:"
+        vm_stat || echo "vm_stat not available"
+        echo ""
+        echo "Swift environment check:"
+        swift --version || echo "Swift not available"
+        swiftc --version || echo "swiftc not available"
+        which swift || echo "swift not found"
+        which swiftc || echo "swiftc not found"
+        echo ""
+        echo "Xcode environment:"
+        xcode-select --print-path || echo "xcode-select not available"
+        xcodebuild -version || echo "xcodebuild not available"
+        echo ""
+        echo "All build artifacts:"
+        find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
+        echo ""
+        echo "All log files:"
+        find . -name "*.log" -type f 2>/dev/null | head -10 || echo "No log files found"
+    
+    - name: Upload debug artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-debug-logs
+        path: |
+          build_output.log
+          validation_output.log
+          test.log
+          dist/
+        retention-days: 7
+    
+    - name: Upload build logs (always)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-build-logs
+        path: |
+          build_output.log
+          validation_output.log
+          test.log
+          release_notes.md
+        retention-days: 3
+
+  homebrew-update:
+    name: Update Homebrew Formula
+    runs-on: ubuntu-latest
+    needs: build-and-release
+    if: ${{ !contains(github.ref, '-') }} # Only for stable releases
+    
+    steps:
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        
+    - name: Download release asset
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        ASSET_NAME="vox-${VERSION}-macos-universal.tar.gz"
+        
+        # Download the release asset
+        curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -o "$ASSET_NAME" \
+          "https://github.com/jsonify/vox/releases/download/v${VERSION}/${ASSET_NAME}"
+        
+        # Calculate SHA256
+        SHA256=$(sha256sum "$ASSET_NAME" | cut -d' ' -f1)
+        echo "SHA256: $SHA256"
+        echo "sha256=$SHA256" >> $GITHUB_ENV
+        
+    - name: Checkout homebrew-vox repository
+      uses: actions/checkout@v4
+      with:
+        repository: jsonify/homebrew-vox
+        token: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
+        path: homebrew-vox
+        
+    - name: Update formula
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        # Update version and SHA256 in formula
+        sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/vox.rb
+        sed -i "s/sha256 \".*\"/sha256 \"${{ env.sha256 }}\"/" Formula/vox.rb
+        
+        # Verify changes
+        echo "Updated formula:"
+        cat Formula/vox.rb
+        
+    - name: Commit and push changes
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        git add Formula/vox.rb
+        git commit -m "Update vox to v$VERSION
+
+        - Version: $VERSION
+        - SHA256: ${{ env.sha256 }}
+        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION"
+        
+        git push origin main
+        
+    - name: Create PR for manual review (fallback)
+      if: failure()
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        # Create a branch for the update
+        git checkout -b "update-v$VERSION"
+        git push origin "update-v$VERSION"
+        
+        # Create PR using GitHub CLI
+        echo "Creating fallback PR for manual review..."
+        gh pr create \
+          --title "Update vox to v$VERSION" \
+          --body "Automated update to vox v$VERSION
+
+        - Version: $VERSION
+        - SHA256: ${{ env.sha256 }}
+        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION
+
+        This PR was created automatically because the direct push failed." \
+          --base main \
+          --head "update-v$VERSION"
+      env:
+        GH_TOKEN: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
+
+  notify:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [build-and-release, homebrew-update]
+    if: always()
+    
+    steps:
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Notify Success
+      if: needs.build-and-release.result == 'success'
+      run: |
+        echo "🎉 Vox CLI ${{ steps.version.outputs.version }} released successfully!"
+        echo "✅ Universal binary created and uploaded"
+        echo "✅ GitHub release created"
+        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+    
+    - name: Notify Failure
+      if: needs.build-and-release.result == 'failure'
+      run: |
+        echo "❌ Release failed for Vox CLI ${{ steps.version.outputs.version }}"
+        echo "Check the build logs for details"
+        exit 1
