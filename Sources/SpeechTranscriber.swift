@@ -2,38 +2,6 @@ import Foundation
 import Speech
 import AVFoundation
 
-/// Thread-safe container for recognition state shared across async boundaries
-private final class RecognitionSharedState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _segments: [TranscriptionSegment] = []
-    private var _finalText: String = ""
-    private var _confidence: Double = 0.0
-    
-    func updateSegments(_ segments: [TranscriptionSegment]) {
-        lock.lock()
-        defer { lock.unlock() }
-        _segments = segments
-    }
-    
-    func updateFinalText(_ text: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        _finalText = text
-    }
-    
-    func updateConfidence(_ confidence: Double) {
-        lock.lock()
-        defer { lock.unlock() }
-        _confidence = confidence
-    }
-    
-    func getState() -> (segments: [TranscriptionSegment], finalText: String, confidence: Double) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (_segments, _finalText, _confidence)
-    }
-}
-
 @available(macOS 10.15, *)
 class SpeechTranscriber {
     private let speechRecognizer: SFSpeechRecognizer
@@ -137,9 +105,6 @@ class SpeechTranscriber {
         progressCallback: ProgressCallback?
     ) async throws -> TranscriptionResult {
         return try await withCheckedThrowingContinuation { continuation in
-            // Use thread-safe container for shared state
-            let sharedState = RecognitionSharedState()
-
             recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
                 guard let self = self else { return }
 
@@ -163,8 +128,7 @@ class SpeechTranscriber {
 
                     self.processRecognitionResult(
                         result,
-                        context: context,
-                        sharedState: sharedState
+                        context: context
                     )
                 }
             }
@@ -181,22 +145,18 @@ class SpeechTranscriber {
 
     private func processRecognitionResult(
         _ result: SFSpeechRecognitionResult,
-        context: RecognitionContext,
-        sharedState: RecognitionSharedState
+        context: RecognitionContext
     ) {
         let finalText = result.bestTranscription.formattedString
-        sharedState.updateFinalText(finalText)
 
         // Calculate average confidence
         let confidences = result.bestTranscription.segments.compactMap { segment in
             segment.confidence > 0 ? Double(segment.confidence) : nil
         }
         let confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
-        sharedState.updateConfidence(confidence)
 
         // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
         let segments = createEnhancedSegments(from: result.bestTranscription.segments)
-        sharedState.updateSegments(segments)
 
         // Enhanced progress reporting with segment-level details
         let currentSegmentCount = result.bestTranscription.segments.count
@@ -237,14 +197,12 @@ class SpeechTranscriber {
             let realTimeRatio = context.audioFile.format.duration > 0 ? 
                 processingTime / context.audioFile.format.duration : 0
 
-            // Get the final state from shared state container
-            let state = sharedState.getState()
             let transcriptionResult = TranscriptionResult(
-                text: state.finalText,
+                text: finalText,
                 language: self.speechRecognizer.locale.identifier,
-                confidence: state.confidence,
+                confidence: confidence,
                 duration: context.audioFile.format.duration,
-                segments: state.segments,
+                segments: segments,
                 engine: .speechAnalyzer,
                 processingTime: processingTime,
                 audioFormat: context.audioFile.format
