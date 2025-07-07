@@ -1,0 +1,98 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout vox repository
+      uses: actions/checkout@v4
+      
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+    - name: Download release asset
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        ASSET_NAME="vox-${VERSION}-macos-universal.tar.gz"
+        
+        # Download the release asset
+        curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -o "$ASSET_NAME" \
+          "https://github.com/jsonify/vox/releases/download/v${VERSION}/${ASSET_NAME}"
+        
+        # Calculate SHA256
+        SHA256=$(sha256sum "$ASSET_NAME" | cut -d' ' -f1)
+        echo "SHA256: $SHA256"
+        echo "sha256=$SHA256" >> $GITHUB_ENV
+        
+    - name: Checkout homebrew-vox repository
+      uses: actions/checkout@v4
+      with:
+        repository: jsonify/homebrew-vox
+        token: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
+        path: homebrew-vox
+        
+    - name: Update formula
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        # Update version and SHA256 in formula
+        sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/vox.rb
+        sed -i "s/sha256 \".*\"/sha256 \"${{ env.sha256 }}\"/" Formula/vox.rb
+        
+        # Verify changes
+        echo "Updated formula:"
+        cat Formula/vox.rb
+        
+    - name: Commit and push changes
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        git add Formula/vox.rb
+        git commit -m "Update vox to v$VERSION
+
+        - Version: $VERSION
+        - SHA256: ${{ env.sha256 }}
+        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION"
+        
+        git push origin main
+        
+    - name: Create PR for manual review (fallback)
+      if: failure()
+      run: |
+        cd homebrew-vox
+        VERSION=${{ steps.version.outputs.version }}
+        
+        # Create a branch for the update
+        git checkout -b "update-v$VERSION"
+        git push origin "update-v$VERSION"
+        
+        # Create PR
+        gh pr create \
+          --title "Update vox to v$VERSION" \
+          --body "Automated update to vox v$VERSION
+
+        - Version: $VERSION
+        - SHA256: ${{ env.sha256 }}
+        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION
+
+        This PR was created automatically because the direct push failed." \
+          --base main \
+          --head "update-v$VERSION"
+      env:
+        GH_TOKEN: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
