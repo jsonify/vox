@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vox",
@@ -79,7 +80,26 @@ struct Vox: ParsableCommand {
         try validateInputs(inputFile: inputFile)
         configureLogging()
         displayStartupInfo(inputFile: inputFile)
-        try processAudioFile(inputFile: inputFile)
+        
+        // Run async code in a blocking manner - this is safe at the top level
+        let group = DispatchGroup()
+        var processingError: Error?
+        
+        group.enter()
+        Task {
+            do {
+                try await processAudioFile(inputFile: inputFile)
+            } catch {
+                processingError = error
+            }
+            group.leave()
+        }
+        
+        group.wait()
+        
+        if let error = processingError {
+            throw error
+        }
     }
 
     private func validateInputs(inputFile: String) throws {
@@ -156,9 +176,9 @@ struct Vox: ParsableCommand {
         }
     }
 
-    private func processAudioFile(inputFile: String) throws {
-        let audioFile = try extractAudio(inputFile: inputFile)
-        let transcriptionResult = try transcribeAudio(audioFile)
+    private func processAudioFile(inputFile: String) async throws {
+        let audioFile = try await extractAudio(inputFile: inputFile)
+        let transcriptionResult = try await transcribeAudio(audioFile)
         
         displayResults(transcriptionResult)
         saveOutput(transcriptionResult)
@@ -167,52 +187,36 @@ struct Vox: ParsableCommand {
         displayCompletionMessage(transcriptionResult)
     }
 
-    private func extractAudio(inputFile: String) throws -> AudioFile {
+    private func extractAudio(inputFile: String) async throws -> AudioFile {
         let audioProcessor = AudioProcessor()
         let progressDisplay = ProgressDisplayManager(verbose: verbose)
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var processingError: Error?
-        var extractedAudioFile: AudioFile?
 
         if verbose {
             Logger.shared.info("🎵 Extracting audio from: \(inputFile)", component: "CLI")
         }
 
-        audioProcessor.extractAudio(
-            from: inputFile,
-            progressCallback: { progressReport in
-                progressDisplay.displayProgress(progressReport)
-            },
-            completion: { result in
-                switch result {
-                case .success(let audioFile):
-                    if self.verbose {
-                        Logger.shared.info("✅ Audio extraction completed successfully", component: "CLI")
+        return try await withCheckedThrowingContinuation { continuation in
+            audioProcessor.extractAudio(
+                from: inputFile,
+                progressCallback: { progressReport in
+                    progressDisplay.displayProgress(progressReport)
+                },
+                completion: { result in
+                    switch result {
+                    case .success(let audioFile):
+                        if self.verbose {
+                            Logger.shared.info("✅ Audio extraction completed successfully", component: "CLI")
+                        }
+                        self.displayAudioExtractionSuccess(audioFile)
+                        continuation.resume(returning: audioFile)
+
+                    case .failure(let error):
+                        Logger.shared.error("❌ Audio extraction failed: \(error.localizedDescription)", component: "CLI")
+                        continuation.resume(throwing: error)
                     }
-                    self.displayAudioExtractionSuccess(audioFile)
-                    extractedAudioFile = audioFile
-
-                case .failure(let error):
-                    Logger.shared.error("❌ Audio extraction failed: \(error.localizedDescription)", component: "CLI")
-                    processingError = error
                 }
-
-                semaphore.signal()
-            }
-        )
-
-        semaphore.wait()
-
-        if let error = processingError {
-            throw error
+            )
         }
-
-        guard let audioFile = extractedAudioFile else {
-            throw VoxError.processingFailed("Failed to extract audio file")
-        }
-
-        return audioFile
     }
 
     private func displayAudioExtractionSuccess(_ audioFile: AudioFile) {
@@ -233,7 +237,7 @@ struct Vox: ParsableCommand {
         }
     }
 
-    private func transcribeAudio(_ audioFile: AudioFile) throws -> TranscriptionResult {
+    private func transcribeAudio(_ audioFile: AudioFile) async throws -> TranscriptionResult {
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
@@ -247,7 +251,7 @@ struct Vox: ParsableCommand {
             Logger.shared.info("🗣️ Starting transcription...", component: "CLI")
         }
 
-        return try transcriptionManager.transcribeAudio(audioFile: audioFile)
+        return try await transcriptionManager.transcribeAudio(audioFile: audioFile)
     }
 
     private func displayResults(_ result: TranscriptionResult) {

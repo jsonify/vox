@@ -1,21 +1,10 @@
 import Foundation
 
-// Only execute main logic when running as an executable, not during test imports
-if !CommandLine.arguments.isEmpty && CommandLine.arguments[0].contains("vox") {
-    // Check for help/version commands to avoid unnecessary logging
-    let isHelpCommand = CommandLine.arguments.contains("--help") || 
-                       CommandLine.arguments.contains("-h") ||
-                       CommandLine.arguments.contains("--version")
-    
-    if !isHelpCommand {
-        Logger.shared.info("Starting main.swift", component: "main")
-        Logger.shared.info("Vox CLI started", component: "main")
-        Logger.shared.info("About to call Vox.main()", component: "main")
-    }
-    
+// Temporary main for debugging
+if #available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *) {
+    print("Starting Vox...")
     Vox.main()
-    
-    if !isHelpCommand {
-        Logger.shared.info("Vox.main() completed", component: "main")
-    }
+} else {
+    print("Error: Vox requires macOS 10.15 or later for async support")
+    exit(1)
 }

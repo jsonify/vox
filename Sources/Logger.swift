@@ -91,12 +91,14 @@ public class Logger: @unchecked Sendable {
 
             let timestamp = self.formatTimestamp()
             let componentInfo = self.formatComponent(component, file: file)
+            // Pass _isVerbose directly to avoid nested queue.sync call
             let formattedMessage = self.formatMessage(
                 timestamp: timestamp,
                 level: level,
                 component: componentInfo,
                 message: message,
-                line: line
+                line: line,
+                isVerbose: self._isVerbose
             )
 
             self.writeToStderr(formattedMessage)
@@ -122,7 +124,7 @@ public class Logger: @unchecked Sendable {
         return String(filename.dropLast(6))
     }
 
-    private func formatMessage(timestamp: String, level: LogLevel, component: String, message: String, line: Int) -> String {
+    private func formatMessage(timestamp: String, level: LogLevel, component: String, message: String, line: Int, isVerbose: Bool) -> String {
         if isVerbose {
             return "[\(timestamp)] \(level.description) [\(component):\(line)] \(message)"
         } else {

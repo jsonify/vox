@@ -66,26 +66,29 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                 // Configure with extremely short timeout
                 transcriptionManager.setNetworkTimeout(seconds: 0.1)
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Transcription should timeout with short timeout")
-                } catch {
-                    // Validate timeout error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for timeout")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("timeout") ||
-                        errorDescription.localizedCaseInsensitiveContains("connection") ||
-                        errorDescription.localizedCaseInsensitiveContains("network"),
-                        "Error should mention timeout: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Transcription should timeout with short timeout")
+                    } catch {
+                        // Validate timeout error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for timeout")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("timeout") ||
+                            errorDescription.localizedCaseInsensitiveContains("connection") ||
+                            errorDescription.localizedCaseInsensitiveContains("network"),
+                            "Error should mention timeout: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -115,27 +118,30 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                 // Configure with invalid hostname
                 transcriptionManager.setAPIEndpoint("https://invalid.nonexistent.domain.com")
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Transcription should fail with invalid hostname")
-                } catch {
-                    // Validate DNS resolution error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for DNS failure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("network") ||
-                        errorDescription.localizedCaseInsensitiveContains("connection") ||
-                        errorDescription.localizedCaseInsensitiveContains("resolve") ||
-                        errorDescription.localizedCaseInsensitiveContains("dns"),
-                        "Error should mention network/DNS issue: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Transcription should fail with invalid hostname")
+                    } catch {
+                        // Validate DNS resolution error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for DNS failure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("network") ||
+                            errorDescription.localizedCaseInsensitiveContains("connection") ||
+                            errorDescription.localizedCaseInsensitiveContains("resolve") ||
+                            errorDescription.localizedCaseInsensitiveContains("dns"),
+                            "Error should mention network/DNS issue: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -171,12 +177,14 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                 for _ in 0..<5 {
                     group.enter()
                     DispatchQueue.global().async {
-                        do {
-                            _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                        } catch {
-                            errors.append(error)
+                        Task {
+                            do {
+                                _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                            } catch {
+                                errors.append(error)
+                            }
+                            group.leave()
                         }
-                        group.leave()
                     }
                 }
                 
@@ -197,6 +205,7 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
         }
         
@@ -227,27 +236,30 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                 // Configure with endpoint that will return service unavailable
                 transcriptionManager.setAPIEndpoint("https://httpstat.us/503")
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Transcription should fail with service unavailable")
-                } catch {
-                    // Validate service unavailability error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for service unavailable")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("service") ||
-                        errorDescription.localizedCaseInsensitiveContains("unavailable") ||
-                        errorDescription.localizedCaseInsensitiveContains("server") ||
-                        errorDescription.localizedCaseInsensitiveContains("503"),
-                        "Error should mention service issue: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Transcription should fail with service unavailable")
+                    } catch {
+                        // Validate service unavailability error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for service unavailable")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("service") ||
+                            errorDescription.localizedCaseInsensitiveContains("unavailable") ||
+                            errorDescription.localizedCaseInsensitiveContains("server") ||
+                            errorDescription.localizedCaseInsensitiveContains("503"),
+                            "Error should mention service issue: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -276,27 +288,30 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Transcription should fail with invalid API key")
-                } catch {
-                    // Validate API key error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for invalid API key")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("api") ||
-                        errorDescription.localizedCaseInsensitiveContains("key") ||
-                        errorDescription.localizedCaseInsensitiveContains("auth") ||
-                        errorDescription.localizedCaseInsensitiveContains("unauthorized"),
-                        "Error should mention authentication issue: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Transcription should fail with invalid API key")
+                    } catch {
+                        // Validate API key error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for invalid API key")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("api") ||
+                            errorDescription.localizedCaseInsensitiveContains("key") ||
+                            errorDescription.localizedCaseInsensitiveContains("auth") ||
+                            errorDescription.localizedCaseInsensitiveContains("unauthorized"),
+                            "Error should mention authentication issue: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -323,27 +338,30 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    XCTFail("Transcription should fail with missing API key")
-                } catch {
-                    // Validate missing API key error handling
-                    XCTAssertTrue(error is VoxError, "Should return VoxError for missing API key")
-                    
-                    if let voxError = error as? VoxError {
-                        switch voxError {
-                        case .apiKeyMissing:
-                            XCTAssertTrue(true, "Correct error type for missing API key")
-                        default:
-                            XCTFail("Should return apiKeyMissing error type")
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        XCTFail("Transcription should fail with missing API key")
+                    } catch {
+                        // Validate missing API key error handling
+                        XCTAssertTrue(error is VoxError, "Should return VoxError for missing API key")
+                        
+                        if let voxError = error as? VoxError {
+                            switch voxError {
+                            case .apiKeyMissing:
+                                XCTAssertTrue(true, "Correct error type for missing API key")
+                            default:
+                                XCTFail("Should return apiKeyMissing error type")
+                            }
                         }
                     }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 30.0)
@@ -372,30 +390,33 @@ final class NetworkFailureComprehensiveTests: XCTestCase {
                     includeTimestamps: false
                 )
                 
-                do {
-                    _ = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    // If it succeeds, either native worked or fallback worked
-                    XCTAssertTrue(true, "Transcription succeeded through fallback chain")
-                } catch {
-                    // If it fails, validate that fallback was attempted
-                    XCTAssertTrue(error is VoxError, "Should return VoxError after fallback failure")
-                    
-                    let errorDescription = error.localizedDescription
-                    XCTAssertFalse(errorDescription.isEmpty, "Error should have description after fallback")
-                    
-                    // Error should indicate that fallback was attempted
-                    XCTAssertTrue(
-                        errorDescription.localizedCaseInsensitiveContains("fallback") ||
-                        errorDescription.localizedCaseInsensitiveContains("cloud") ||
-                        errorDescription.localizedCaseInsensitiveContains("api"),
-                        "Error should mention fallback attempt: \(errorDescription)"
-                    )
+                Task {
+                    do {
+                        _ = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        // If it succeeds, either native worked or fallback worked
+                        XCTAssertTrue(true, "Transcription succeeded through fallback chain")
+                    } catch {
+                        // If it fails, validate that fallback was attempted
+                        XCTAssertTrue(error is VoxError, "Should return VoxError after fallback failure")
+                        
+                        let errorDescription = error.localizedDescription
+                        XCTAssertFalse(errorDescription.isEmpty, "Error should have description after fallback")
+                        
+                        // Error should indicate that fallback was attempted
+                        XCTAssertTrue(
+                            errorDescription.localizedCaseInsensitiveContains("fallback") ||
+                            errorDescription.localizedCaseInsensitiveContains("cloud") ||
+                            errorDescription.localizedCaseInsensitiveContains("api"),
+                            "Error should mention fallback attempt: \(errorDescription)"
+                        )
+                    }
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 45.0)

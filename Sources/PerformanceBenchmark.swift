@@ -331,4 +331,3 @@ public final class PerformanceBenchmark {
     // MARK: - Reporting (see extensions below)
 }
 
-

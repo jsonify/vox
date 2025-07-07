@@ -72,7 +72,7 @@ public struct TranscriptionManager {
         self.includeTimestamps = includeTimestamps
     }
 
-    func transcribeAudio(audioFile: AudioFile) throws -> TranscriptionResult {
+    func transcribeAudio(audioFile: AudioFile) async throws -> TranscriptionResult {
         fputs("DEBUG: In TranscriptionManager.transcribeAudio\n", stderr)
         fputs("Starting transcription...\n", stdout)
 
@@ -85,7 +85,7 @@ public struct TranscriptionManager {
         // Logger.shared.info("Language preferences: \(preferredLanguages.joined(separator: ", "))", component: "TranscriptionManager")
         fputs("DEBUG: About to call transcribeAudioWithAsyncFunction\n", stderr)
 
-        let transcriptionResult = try transcribeAudioWithAsyncFunction(
+        let transcriptionResult = try await transcribeAudioWithAsyncFunction(
             audioFile: audioFile,
             preferredLanguages: preferredLanguages
         )
@@ -94,31 +94,27 @@ public struct TranscriptionManager {
         return transcriptionResult
     }
 
-    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) throws -> TranscriptionResult {
+    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) async throws -> TranscriptionResult {
         fputs("DEBUG: In transcribeAudioWithAsyncFunction - start\n", stderr)
         
         let capturedConfig = captureConfiguration()
-        fputs("DEBUG: About to call runAsyncAndWait\n", stderr)
+        fputs("DEBUG: Configuration captured, proceeding with async transcription\n", stderr)
         
-        return try runAsyncAndWait { @Sendable in
-            fputs("DEBUG: Inside runAsyncAndWait closure\n", stderr)
-            
-            if capturedConfig.forceCloud {
-                return try await self.performCloudTranscription(
-                    audioFile: audioFile,
-                    preferredLanguage: capturedConfig.language,
-                    fallbackAPI: capturedConfig.fallbackAPI,
-                    apiKey: capturedConfig.apiKey,
-                    includeTimestamps: capturedConfig.includeTimestamps,
-                    verbose: capturedConfig.verbose
-                )
-            } else {
-                return try await self.performNativeTranscriptionWithFallback(
-                    audioFile: audioFile,
-                    preferredLanguages: preferredLanguages,
-                    config: capturedConfig
-                )
-            }
+        if capturedConfig.forceCloud {
+            return try await self.performCloudTranscription(
+                audioFile: audioFile,
+                preferredLanguage: capturedConfig.language,
+                fallbackAPI: capturedConfig.fallbackAPI,
+                apiKey: capturedConfig.apiKey,
+                includeTimestamps: capturedConfig.includeTimestamps,
+                verbose: capturedConfig.verbose
+            )
+        } else {
+            return try await self.performNativeTranscriptionWithFallback(
+                audioFile: audioFile,
+                preferredLanguages: preferredLanguages,
+                config: capturedConfig
+            )
         }
     }
 
@@ -214,40 +210,6 @@ public struct TranscriptionManager {
             processingTime: 1.0,
             audioFormat: audioFile.format
         )
-    }
-
-    private func runAsyncAndWait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
-        fputs("DEBUG: In runAsyncAndWait - start\n", stderr)
-        let semaphore = DispatchSemaphore(value: 0)
-        let resultBox = ResultBox<T>()
-
-        fputs("DEBUG: About to create Task\n", stderr)
-        Task {
-            fputs("DEBUG: Inside Task execution\n", stderr)
-            do {
-                fputs("DEBUG: About to call operation()\n", stderr)
-                let value = try await operation()
-                fputs("DEBUG: operation() completed successfully\n", stderr)
-                resultBox.setValue(value)
-                fputs("DEBUG: resultBox.setValue() completed\n", stderr)
-            } catch {
-                fputs("DEBUG: operation() threw error: \(error.localizedDescription)\n", stderr)
-                resultBox.setError(error)
-                fputs("DEBUG: resultBox.setError() completed\n", stderr)
-            }
-            fputs("DEBUG: About to signal semaphore\n", stderr)
-            semaphore.signal()
-            fputs("DEBUG: Semaphore signaled in Task\n", stderr)
-        }
-
-        fputs("DEBUG: About to wait on semaphore\n", stderr)
-        semaphore.wait()
-        fputs("DEBUG: Semaphore wait completed\n", stderr)
-
-        fputs("DEBUG: About to call resultBox.getResult()\n", stderr)
-        let result = try resultBox.getResult()
-        fputs("DEBUG: resultBox.getResult() completed\n", stderr)
-        return result
     }
 
     private func performCloudTranscription(

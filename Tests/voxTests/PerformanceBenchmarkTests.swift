@@ -246,29 +246,32 @@ final class PerformanceBenchmarkTests: XCTestCase {
                     includeTimestamps: true
                 )
                 
-                do {
-                    let transcriptionResult = try transcriptionManager.transcribeAudio(audioFile: audioFile)
-                    let transcriptionTime = Date().timeIntervalSince(startTime)
+                Task {
+                    do {
+                        let transcriptionResult = try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+                        let transcriptionTime = Date().timeIntervalSince(startTime)
+                        
+                        // Transcription should be reasonably fast
+                        XCTAssertLessThan(transcriptionTime, 15.0, 
+                            "Transcription should complete within 15 seconds for small files")
+                        
+                        // Validate transcription quality metrics
+                        XCTAssertGreaterThan(transcriptionResult.confidence, 0.0, 
+                            "Transcription should have confidence score")
+                        XCTAssertFalse(transcriptionResult.text.isEmpty, 
+                            "Transcription should produce text output")
+                    } catch {
+                        // Native transcription may fail in test environment
+                        print("Transcription failed (acceptable in test environment): \(error)")
+                    }
                     
-                    // Transcription should be reasonably fast
-                    XCTAssertLessThan(transcriptionTime, 15.0, 
-                        "Transcription should complete within 15 seconds for small files")
-                    
-                    // Validate transcription quality metrics
-                    XCTAssertGreaterThan(transcriptionResult.confidence, 0.0, 
-                        "Transcription should have confidence score")
-                    XCTAssertFalse(transcriptionResult.text.isEmpty, 
-                        "Transcription should produce text output")
-                } catch {
-                    // Native transcription may fail in test environment
-                    print("Transcription failed (acceptable in test environment): \(error)")
+                    expectation.fulfill()
                 }
                 
             case .failure(let error):
                 XCTFail("Audio processing failed: \(error)")
+                expectation.fulfill()
             }
-            
-            expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 60.0)
