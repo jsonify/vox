@@ -40,185 +40,119 @@ class SpeechTranscriber {
         audioFile: AudioFile,
         progressCallback: ProgressCallback? = nil
     ) async throws -> TranscriptionResult {
-        fputs("DEBUG: TEMP BYPASS: Native speech recognition disabled due to system compatibility issues\n", stderr)
+        let startTime = Date()
+        
+        guard FileManager.default.fileExists(atPath: audioFile.path) else {
+            throw VoxError.invalidInputFile(audioFile.path)
+        }
 
-        // TEMP FIX: Immediately throw error to trigger cloud fallback
-        throw VoxError.transcriptionFailed(
-            "Native speech recognition temporarily disabled due to system compatibility issues"
+        let audioURL = URL(fileURLWithPath: audioFile.path)
+        let request = createRecognitionRequest(for: audioURL)
+        
+        fputs("DEBUG: About to start speech recognition task\n", stderr)
+        
+        // Use the exact same pattern as our working test
+        let result: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            
+            fputs("DEBUG: About to create recognitionTask\n", stderr)
+            recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
+                fputs("DEBUG: Speech recognition callback called\n", stderr)
+                
+                if hasResumed { 
+                    fputs("DEBUG: Already resumed, ignoring callback\n", stderr)
+                    return 
+                }
+                
+                if let error = error {
+                    fputs("DEBUG: Speech recognition error: \(error.localizedDescription)\n", stderr)
+                    hasResumed = true
+                    continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
+                    return
+                }
+                
+                if let result = result, result.isFinal {
+                    fputs("DEBUG: Final result received: \(result.bestTranscription.formattedString)\n", stderr)
+                    hasResumed = true
+                    continuation.resume(returning: result)
+                } else if let result = result {
+                    fputs("DEBUG: Partial result: \(result.bestTranscription.formattedString)\n", stderr)
+                    // Handle progress updates here if needed
+                }
+            }
+            fputs("DEBUG: Recognition task created, setting up timeout\n", stderr)
+            
+            // Add timeout with task cancellation 
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                fputs("DEBUG: Timeout timer fired\n", stderr)
+                if !hasResumed {
+                    hasResumed = true
+                    fputs("DEBUG: Canceling recognition task due to timeout\n", stderr)
+                    self?.recognitionTask?.cancel()
+                    continuation.resume(throwing: VoxError.transcriptionFailed("Speech recognition timed out"))
+                }
+            }
+            fputs("DEBUG: Timeout set, waiting for recognition results\n", stderr)
+        }
+        
+        fputs("DEBUG: Building final transcription result\n", stderr)
+        return try buildTranscriptionResult(
+            result: result,
+            audioFile: audioFile,
+            startTime: startTime,
+            progressReporter: EnhancedProgressReporter(totalAudioDuration: audioFile.format.duration),
+            progressCallback: progressCallback
         )
-
-        /*
-         // Original implementation commented out
-         let startTime = Date()
-         let progressReporter = EnhancedProgressReporter(totalAudioDuration: audioFile.format.duration)
-
-         // Initial progress report
-         if let callback = progressCallback {
-         callback(progressReporter.generateDetailedProgressReport())
-         }
-
-         guard FileManager.default.fileExists(atPath: audioFile.path) else {
-         throw VoxError.invalidInputFile(audioFile.path)
-         }
-
-         let audioURL = URL(fileURLWithPath: audioFile.path)
-         progressReporter.updateProgress(segmentIndex: 0,
-         totalSegments: estimateSegmentCount(for: audioFile.format.duration),
-         segmentText: "Loading audio file",
-         segmentConfidence: 1.0,
-         audioTimeProcessed: 0)
-         if let callback = progressCallback {
-         callback(progressReporter.generateDetailedProgressReport())
-         }
-
-         let request = createRecognitionRequest(for: audioURL)
-         progressReporter.updateProgress(segmentIndex: 0,
-         totalSegments: estimateSegmentCount(for: audioFile.format.duration),
-         segmentText: "Initializing speech recognition",
-         segmentConfidence: 1.0,
-         audioTimeProcessed: 0)
-         if let callback = progressCallback {
-         callback(progressReporter.generateDetailedProgressReport())
-         }
-
-         return try await performSpeechRecognition(request: request,
-         audioFile: audioFile,
-         startTime: startTime,
-         progressReporter: progressReporter,
-         progressCallback: progressCallback)
-         */
     }
 
     private func createRecognitionRequest(for audioURL: URL) -> SFSpeechURLRecognitionRequest {
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
-        request.requiresOnDeviceRecognition = true // Force local processing
+        // Allow both local and cloud processing for now
+        request.requiresOnDeviceRecognition = false
         return request
     }
 
-    private func performSpeechRecognition(
-        request: SFSpeechURLRecognitionRequest,
+
+    private func buildTranscriptionResult(
+        result: SFSpeechRecognitionResult,
         audioFile: AudioFile,
         startTime: Date,
         progressReporter: EnhancedProgressReporter,
         progressCallback: ProgressCallback?
-    ) async throws -> TranscriptionResult {
-        return try await withCheckedThrowingContinuation { continuation in
-            recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-                guard let self = self else { return }
-
-                if let error = error {
-                    fputs("DEBUG: Speech recognition error: \(error.localizedDescription)\n", stderr)
-                    // TEMP DEBUG: Bypass Logger call
-                    // Logger.shared.error("Speech recognition error: \(error.localizedDescription)", 
-                    //                   component: "SpeechTranscriber")
-                    continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
-                    return
-                }
-
-                if let result = result {
-                    let context = RecognitionContext(
-                        audioFile: audioFile,
-                        startTime: startTime,
-                        progressReporter: progressReporter,
-                        progressCallback: progressCallback,
-                        continuation: continuation
-                    )
-
-                    self.processRecognitionResult(
-                        result,
-                        context: context
-                    )
-                }
-            }
-        }
-    }
-
-    private struct RecognitionContext {
-        let audioFile: AudioFile
-        let startTime: Date
-        let progressReporter: EnhancedProgressReporter
-        let progressCallback: ProgressCallback?
-        let continuation: CheckedContinuation<TranscriptionResult, Error>
-    }
-
-    private func processRecognitionResult(
-        _ result: SFSpeechRecognitionResult,
-        context: RecognitionContext
-    ) {
+    ) throws -> TranscriptionResult {
+        fputs("DEBUG: Building transcription result\n", stderr)
         let finalText = result.bestTranscription.formattedString
+        fputs("DEBUG: Got final text: \(finalText)\n", stderr)
 
         // Calculate average confidence
         let confidences = result.bestTranscription.segments.compactMap { segment in
             segment.confidence > 0 ? Double(segment.confidence) : nil
         }
         let confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
+        fputs("DEBUG: Calculated confidence: \(confidence)\n", stderr)
 
         // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
         let segments = createEnhancedSegments(from: result.bestTranscription.segments)
-
-        // Enhanced progress reporting with segment-level details
-        let currentSegmentCount = result.bestTranscription.segments.count
-        let estimatedTotalSegments = estimateSegmentCount(for: context.audioFile.format.duration)
-        let audioProcessed = calculateAudioProcessed(from: result.bestTranscription.segments)
-
-        // Update progress with enhanced metrics
-        let lastSegmentText = result.bestTranscription.segments.last?.substring
-        context.progressReporter.updateProgress(
-            segmentIndex: currentSegmentCount,
-            totalSegments: estimatedTotalSegments,
-            segmentText: lastSegmentText,
-            segmentConfidence: confidence,
-            audioTimeProcessed: audioProcessed
+        
+        let processingTime = Date().timeIntervalSince(startTime)
+        
+        let transcriptionResult = TranscriptionResult(
+            text: finalText,
+            language: self.speechRecognizer.locale.identifier,
+            confidence: confidence,
+            duration: audioFile.format.duration,
+            segments: segments,
+            engine: .speechAnalyzer,
+            processingTime: processingTime,
+            audioFormat: audioFile.format
         )
-
-        if let callback = context.progressCallback {
-            callback(context.progressReporter.generateDetailedProgressReport())
-        }
-
-        // Log detailed progress for verbose mode
-        if !result.isFinal {
-            let progress = Double(currentSegmentCount) / Double(estimatedTotalSegments)
-            let progressPercent = String(format: "%.1f%%", progress * 100)
-            let audioProcessedStr = String(format: "%.1f", audioProcessed)
-            let progressMessage = "DEBUG: Transcription progress: \(progressPercent) - " +
-                "\(currentSegmentCount) segments, \(audioProcessedStr)s processed\n"
-            fputs(progressMessage, stderr)
-            // TEMP DEBUG: Bypass Logger call
-            // let progressPercent = String(format: "%.1f%%", progress * 100)
-            // let audioProcessedStr = String(format: "%.1f", audioProcessed)
-            // Logger.shared.debug("Transcription progress: \(progressPercent) - \(currentSegmentCount) segments, 
-            //                   \(audioProcessedStr)s processed", component: "SpeechTranscriber")
-        }
-
-        if result.isFinal {
-            let processingTime = Date().timeIntervalSince(context.startTime)
-            let realTimeRatio = context.audioFile.format.duration > 0 ? 
-                processingTime / context.audioFile.format.duration : 0
-
-            let transcriptionResult = TranscriptionResult(
-                text: finalText,
-                language: self.speechRecognizer.locale.identifier,
-                confidence: confidence,
-                duration: context.audioFile.format.duration,
-                segments: segments,
-                engine: .speechAnalyzer,
-                processingTime: processingTime,
-                audioFormat: context.audioFile.format
-            )
-
-            let completionMessage = "DEBUG: Speech transcription completed in " +
-                "\(String(format: "%.2f", processingTime))s (\(String(format: "%.2f", realTimeRatio))x real-time)\n"
-            fputs(completionMessage, stderr)
-            // TEMP DEBUG: Bypass Logger call
-            // let processingTimeStr = String(format: "%.2f", processingTime)
-            // let realTimeRatioStr = String(format: "%.2f", realTimeRatio)
-            // Logger.shared.info("Speech transcription completed in \(processingTimeStr)s 
-            //                  (\(realTimeRatioStr)x real-time)", component: "SpeechTranscriber")
-            context.continuation.resume(returning: transcriptionResult)
-        }
+        
+        fputs("DEBUG: Transcription result built successfully\n", stderr)
+        return transcriptionResult
     }
+
 
     private func estimateSegmentCount(for duration: TimeInterval) -> Int {
         // Rough estimate: Apple's Speech framework typically creates segments for individual words

@@ -166,11 +166,11 @@ public struct TranscriptionManager {
     ) async throws -> TranscriptionResult {
         fputs("DEBUG: About to create SpeechTranscriber\n", stderr)
         let speechTranscriber = try SpeechTranscriber()
-        fputs("DEBUG: SpeechTranscriber created, about to call transcribeWithLanguageDetection\n", stderr)
+        fputs("DEBUG: SpeechTranscriber created, calling direct transcribe method\n", stderr)
         
-        return try await speechTranscriber.transcribeWithLanguageDetection(
+        // Use direct transcribe method instead of complex language detection
+        return try await speechTranscriber.transcribe(
             audioFile: audioFile,
-            preferredLanguages: preferredLanguages,
             progressCallback: progressCallback ?? { @Sendable progressReport in
                 fputs("DEBUG: Progress callback called\n", stderr)
                 fputs(
@@ -190,37 +190,10 @@ public struct TranscriptionManager {
     ) async throws -> TranscriptionResult {
         fputs("DEBUG: Native transcription failed: \(error.localizedDescription)\n", stderr)
         
-        if config.fallbackAPI != nil || config.apiKey != nil {
-            fputs("DEBUG: Using cloud fallback with provided API key\n", stderr)
-            return try await performCloudTranscription(
-                audioFile: audioFile,
-                preferredLanguage: config.language,
-                fallbackAPI: config.fallbackAPI,
-                apiKey: config.apiKey,
-                includeTimestamps: config.includeTimestamps,
-                verbose: config.verbose,
-                progressCallback: progressCallback
-            )
-        } else {
-            fputs("DEBUG: No cloud API key provided - creating demo transcription\n", stderr)
-            return createDemoTranscriptionResult(audioFile: audioFile)
-        }
+        // No fallback - throw the original error to surface the real issue
+        throw error
     }
 
-    private func createDemoTranscriptionResult(audioFile: AudioFile) -> TranscriptionResult {
-        return TranscriptionResult(
-            text: "[DEMO] Native speech recognition is temporarily disabled due to " +
-                "system compatibility issues. To get real transcription, use: " +
-                "vox file.mp4 --force-cloud --api-key YOUR_OPENAI_KEY",
-            language: "en-US",
-            confidence: 0.95,
-            duration: audioFile.format.duration,
-            segments: [],
-            engine: .speechAnalyzer,
-            processingTime: 1.0,
-            audioFormat: audioFile.format
-        )
-    }
 
     private func performCloudTranscription(
         audioFile: AudioFile,
