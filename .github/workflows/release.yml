@@ -264,3 +264,86 @@ jobs:
           dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
           dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
           dist/checksums.txt
+    
+    - name: Update Homebrew Formula
+      if: "!contains(steps.version.outputs.version, '-')"
+      run: |
+        # Skip pre-releases
+        echo "Updating Homebrew formula for stable release ${{ steps.version.outputs.version }}"
+        
+        # Calculate SHA256 for Homebrew formula
+        cd dist
+        ASSET_NAME="vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz"
+        if [ ! -f "$ASSET_NAME" ]; then
+          echo "❌ Error: Asset $ASSET_NAME not found"
+          exit 1
+        fi
+        
+        SHA256=$(shasum -a 256 "$ASSET_NAME" | cut -d' ' -f1)
+        echo "SHA256: $SHA256"
+        echo "HOMEBREW_SHA256=$SHA256" >> $GITHUB_ENV
+        
+        # Clone homebrew-vox repository
+        cd ..
+        if ! git clone https://github.com/jsonify/homebrew-vox.git homebrew-vox; then
+          echo "❌ Error: Failed to clone homebrew-vox repository"
+          echo "This may be because the repository doesn't exist or is not accessible"
+          echo "Skipping homebrew formula update for now"
+          exit 0
+        fi
+        cd homebrew-vox
+        
+        # Configure Git
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # Update formula
+        if [ ! -f "Formula/vox.rb" ]; then
+          echo "❌ Error: Formula/vox.rb not found"
+          exit 1
+        fi
+        
+        # Create a new branch for the update
+        BRANCH_NAME="update-v${{ steps.version.outputs.version }}"
+        git checkout -b "$BRANCH_NAME"
+        
+        # Update version and SHA256 in formula
+        sed -i.bak "s/version \".*\"/version \"${{ steps.version.outputs.version }}\"/" Formula/vox.rb
+        sed -i.bak "s/sha256 \".*\"/sha256 \"$SHA256\"/" Formula/vox.rb
+        
+        # Verify changes
+        echo "Updated formula:"
+        cat Formula/vox.rb
+        
+        # Create commit
+        git add Formula/vox.rb
+        git commit -m "Update vox to v${{ steps.version.outputs.version }}
+
+- Version: ${{ steps.version.outputs.version }}
+- SHA256: $SHA256
+- Release: https://github.com/jsonify/vox/releases/tag/v${{ steps.version.outputs.version }}"
+        
+        # Push branch
+        git push origin "$BRANCH_NAME"
+        
+        # Create pull request
+        if gh pr create \
+          --title "Update vox to v${{ steps.version.outputs.version }}" \
+          --body "Automated update to vox v${{ steps.version.outputs.version }}
+
+- Version: ${{ steps.version.outputs.version }}
+- SHA256: $SHA256
+- Release: https://github.com/jsonify/vox/releases/tag/v${{ steps.version.outputs.version }}
+
+This PR was created automatically by the release workflow." \
+          --base main \
+          --head "$BRANCH_NAME"; then
+          echo "✅ Pull request created successfully"
+        else
+          echo "⚠️  PR creation failed, but formula was updated on branch $BRANCH_NAME"
+        fi
+        
+        echo "✅ Homebrew formula updated successfully with PR"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
