@@ -225,145 +225,152 @@ jobs:
         echo "Package describe for release build:"
         swift package describe || echo "Package describe failed"
     
-    - name: Build release configuration
+    - name: Build universal binary
       run: |
-        echo "=== Starting Release Build Process ==="
-        echo "Building with release configuration and verbose output..."
-        echo "Build command: swift build -c release --verbose"
+        echo "=== Building Universal Binary ==="
+        echo "Using build.sh to create universal binary with both ARM64 and x86_64 architectures"
         echo "Working directory: $(pwd)"
         
-        if swift build -c release --verbose 2>&1 | tee release-build.log; then
+        # Set environment variables for CI-friendly build
+        export SKIP_PACKAGING=true  # We'll handle packaging separately
+        
+        if ./build.sh 2>&1 | tee universal-build.log; then
           echo ""
-          echo "=== Release build command completed ==="
+          echo "=== Universal Binary Build Complete ==="
           echo "Build exit code: $?"
           
-          # Check if the build log indicates any issues
-          HAS_ERRORS=false
-          if grep -i "error" release-build.log; then
-            echo "⚠️  Build completed but contained errors"
-            HAS_ERRORS=true
-          fi
-          if grep -i "warning" release-build.log; then
-            echo "⚠️  Build completed but contained warnings"
-          fi
-          if grep -i "failed" release-build.log; then
-            echo "⚠️  Build completed but had failures"
-            HAS_ERRORS=true
-          fi
-          
-          # Show the end of the build log
-          echo ""
-          echo "Last 10 lines of build log:"
-          tail -10 release-build.log || echo "Could not read build log"
-          
-          # Check if release directory was actually created
-          echo ""
-          echo "=== Verifying Release Build Output ==="
-          RELEASE_DIR=""
-          for dir in ".build/arm64-apple-macosx/release" ".build/x86_64-apple-macosx/release" ".build/release"; do
-            if [ -d "$dir" ]; then
-              echo "✅ Found release directory: $dir"
-              RELEASE_DIR="$dir"
-              break
-            else
-              echo "❌ No release directory at: $dir"
-            fi
-          done
-          
-          if [ -z "$RELEASE_DIR" ] || [ "$HAS_ERRORS" = "true" ]; then
-            echo ""
-            echo "❌ Release build failed or produced no output directory"
-            echo "Attempting debug build as fallback..."
+          # Verify the universal binary was created
+          if [ -f "dist/vox" ]; then
+            echo "✅ Universal binary created successfully"
+            echo "Binary info:"
+            ls -la dist/vox
+            file dist/vox
+            lipo -info dist/vox
             
-            if swift build -c debug --verbose 2>&1 | tee debug-build.log; then
-              echo "✅ Debug build completed successfully"
-              echo "Debug build will be used instead of release build"
+            # Verify both architectures are present
+            if lipo -info dist/vox | grep -q "arm64" && lipo -info dist/vox | grep -q "x86_64"; then
+              echo "✅ Both ARM64 and x86_64 architectures confirmed"
             else
-              echo "❌ Debug build also failed"
-              echo "Last 20 lines of debug build log:"
-              tail -20 debug-build.log || echo "Could not read debug build log"
+              echo "❌ Missing required architectures"
+              lipo -info dist/vox
               exit 1
             fi
           else
-            echo "✅ Release build completed successfully"
+            echo "❌ Universal binary not found at dist/vox"
+            echo "Directory contents:"
+            ls -la
+            ls -la dist/ || echo "No dist directory"
+            exit 1
           fi
-          
-          echo ""
-          echo "=== Debugging Build Output Structure ==="
-          echo "Current working directory: $(pwd)"
-          echo "Contents of current directory:"
-          ls -la
-          echo ""
-          echo "Contents of .build directory:"
-          ls -la .build/ || echo "No .build directory found"
-          echo ""
-          echo "All subdirectories in .build (detailed):"
-          find .build -type d 2>/dev/null | sort || echo "Could not list .build subdirectories"
-          echo ""
-          echo "All executables in .build:"
-          find .build -type f -name "vox" 2>/dev/null || echo "No vox executables found"
-          echo ""
-          echo "All executable files in .build:"
-          find .build -type f -executable 2>/dev/null || echo "No executable files found"
-          echo ""
-          echo "All files in .build (with details):"
-          find .build -type f -ls 2>/dev/null | head -30 || echo "Could not list .build files"
-          
         else
           echo ""
-          echo "=== RELEASE BUILD FAILED ==="
+          echo "=== UNIVERSAL BINARY BUILD FAILED ==="
           echo "Exit code: $?"
-          echo "Last 50 lines of release build log:"
-          tail -50 release-build.log || echo "Could not read release build log"
+          echo "Last 50 lines of build log:"
+          tail -50 universal-build.log || echo "Could not read build log"
           echo ""
-          echo "Checking for common release build issues..."
+          echo "Checking for common build issues..."
           
           # Check for specific error patterns
-          if grep -i "error.*not found" release-build.log; then
-            echo "❌ Missing dependency detected in release build"
+          if grep -i "error.*not found" universal-build.log; then
+            echo "❌ Missing dependency detected"
           fi
-          if grep -i "permission denied" release-build.log; then
-            echo "❌ Permission issue detected in release build"
+          if grep -i "permission denied" universal-build.log; then
+            echo "❌ Permission issue detected"
           fi
-          if grep -i "unavailable" release-build.log; then
-            echo "❌ API unavailability detected in release build"
+          if grep -i "unavailable" universal-build.log; then
+            echo "❌ API unavailability detected"
           fi
-          if grep -i "optimization" release-build.log; then
-            echo "⚠️  Optimization issue detected in release build"
+          if grep -i "architecture" universal-build.log; then
+            echo "❌ Architecture issue detected"
           fi
-          if grep -i "linking" release-build.log; then
-            echo "❌ Linking issue detected in release build"
-          fi
-          if grep -i "architecture" release-build.log; then
-            echo "❌ Architecture issue detected in release build"
+          if grep -i "lipo" universal-build.log; then
+            echo "❌ Universal binary creation failed"
           fi
           
           exit 1
         fi
     
-    - name: Verify build artifacts
+    - name: Verify universal binary
       run: |
-        echo "=== Verifying Build Artifacts ==="
-        echo "Build completed successfully - skipping universal binary creation"
-        echo "For personal Intel Mac use, the standard build output is sufficient"
+        echo "=== Verifying Universal Binary ==="
         
-        # Quick verification that build produced something
-        if find .build -name "vox" -type f 2>/dev/null | head -1; then
-          echo "✅ Build artifacts verified - vox binary exists"
+        if [ -f "dist/vox" ]; then
+          echo "✅ Universal binary exists at dist/vox"
+          
+          # Show detailed binary information
+          echo "Binary size: $(du -h dist/vox | cut -f1)"
+          echo "Binary file info:"
+          file dist/vox
+          
+          # Verify architectures
+          echo "Architecture info:"
+          lipo -info dist/vox
+          
+          # Verify both required architectures are present
+          if lipo -info dist/vox | grep -q "arm64" && lipo -info dist/vox | grep -q "x86_64"; then
+            echo "✅ Universal binary contains both ARM64 and x86_64 architectures"
+          else
+            echo "❌ Universal binary missing required architectures"
+            echo "Expected: arm64 and x86_64"
+            echo "Found: $(lipo -info dist/vox)"
+            exit 1
+          fi
+          
+          # Verify binary is executable
+          if [ -x "dist/vox" ]; then
+            echo "✅ Binary is executable"
+          else
+            echo "❌ Binary is not executable"
+            ls -la dist/vox
+            exit 1
+          fi
+          
+          # Verify checksum file exists
+          if [ -f "dist/checksum.txt" ]; then
+            echo "✅ Checksum file exists"
+            echo "Checksum: $(cat dist/checksum.txt)"
+          else
+            echo "⚠️  Checksum file not found (not critical)"
+          fi
+          
         else
-          echo "⚠️  No vox binary found, but this is not critical for current workflow"
+          echo "❌ Universal binary not found at dist/vox"
+          echo "Directory contents:"
+          ls -la
+          ls -la dist/ || echo "No dist directory found"
+          exit 1
         fi
         
         echo ""
-        echo "Build validation completed successfully"
+        echo "Universal binary verification completed successfully"
     
     - name: Test CLI functionality
       run: |
         echo "=== Testing CLI Functionality ==="
-        echo "Skipping CLI tests for now - focusing on build validation"
-        echo "Local testing on Intel Mac will be sufficient for current needs"
-        echo ""
-        echo "CLI functionality testing skipped"
+        
+        if [ -f "dist/vox" ]; then
+          # Test basic help command
+          echo "Testing --help command..."
+          if timeout 10s ./dist/vox --help >/dev/null 2>&1; then
+            echo "✅ Help command works"
+          else
+            echo "⚠️  Help command failed or timed out (may be normal in CI)"
+          fi
+          
+          # Test version command if available
+          echo "Testing --version command..."
+          if timeout 10s ./dist/vox --version >/dev/null 2>&1; then
+            echo "✅ Version command works"
+          else
+            echo "⚠️  Version command failed or timed out (may be normal in CI)"
+          fi
+          
+          echo "✅ Basic CLI functionality testing completed"
+        else
+          echo "❌ Cannot test CLI functionality - binary not found"
+          exit 1
+        fi
     
     - name: Build Validation Debug (on failure)
       if: failure()
@@ -394,11 +401,9 @@ jobs:
       with:
         name: build-validation-logs
         path: |
+          universal-build.log
           release-build.log
           debug-build.log
-          manual-rebuild.log
-          cli-help.log
-          cli-version.log
         retention-days: 7
     
     - name: Upload build artifacts

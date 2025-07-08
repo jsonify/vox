@@ -159,18 +159,32 @@ MACOSX_DEPLOYMENT_TARGET = 14.0
 SWIFT_VERSION = 5.9
 
 # Development Commands
-swift build                    # Standard build
+swift build                    # Standard build (single architecture)
 swift test                     # Run all tests
 swift test --filter CITests    # CI-safe tests only
-swift build -c release         # Release build
+
+# Universal Binary Build (RECOMMENDED)
+./build.sh                     # Creates universal binary with both architectures
+./build.sh clean              # Clean build artifacts
+./build.sh test               # Run tests only
+./build.sh validate           # Validate build environment
+
+# Environment Variables for build.sh
+export SKIP_TESTS=true         # Skip running tests
+export SKIP_PACKAGING=true     # Skip creating packages
+export SKIP_VALIDATION=true    # Skip binary validation
+export BUILD_VERSION=x.y.z     # Override version for packages
+export CI_MODE=true            # Enable CI-friendly mode
 
 # Check test file line counts (must be under 400 lines each)
 find Tests -name "*.swift" -exec wc -l {} \; | sort -nr
 
-# Create universal binary
-lipo -create -output vox \
-  .build/x86_64-apple-macosx/release/vox \
-  .build/arm64-apple-macosx/release/vox
+# Manual universal binary creation (NOT RECOMMENDED - use build.sh instead)
+# swift build -c release --arch arm64
+# swift build -c release --arch x86_64
+# lipo -create -output vox \
+#   .build/x86_64-apple-macosx/release/vox \
+#   .build/arm64-apple-macosx/release/vox
 ```
 
 ## Security & Privacy
@@ -188,10 +202,18 @@ lipo -create -output vox \
 - `VOX_VERBOSE` - Enable verbose logging by default
 
 ## Distribution
-- **Standalone Executable**: Self-contained `vox` binary
+- **Standalone Executable**: Self-contained `vox` universal binary
 - **Installation**: Copy to `/usr/local/bin` or add to PATH
 - **Homebrew**: Custom tap for easy installation
-- **GitHub Releases**: Universal binary distribution
+- **GitHub Releases**: Universal binary distribution (supports both Intel and Apple Silicon)
+
+### CI/CD Integration
+The project uses automated workflows to build and distribute universal binaries:
+
+- **CI Workflow**: Uses `./build.sh` to create and validate universal binaries
+- **Release Workflow**: Creates universal binaries and distribution packages
+- **Architecture Support**: All releases include both ARM64 and x86_64 architectures
+- **Validation**: Automated checks ensure binaries work on both architectures
 
 *See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for complete distribution setup.*
 

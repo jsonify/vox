@@ -167,51 +167,84 @@ jobs:
           test.log
         retention-days: 7
     
-    - name: Build release binary
+    - name: Build universal binary
       run: |
-        echo "Building release binary..."
-        swift build -c release --verbose
+        echo "=== Building Universal Binary for Release ==="
+        echo "Using build.sh to create universal binary with both ARM64 and x86_64 architectures"
+        echo "Working directory: $(pwd)"
         
-        # Find and copy the binary
-        BINARY_PATH=$(find .build -name "vox" -type f -path "*/release/*" | head -1)
-        if [ -z "$BINARY_PATH" ]; then
-          echo "ERROR: Could not find release binary"
-          find .build -name "vox" -type f
+        # Set version for packaging
+        export BUILD_VERSION="${{ steps.version.outputs.version }}"
+        
+        if ./build.sh 2>&1 | tee universal-build.log; then
+          echo ""
+          echo "=== Universal Binary Build Complete ==="
+          echo "Build exit code: $?"
+          
+          # Verify the universal binary was created
+          if [ -f "dist/vox" ]; then
+            echo "✅ Universal binary created successfully"
+            echo "Binary info:"
+            ls -la dist/vox
+            file dist/vox
+            lipo -info dist/vox
+            
+            # Verify both architectures are present
+            if lipo -info dist/vox | grep -q "arm64" && lipo -info dist/vox | grep -q "x86_64"; then
+              echo "✅ Both ARM64 and x86_64 architectures confirmed"
+            else
+              echo "❌ Missing required architectures"
+              lipo -info dist/vox
+              exit 1
+            fi
+            
+            # Test binary functionality
+            if timeout 10s ./dist/vox --help > /dev/null 2>&1; then
+              echo "✅ Binary test successful"
+            else
+              echo "⚠️ Binary test failed or timed out (may be normal in CI)"
+            fi
+          else
+            echo "❌ Universal binary not found at dist/vox"
+            echo "Directory contents:"
+            ls -la
+            ls -la dist/ || echo "No dist directory"
+            exit 1
+          fi
+        else
+          echo ""
+          echo "=== UNIVERSAL BINARY BUILD FAILED ==="
+          echo "Exit code: $?"
+          echo "Last 50 lines of build log:"
+          tail -50 universal-build.log || echo "Could not read build log"
           exit 1
         fi
-        
-        echo "Found binary at: $BINARY_PATH"
-        mkdir -p dist
-        cp "$BINARY_PATH" dist/vox
-        chmod +x dist/vox
-        
-        # Verify binary
-        echo "Binary info:"
-        ls -la dist/vox
-        file dist/vox
-        
-        # Test binary
-        if ./dist/vox --help > /dev/null 2>&1; then
-          echo "✅ Binary test successful"
-        else
-          echo "⚠️ Binary test failed (may be normal in CI)"
-        fi
     
-    - name: Create distribution packages
+    - name: Verify distribution packages
       run: |
-        cd dist
+        echo "=== Verifying Distribution Packages ==="
         
-        # Create archives
-        tar -czf "vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz" vox
-        zip "vox-${{ steps.version.outputs.version }}-macos-universal.zip" vox
+        # Check if build.sh created packages
+        if [ -f "dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz" ]; then
+          echo "✅ build.sh created distribution packages"
+        else
+          echo "⚠️ build.sh did not create packages, creating them manually"
+          cd dist
+          
+          # Create archives
+          tar -czf "vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz" vox checksum.txt
+          zip "vox-${{ steps.version.outputs.version }}-macos-universal.zip" vox checksum.txt
+          
+          # Generate checksums
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          
+          cd ..
+        fi
         
-        # Generate checksums
-        shasum -a 256 *.tar.gz *.zip > checksums.txt
-        
-        echo "Created packages:"
-        ls -la
+        echo "Final packages:"
+        ls -la dist/
         echo "Checksums:"
-        cat checksums.txt
+        cat dist/checksums.txt || cat dist/checksum.txt || echo "No checksum file found"
     
     - name: Generate release notes
       run: |
@@ -264,3 +297,4 @@ jobs:
           dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
           dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
           dist/checksums.txt
+          dist/checksum.txt
