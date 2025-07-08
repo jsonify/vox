@@ -172,15 +172,15 @@ class AudioProcessor {
                 return
             }
             
-            debugPrint(Export session created successfully)
+            debugPrint("Export session created successfully")
             exportSession.outputURL = outputURL
             exportSession.outputFileType = .m4a
             
-            debugPrint(Starting export session with output URL: \(outputURL.path))
+            debugPrint("Starting export session with output URL: \(outputURL.path)")
             
             // Initial progress report
             if let callback = progressCallback {
-                debugPrint(Sending initial progress report)
+                debugPrint("Sending initial progress report")
                 let initialProgress = TranscriptionProgress(
                     progress: 0.0,
                     status: "Starting audio extraction...",
@@ -193,9 +193,9 @@ class AudioProcessor {
             // Start progress monitoring
             let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
                 let progress = Double(exportSession.progress)
-                debugPrint(Export progress: \(String(format: "%.1f", progress * 100))%)
+                debugPrint("Export progress: \(String(format: "%.1f", progress * 100))%")
                 if let callback = progressCallback {
-                    debugPrint(Calling progress callback with progress: \(String(format: "%.1f", progress * 100))%)
+                    debugPrint("Calling progress callback with progress: \(String(format: "%.1f", progress * 100))%")
                     let transcriptionProgress = TranscriptionProgress(
                         progress: progress * 0.8, // Reserve 20% for post-processing
                         status: "Extracting audio using AVFoundation",
@@ -204,13 +204,13 @@ class AudioProcessor {
                     )
                     callback(transcriptionProgress)
                 } else {
-                    debugPrint(No progress callback available)
+                    debugPrint("No progress callback available")
                 }
             }
             
             // Add timeout protection (5 minutes max)
             let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: false) { _ in
-                debugPrint(Export session timed out after 5 minutes)
+                debugPrint("Export session timed out after 5 minutes")
                 exportSession.cancelExport()
                 progressTimer.invalidate()
                 let voxError = VoxError.audioExtractionFailed("Audio extraction timed out after 5 minutes")
@@ -220,13 +220,13 @@ class AudioProcessor {
             }
             
             exportSession.exportAsynchronously {
-                debugPrint(Export completion handler called)
+                debugPrint("Export completion handler called")
                 progressTimer.invalidate()
                 timeoutTimer.invalidate()
                 
-                debugPrint(Export session completed with status: \(exportSession.status) (raw: \(exportSession.status.rawValue)))
+                debugPrint("Export session completed with status: \(exportSession.status) (raw: \(exportSession.status.rawValue))")
                 
-                debugPrint(About to call handleExportCompletion)
+                debugPrint("About to call handleExportCompletion")
                 self.handleExportCompletion(
                     exportSession: exportSession,
                     asset: asset,
@@ -234,7 +234,7 @@ class AudioProcessor {
                     progressTimer: progressTimer,
                     completion: completion
                 )
-                debugPrint(handleExportCompletion call completed)
+                debugPrint("handleExportCompletion call completed")
             }
         }
     }
@@ -246,11 +246,11 @@ class AudioProcessor {
         progressTimer: Timer,
         completion: @escaping (Result<AudioFormat, VoxError>) -> Void
     ) {
-        debugPrint(handleExportCompletion called with status: \(exportSession.status) (raw: \(exportSession.status.rawValue)))
+        debugPrint("handleExportCompletion called with status: \(exportSession.status) (raw: \(exportSession.status.rawValue))")
         
         switch exportSession.status {
         case .completed:
-            debugPrint(Export completed successfully, extracting audio format)
+            debugPrint("Export completed successfully, extracting audio format")
             // Extract audio format information
             self.extractAudioFormat(from: asset, outputURL: outputURL) { formatResult in
                 completion(formatResult)
@@ -258,17 +258,17 @@ class AudioProcessor {
             
         case .failed:
             let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export error"
-            debugPrint(Export failed with error: \(errorMessage))
+            debugPrint("Export failed with error: \(errorMessage)")
             let voxError = VoxError.audioExtractionFailed("AVFoundation export failed: \(errorMessage)")
             completion(.failure(voxError))
             
         case .cancelled:
-            debugPrint(Export was cancelled)
+            debugPrint("Export was cancelled")
             let voxError = VoxError.audioExtractionFailed("Export was cancelled")
             completion(.failure(voxError))
             
         default:
-            debugPrint(Export completed with unknown status: \(exportSession.status.rawValue))
+            debugPrint("Export completed with unknown status: \(exportSession.status.rawValue)")
             let voxError = VoxError.audioExtractionFailed("Export completed with unknown status")
             completion(.failure(voxError))
         }
@@ -279,16 +279,16 @@ class AudioProcessor {
         outputURL: URL,
         completion: @escaping (Result<AudioFormat, VoxError>) -> Void
     ) {
-        debugPrint(extractAudioFormat called)
+        debugPrint("extractAudioFormat called")
         asset.loadValuesAsynchronously(forKeys: ["duration", "tracks"]) {
-            debugPrint(Asset values loaded asynchronously)
+            debugPrint("Asset values loaded asynchronously")
             var error: NSError?
             let status = asset.statusOfValue(forKey: "duration", error: &error)
             
-            debugPrint(Asset duration status: \(status.rawValue))
+            debugPrint("Asset duration status: \(status.rawValue)")
             
             guard status == .loaded else {
-                debugPrint(Failed to load asset duration)
+                debugPrint("Failed to load asset duration")
                 let voxError = VoxError.audioExtractionFailed(
                     "Failed to load asset duration: \(error?.localizedDescription ?? "Unknown error")"
                 )
@@ -296,34 +296,34 @@ class AudioProcessor {
                 return
             }
             
-            debugPrint(Asset duration loaded successfully)
+            debugPrint("Asset duration loaded successfully")
             let duration = CMTimeGetSeconds(asset.duration)
-            debugPrint(Duration: \(duration) seconds)
+            debugPrint("Duration: \(duration) seconds")
             
             let audioTracks = asset.tracks(withMediaType: .audio)
-            debugPrint(Found \(audioTracks.count) audio tracks)
+            debugPrint("Found \(audioTracks.count) audio tracks")
             
             guard let audioTrack = audioTracks.first else {
-                debugPrint(No audio tracks found)
+                debugPrint("No audio tracks found")
                 let voxError = VoxError.audioExtractionFailed("No audio tracks found")
                 completion(.failure(voxError))
                 return
             }
             
             // Extract format descriptions
-            debugPrint(Extracting format descriptions)
+            debugPrint("Extracting format descriptions")
             let formatDescriptions = audioTrack.formatDescriptions
-            debugPrint(Found \(formatDescriptions.count) format descriptions)
+            debugPrint("Found \(formatDescriptions.count) format descriptions")
             
             guard let formatDescription = formatDescriptions.first else {
-                debugPrint(No format description found)
+                debugPrint("No format description found")
                 let voxError = VoxError.audioExtractionFailed("No format description found")
                 completion(.failure(voxError))
                 return
             }
             
             // Extract audio format details
-            debugPrint(Extracting audio format details)
+            debugPrint("Extracting audio format details")
             // swiftlint:disable force_cast
             let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(
                 formatDescription as! CMAudioFormatDescription
@@ -332,15 +332,15 @@ class AudioProcessor {
             let sampleRate = Int(audioStreamBasicDescription?.pointee.mSampleRate ?? 44100)
             let channels = Int(audioStreamBasicDescription?.pointee.mChannelsPerFrame ?? 2)
             
-            debugPrint(Sample rate: \(sampleRate), Channels: \(channels))
+            debugPrint("Sample rate: \(sampleRate), Channels: \(channels)")
             
             // Get file size
-            debugPrint(Getting file size for: \(outputURL.path))
+            debugPrint("Getting file size for: \(outputURL.path)")
             let fileSize = try? FileManager.default.attributesOfItem(
                 atPath: outputURL.path
             )[.size] as? UInt64
             
-            debugPrint(File size: \(fileSize ?? 0) bytes)
+            debugPrint("File size: \(fileSize ?? 0) bytes")
             
             let audioFormat = AudioFormat(
                 codec: "aac",
@@ -351,7 +351,7 @@ class AudioProcessor {
                 fileSize: fileSize
             )
             
-            debugPrint(Audio format created successfully, calling completion)
+            debugPrint("Audio format created successfully, calling completion")
             completion(.success(audioFormat))
         }
     }
