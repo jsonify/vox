@@ -285,7 +285,12 @@ jobs:
         
         # Clone homebrew-vox repository
         cd ..
-        git clone https://github.com/jsonify/homebrew-vox.git homebrew-vox
+        if ! git clone https://github.com/jsonify/homebrew-vox.git homebrew-vox; then
+          echo "❌ Error: Failed to clone homebrew-vox repository"
+          echo "This may be because the repository doesn't exist or is not accessible"
+          echo "Skipping homebrew formula update for now"
+          exit 0
+        fi
         cd homebrew-vox
         
         # Configure Git
@@ -322,7 +327,7 @@ jobs:
         git push origin "$BRANCH_NAME"
         
         # Create pull request
-        gh pr create \
+        if gh pr create \
           --title "Update vox to v${{ steps.version.outputs.version }}" \
           --body "Automated update to vox v${{ steps.version.outputs.version }}
 
@@ -332,8 +337,13 @@ jobs:
 
 This PR was created automatically by the release workflow." \
           --base main \
-          --head "$BRANCH_NAME"
+          --head "$BRANCH_NAME"; then
+          echo "✅ Pull request created successfully"
+        else
+          echo "⚠️  PR creation failed, but formula was updated on branch $BRANCH_NAME"
+        fi
         
         echo "✅ Homebrew formula updated successfully with PR"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
