@@ -266,7 +266,7 @@ jobs:
           dist/checksums.txt
     
     - name: Update Homebrew Formula
-      if: ${{ !contains(steps.version.outputs.version, '-') }}
+      if: "!contains(steps.version.outputs.version, '-')"
       run: |
         # Skip pre-releases
         echo "Updating Homebrew formula for stable release ${{ steps.version.outputs.version }}"
