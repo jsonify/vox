@@ -63,19 +63,14 @@ class AudioProcessor {
             progressCallback: progressCallback
         ) { [weak self] result in
             switch result {
-            case .success(let audioFormat):
+            case .success(let audioFile):
                 // Validate the extracted audio format
-                if audioFormat.isTranscriptionReady {
-                    let audioFile = AudioFile(
-                        path: tempOutputURL.path,
-                        format: audioFormat,
-                        temporaryPath: tempOutputURL.path
-                    )
+                if audioFile.format.isTranscriptionReady {
                     self?.logger.info("AVFoundation extraction successful", component: "AudioProcessor")
                     completion(.success(audioFile))
                 } else {
                     let error = VoxError.incompatibleAudioProperties(
-                        "Audio format not compatible with transcription engines: \(audioFormat.description)"
+                        "Audio format not compatible with transcription engines: \(audioFile.format.description)"
                     )
                     self?.handleFailedExtraction(
                         inputPath: inputPath,
@@ -133,7 +128,7 @@ class AudioProcessor {
         from inputURL: URL,
         to outputURL: URL,
         progressCallback: ProgressCallback?,
-        completion: @escaping (Result<AudioFormat, VoxError>) -> Void
+        completion: @escaping (Result<AudioFile, VoxError>) -> Void
     ) {
         let asset = AVAsset(url: inputURL)
         
@@ -244,7 +239,7 @@ class AudioProcessor {
         asset: AVAsset,
         outputURL: URL,
         progressTimer: Timer,
-        completion: @escaping (Result<AudioFormat, VoxError>) -> Void
+        completion: @escaping (Result<AudioFile, VoxError>) -> Void
     ) {
         debugPrint("handleExportCompletion called with status: \(exportSession.status) (raw: \(exportSession.status.rawValue))")
         
@@ -255,7 +250,18 @@ class AudioProcessor {
             self.extractAudioFormat(from: asset, outputURL: outputURL) { formatResult in
                 // Always dispatch completion handlers to main queue for consistent thread safety
                 DispatchQueue.main.async {
-                    completion(formatResult)
+                    switch formatResult {
+                    case .success(let audioFormat):
+                        // Create AudioFile object from format and output URL
+                        let audioFile = AudioFile(
+                            path: outputURL.path,
+                            format: audioFormat,
+                            temporaryPath: outputURL.path // Mark as temporary so it gets cleaned up
+                        )
+                        completion(.success(audioFile))
+                    case .failure(let error):
+                        completion(.failure(error))
+                    }
                 }
             }
             
@@ -366,7 +372,7 @@ class AudioProcessor {
                 fileSize: fileSize
             )
             
-            debugPrint("Audio format created successfully, calling completion")
+            Logger.shared.debug("Audio format created successfully, calling completion", component: "AudioProcessor")
             // Ensure completion is called on main thread for consistent thread safety
             DispatchQueue.main.async {
                 completion(.success(audioFormat))
