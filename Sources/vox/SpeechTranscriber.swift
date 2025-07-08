@@ -12,25 +12,25 @@ class SpeechTranscriber {
     // MARK: - Initialization
 
     init(locale: Locale = Locale(identifier: "en-US")) throws {
-        debugPrint("SpeechTranscriber init start")
+        Logger.shared.debug("SpeechTranscriber init start", component: "SpeechTranscriber")
         guard let speechRecognizer = SFSpeechRecognizer(locale: locale) else {
             throw VoxError.transcriptionFailed(
                 "Speech recognizer not available for locale: \(locale.identifier)"
             )
         }
 
-        debugPrint("SpeechTranscriber created successfully")
+        Logger.shared.debug("SpeechTranscriber created successfully", component: "SpeechTranscriber")
         guard speechRecognizer.isAvailable else {
             throw VoxError.transcriptionFailed("Speech recognizer is not available")
         }
 
-        debugPrint("SpeechTranscriber is available")
+        Logger.shared.debug("SpeechTranscriber is available", component: "SpeechTranscriber")
         self.speechRecognizer = speechRecognizer
 
-        debugPrint("About to request speech recognition permission")
+        Logger.shared.debug("About to request speech recognition permission", component: "SpeechTranscriber")
         // Request authorization if needed
         try requestSpeechRecognitionPermission()
-        debugPrint("Speech recognition permission request completed")
+        Logger.shared.debug("Speech recognition permission request completed", component: "SpeechTranscriber")
     }
 
     // MARK: - Public Interface
@@ -49,53 +49,56 @@ class SpeechTranscriber {
         let audioURL = URL(fileURLWithPath: audioFile.path)
         let request = createRecognitionRequest(for: audioURL)
         
-        debugPrint("About to start speech recognition task")
+        Logger.shared.debug("About to start speech recognition task", component: "SpeechTranscriber")
         
         // Use the exact same pattern as our working test
         let result: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
             var hasResumed = false
             
-            debugPrint("About to create recognitionTask")
+            Logger.shared.debug("About to create recognitionTask", component: "SpeechTranscriber")
             recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
-                debugPrint("Speech recognition callback called")
-                
-                if hasResumed { 
-                    debugPrint("Already resumed, ignoring callback")
-                    return 
-                }
-                
-                if let error = error {
-                    debugPrint("Speech recognition error: \(error.localizedDescription)")
-                    hasResumed = true
-                    continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
-                    return
-                }
-                
-                if let result = result, result.isFinal {
-                    debugPrint("Final result received: \(result.bestTranscription.formattedString)")
-                    hasResumed = true
-                    continuation.resume(returning: result)
-                } else if let result = result {
-                    debugPrint("Partial result: \(result.bestTranscription.formattedString)")
-                    // Handle progress updates here if needed
+                // Ensure callback is handled on main thread for proper continuation dispatch
+                DispatchQueue.main.async {
+                    Logger.shared.debug("Speech recognition callback called", component: "SpeechTranscriber")
+                    
+                    if hasResumed { 
+                        Logger.shared.debug("Already resumed, ignoring callback", component: "SpeechTranscriber")
+                        return 
+                    }
+                    
+                    if let error = error {
+                        Logger.shared.debug("Speech recognition error: \(error.localizedDescription)", component: "SpeechTranscriber")
+                        hasResumed = true
+                        continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
+                        return
+                    }
+                    
+                    if let result = result, result.isFinal {
+                        Logger.shared.debug("Final result received: \(result.bestTranscription.formattedString)", component: "SpeechTranscriber")
+                        hasResumed = true
+                        continuation.resume(returning: result)
+                    } else if let result = result {
+                        Logger.shared.debug("Partial result: \(result.bestTranscription.formattedString)", component: "SpeechTranscriber")
+                        // Handle progress updates here if needed
+                    }
                 }
             }
-            debugPrint("Recognition task created, setting up timeout")
+            Logger.shared.debug("Recognition task created, setting up timeout", component: "SpeechTranscriber")
             
             // Add timeout with task cancellation (5 minutes)
             DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
-                debugPrint("Timeout timer fired")
+                Logger.shared.debug("Timeout timer fired", component: "SpeechTranscriber")
                 if !hasResumed {
                     hasResumed = true
-                    debugPrint("Canceling recognition task due to timeout")
+                    Logger.shared.debug("Canceling recognition task due to timeout", component: "SpeechTranscriber")
                     self?.recognitionTask?.cancel()
                     continuation.resume(throwing: VoxError.transcriptionFailed("Speech recognition timed out after 5 minutes"))
                 }
             }
-            debugPrint("Timeout set, waiting for recognition results")
+            Logger.shared.debug("Timeout set, waiting for recognition results", component: "SpeechTranscriber")
         }
         
-        debugPrint("Building final transcription result")
+        Logger.shared.debug("Building final transcription result", component: "SpeechTranscriber")
         return try buildTranscriptionResult(
             result: result,
             audioFile: audioFile,
@@ -122,16 +125,16 @@ class SpeechTranscriber {
         progressReporter: EnhancedProgressReporter,
         progressCallback: ProgressCallback?
     ) throws -> TranscriptionResult {
-        debugPrint("Building transcription result")
+        Logger.shared.debug("Building transcription result", component: "SpeechTranscriber")
         let finalText = result.bestTranscription.formattedString
-        debugPrint("Got final text: \(finalText)")
+        Logger.shared.debug("Got final text: \(finalText)", component: "SpeechTranscriber")
 
         // Calculate average confidence
         let confidences = result.bestTranscription.segments.compactMap { segment in
             segment.confidence > 0 ? Double(segment.confidence) : nil
         }
         let confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
-        debugPrint("Calculated confidence: \(confidence)")
+        Logger.shared.debug("Calculated confidence: \(confidence)", component: "SpeechTranscriber")
 
         // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
         let segments = createEnhancedSegments(from: result.bestTranscription.segments)
@@ -149,7 +152,7 @@ class SpeechTranscriber {
             audioFormat: audioFile.format
         )
         
-        debugPrint("Transcription result built successfully")
+        Logger.shared.debug("Transcription result built successfully", component: "SpeechTranscriber")
         return transcriptionResult
     }
 
@@ -225,38 +228,38 @@ class SpeechTranscriber {
     }
 
     private func requestSpeechRecognitionPermission() throws {
-        debugPrint("In requestSpeechRecognitionPermission")
+        Logger.shared.debug("In requestSpeechRecognitionPermission", component: "SpeechTranscriber")
         let semaphore = DispatchSemaphore(value: 0)
         var authError: Error?
 
-        debugPrint("About to call SFSpeechRecognizer.requestAuthorization")
+        Logger.shared.debug("About to call SFSpeechRecognizer.requestAuthorization", component: "SpeechTranscriber")
         SFSpeechRecognizer.requestAuthorization { status in
-            debugPrint("SFSpeechRecognizer.requestAuthorization callback called")
+            Logger.shared.debug("SFSpeechRecognizer.requestAuthorization callback called", component: "SpeechTranscriber")
             switch status {
             case .authorized:
-                debugPrint("Speech recognition authorization granted")
+                Logger.shared.debug("Speech recognition authorization granted", component: "SpeechTranscriber")
             // TEMP DEBUG: Bypass Logger call
             // Logger.shared.info("Speech recognition authorization granted", component: "SpeechTranscriber")
             case .denied:
-                debugPrint("Speech recognition access denied by user")
+                Logger.shared.debug("Speech recognition access denied by user", component: "SpeechTranscriber")
                 authError = VoxError.transcriptionFailed("Speech recognition access denied by user")
             case .restricted:
-                debugPrint("Speech recognition restricted on this device")
+                Logger.shared.debug("Speech recognition restricted on this device", component: "SpeechTranscriber")
                 authError = VoxError.transcriptionFailed("Speech recognition restricted on this device")
             case .notDetermined:
-                debugPrint("Speech recognition authorization not determined")
+                Logger.shared.debug("Speech recognition authorization not determined", component: "SpeechTranscriber")
                 authError = VoxError.transcriptionFailed("Speech recognition authorization not determined")
             @unknown default:
-                debugPrint("Unknown speech recognition authorization status")
+                Logger.shared.debug("Unknown speech recognition authorization status", component: "SpeechTranscriber")
                 authError = VoxError.transcriptionFailed("Unknown speech recognition authorization status")
             }
-            debugPrint("About to signal semaphore")
+            Logger.shared.debug("About to signal semaphore", component: "SpeechTranscriber")
             semaphore.signal()
         }
 
-        debugPrint("About to wait on semaphore")
+        Logger.shared.debug("About to wait on semaphore", component: "SpeechTranscriber")
         semaphore.wait()
-        debugPrint("Semaphore wait completed")
+        Logger.shared.debug("Semaphore wait completed", component: "SpeechTranscriber")
 
         if let error = authError {
             throw error
@@ -281,16 +284,16 @@ extension SpeechTranscriber {
         languages: [String],
         progressCallback: ProgressCallback?
     ) async throws -> TranscriptionResult {
-        debugPrint("In attemptTranscriptionWithLanguages")
+        Logger.shared.debug("In attemptTranscriptionWithLanguages", component: "SpeechTranscriber")
         var lastError: Error?
         var bestResult: TranscriptionResult?
-        debugPrint("About to create ConfidenceManager")
+        Logger.shared.debug("About to create ConfidenceManager", component: "SpeechTranscriber")
         let confidenceManager = ConfidenceManager()
         _ = ConfidenceConfig.default
-        debugPrint("ConfidenceManager created")
+        Logger.shared.debug("ConfidenceManager created", component: "SpeechTranscriber")
 
         // Try each language in order
-        debugPrint("About to iterate languages: \(languages.joined(separator: ", "))")
+        Logger.shared.debug("About to iterate languages: \(languages.joined(separator: ", "))", component: "SpeechTranscriber")
         for (index, languageCode) in languages.enumerated() {
             do {
                 if let result = try await attemptTranscriptionWithLanguage(
@@ -334,25 +337,25 @@ extension SpeechTranscriber {
         progressCallback: ProgressCallback?,
         confidenceManager: ConfidenceManager
     ) async throws -> TranscriptionResult? {
-        debugPrint("Trying language \(languageCode) (\(index + 1)/\(totalCount))")
+        Logger.shared.debug("Trying language \(languageCode) (\(index + 1)/\(totalCount))", component: "SpeechTranscriber")
         let locale = Locale(identifier: languageCode)
 
-        debugPrint("About to check if speech recognition is available for \(languageCode)")
+        Logger.shared.debug("About to check if speech recognition is available for \(languageCode)", component: "SpeechTranscriber")
         guard Self.isAvailable(for: locale) else {
-            debugPrint("Speech recognition not available for \(languageCode)")
+            Logger.shared.debug("Speech recognition not available for \(languageCode)", component: "SpeechTranscriber")
             return nil
         }
 
-        debugPrint("Attempting transcription with language: \(languageCode) (\(index + 1)/\(totalCount))")
+        Logger.shared.debug("Attempting transcription with language: \(languageCode) (\(index + 1)/\(totalCount))", component: "SpeechTranscriber")
 
-        debugPrint("About to create SpeechTranscriber with locale \(languageCode)")
+        Logger.shared.debug("About to create SpeechTranscriber with locale \(languageCode)", component: "SpeechTranscriber")
         let speechTranscriber = try SpeechTranscriber(locale: locale)
-        debugPrint("SpeechTranscriber created successfully, about to call transcribe")
+        Logger.shared.debug("SpeechTranscriber created successfully, about to call transcribe", component: "SpeechTranscriber")
         let result = try await speechTranscriber.transcribe(
             audioFile: audioFile,
             progressCallback: progressCallback
         )
-        debugPrint("transcribe() completed successfully")
+        Logger.shared.debug("transcribe() completed successfully", component: "SpeechTranscriber")
 
         Logger.shared.info(
             "Transcription confidence for \(languageCode): \(String(format: "%.1f%%", result.confidence * 100))",
