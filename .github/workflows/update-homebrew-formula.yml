@@ -1,22 +1,32 @@
-name: Update Homebrew Formula
+name: Update Homebrew Formula (Fallback)
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update (e.g., 1.1.3)'
+        required: true
+        type: string
 
 jobs:
   update-formula:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     
     steps:
     - name: Checkout vox repository
       uses: actions/checkout@v4
       
-    - name: Extract version from tag
+    - name: Extract version from tag or input
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/v}
+        fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
         
@@ -26,20 +36,46 @@ jobs:
         ASSET_NAME="vox-${VERSION}-macos-universal.tar.gz"
         
         # Download the release asset
-        curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+        echo "Downloading asset: $ASSET_NAME"
+        if curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -o "$ASSET_NAME" \
-          "https://github.com/jsonify/vox/releases/download/v${VERSION}/${ASSET_NAME}"
+          "https://github.com/jsonify/vox/releases/download/v${VERSION}/${ASSET_NAME}"; then
+          echo "✅ Asset downloaded successfully"
+        else
+          echo "❌ Error: Failed to download asset"
+          exit 1
+        fi
+        
+        # Verify file exists and has content
+        if [ ! -f "$ASSET_NAME" ]; then
+          echo "❌ Error: Asset file not found after download"
+          exit 1
+        fi
+        
+        FILE_SIZE=$(stat -c%s "$ASSET_NAME" 2>/dev/null || stat -f%z "$ASSET_NAME")
+        echo "Asset size: $FILE_SIZE bytes"
+        
+        if [ "$FILE_SIZE" -eq 0 ]; then
+          echo "❌ Error: Asset file is empty"
+          exit 1
+        fi
         
         # Calculate SHA256
         SHA256=$(sha256sum "$ASSET_NAME" | cut -d' ' -f1)
         echo "SHA256: $SHA256"
+        
+        if [ -z "$SHA256" ]; then
+          echo "❌ Error: Failed to calculate SHA256"
+          exit 1
+        fi
+        
         echo "sha256=$SHA256" >> $GITHUB_ENV
         
-    - name: Checkout homebrew-vox repository
+    - name: Checkout homebrew-vox repository  
       uses: actions/checkout@v4
       with:
         repository: jsonify/homebrew-vox
-        token: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         path: homebrew-vox
         
     - name: Update formula
@@ -47,13 +83,26 @@ jobs:
         cd homebrew-vox
         VERSION=${{ steps.version.outputs.version }}
         
+        # Check if formula exists
+        if [ ! -f "Formula/vox.rb" ]; then
+          echo "❌ Error: Formula/vox.rb not found"
+          exit 1
+        fi
+        
         # Update version and SHA256 in formula
-        sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/vox.rb
-        sed -i "s/sha256 \".*\"/sha256 \"${{ env.sha256 }}\"/" Formula/vox.rb
+        sed -i.bak "s/version \".*\"/version \"$VERSION\"/" Formula/vox.rb
+        sed -i.bak "s/sha256 \".*\"/sha256 \"${{ env.sha256 }}\"/" Formula/vox.rb
         
         # Verify changes
         echo "Updated formula:"
         cat Formula/vox.rb
+        
+        # Check if changes were made
+        if git diff --quiet; then
+          echo "⚠️  No changes detected in formula"
+        else
+          echo "✅ Formula updated successfully"
+        fi
         
     - name: Commit and push changes
       run: |
@@ -63,14 +112,21 @@ jobs:
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
         
+        # Check if there are changes to commit
+        if git diff --staged --quiet && git diff --quiet; then
+          echo "⚠️  No changes to commit"
+          exit 0
+        fi
+        
         git add Formula/vox.rb
         git commit -m "Update vox to v$VERSION
 
-        - Version: $VERSION
-        - SHA256: ${{ env.sha256 }}
-        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION"
+- Version: $VERSION
+- SHA256: ${{ env.sha256 }}
+- Release: https://github.com/jsonify/vox/releases/tag/v$VERSION"
         
         git push origin main
+        echo "✅ Homebrew formula updated successfully"
         
     - name: Create PR for manual review (fallback)
       if: failure()
@@ -80,6 +136,15 @@ jobs:
         
         # Create a branch for the update
         git checkout -b "update-v$VERSION"
+        git add Formula/vox.rb
+        git commit -m "Update vox to v$VERSION
+
+- Version: $VERSION
+- SHA256: ${{ env.sha256 }}
+- Release: https://github.com/jsonify/vox/releases/tag/v$VERSION
+
+This update was created as a fallback when automated push failed."
+        
         git push origin "update-v$VERSION"
         
         # Create PR
@@ -87,12 +152,12 @@ jobs:
           --title "Update vox to v$VERSION" \
           --body "Automated update to vox v$VERSION
 
-        - Version: $VERSION
-        - SHA256: ${{ env.sha256 }}
-        - Release: https://github.com/jsonify/vox/releases/tag/v$VERSION
+- Version: $VERSION
+- SHA256: ${{ env.sha256 }}
+- Release: https://github.com/jsonify/vox/releases/tag/v$VERSION
 
-        This PR was created automatically because the direct push failed." \
+This PR was created automatically because the direct push failed." \
           --base main \
           --head "update-v$VERSION"
       env:
-        GH_TOKEN: ${{ secrets.HOMEBREW_UPDATE_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
