@@ -51,14 +51,15 @@ class SpeechTranscriber {
         
         Logger.shared.debug("About to start speech recognition task", component: "SpeechTranscriber")
         
-        // Use the exact same pattern as our working test
+        // Create recognition task with proper main thread handling for Speech framework
         let result: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
             var hasResumed = false
             
             Logger.shared.debug("About to create recognitionTask", component: "SpeechTranscriber")
-            recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
-                // Ensure callback is handled on main thread for proper continuation dispatch
-                DispatchQueue.main.async {
+            
+            // Create the recognition task - ensure it runs on main thread
+            recognitionTask = speechRecognizer.recognitionTask(with: request, resultHandler: { result, error in
+                // Process callback directly (Speech framework already uses main thread)
                     Logger.shared.debug("Speech recognition callback called", component: "SpeechTranscriber")
                     
                     if hasResumed { 
@@ -80,10 +81,26 @@ class SpeechTranscriber {
                     } else if let result = result {
                         Logger.shared.debug("Partial result: \(result.bestTranscription.formattedString)", component: "SpeechTranscriber")
                         // Handle progress updates here if needed
+                        if let callback = progressCallback {
+                            let progress = TranscriptionProgress(
+                                progress: 0.5, // Partial progress
+                                status: "Processing...",
+                                phase: .converting,
+                                startTime: Date()
+                            )
+                            callback(progress)
+                        }
                     }
-                }
-            }
+            })
+            
             Logger.shared.debug("Recognition task created, setting up timeout", component: "SpeechTranscriber")
+            
+            // Ensure recognition task was created successfully
+            guard recognitionTask != nil else {
+                hasResumed = true
+                continuation.resume(throwing: VoxError.transcriptionFailed("Failed to create recognition task"))
+                return
+            }
             
             // Add timeout with task cancellation (5 minutes)
             DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
@@ -95,6 +112,7 @@ class SpeechTranscriber {
                     continuation.resume(throwing: VoxError.transcriptionFailed("Speech recognition timed out after 5 minutes"))
                 }
             }
+            
             Logger.shared.debug("Timeout set, waiting for recognition results", component: "SpeechTranscriber")
         }
         
@@ -229,6 +247,23 @@ class SpeechTranscriber {
 
     private func requestSpeechRecognitionPermission() throws {
         Logger.shared.debug("In requestSpeechRecognitionPermission", component: "SpeechTranscriber")
+        
+        // Check current authorization status first
+        let currentStatus = SFSpeechRecognizer.authorizationStatus()
+        switch currentStatus {
+        case .authorized:
+            Logger.shared.debug("Speech recognition already authorized", component: "SpeechTranscriber")
+            return
+        case .denied:
+            throw VoxError.transcriptionFailed("Speech recognition access denied by user")
+        case .restricted:
+            throw VoxError.transcriptionFailed("Speech recognition restricted on this device")
+        case .notDetermined:
+            Logger.shared.debug("Need to request speech recognition authorization", component: "SpeechTranscriber")
+        @unknown default:
+            throw VoxError.transcriptionFailed("Unknown speech recognition authorization status")
+        }
+        
         let semaphore = DispatchSemaphore(value: 0)
         var authError: Error?
 
@@ -238,8 +273,6 @@ class SpeechTranscriber {
             switch status {
             case .authorized:
                 Logger.shared.debug("Speech recognition authorization granted", component: "SpeechTranscriber")
-            // TEMP DEBUG: Bypass Logger call
-            // Logger.shared.info("Speech recognition authorization granted", component: "SpeechTranscriber")
             case .denied:
                 Logger.shared.debug("Speech recognition access denied by user", component: "SpeechTranscriber")
                 authError = VoxError.transcriptionFailed("Speech recognition access denied by user")
