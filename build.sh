@@ -11,6 +11,13 @@ BUILD_CONFIG="release"
 DIST_DIR="dist"
 TEMP_BUILD_DIR=".build-temp"
 
+# CI/CD integration flags
+CI_MODE=${CI_MODE:-false}
+SKIP_TESTS=${SKIP_TESTS:-false}
+SKIP_PACKAGING=${SKIP_PACKAGING:-false}
+SKIP_VALIDATION=${SKIP_VALIDATION:-false}
+BUILD_VERSION=${BUILD_VERSION:-""}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -72,17 +79,33 @@ validate_environment() {
 
 # Function to run tests before building
 run_tests() {
-    if [[ "${SKIP_TESTS:-}" == "true" ]]; then
+    if [[ "$SKIP_TESTS" == "true" ]]; then
         log_warning "Skipping tests (SKIP_TESTS=true)"
         return 0
     fi
     
     log_info "Running CI tests..."
-    if swift test --filter CITests --verbose; then
-        log_success "All tests passed"
+    if [[ "$CI_MODE" == "true" ]]; then
+        # In CI mode, provide more detailed output
+        log_info "Running in CI mode with enhanced logging"
+        if swift test --filter CITests --verbose 2>&1 | tee test-output.log; then
+            log_success "All tests passed"
+            # Clean up test log in CI mode
+            rm -f test-output.log
+        else
+            log_error "Tests failed. Build aborted."
+            log_error "Test output:"
+            tail -20 test-output.log || echo "Could not read test output"
+            exit 1
+        fi
     else
-        log_error "Tests failed. Build aborted."
-        exit 1
+        # Standard test execution
+        if swift test --filter CITests --verbose; then
+            log_success "All tests passed"
+        else
+            log_error "Tests failed. Build aborted."
+            exit 1
+        fi
     fi
 }
 
@@ -173,6 +196,11 @@ create_universal_binary() {
 
 # Function to validate final binary
 validate_binary() {
+    if [[ "$SKIP_VALIDATION" == "true" ]]; then
+        log_warning "Skipping binary validation (SKIP_VALIDATION=true)"
+        return 0
+    fi
+    
     local binary="$DIST_DIR/$PROJECT_NAME"
     
     log_info "Validating final binary..."
@@ -193,10 +221,20 @@ validate_binary() {
     fi
     
     # Test basic functionality (if possible)
-    if timeout 10s "$binary" --help > /dev/null 2>&1; then
-        log_success "Binary help command works"
+    if [[ "$CI_MODE" == "true" ]]; then
+        # In CI mode, be more tolerant of binary test failures
+        if timeout 10s "$binary" --help > /dev/null 2>&1; then
+            log_success "Binary help command works"
+        else
+            log_warning "Could not test binary functionality (timeout or error - may be normal in CI)"
+        fi
     else
-        log_warning "Could not test binary functionality (timeout or error)"
+        # In local mode, test is more critical
+        if timeout 10s "$binary" --help > /dev/null 2>&1; then
+            log_success "Binary help command works"
+        else
+            log_warning "Could not test binary functionality (timeout or error)"
+        fi
     fi
     
     # Generate checksum
@@ -207,7 +245,7 @@ validate_binary() {
 
 # Function to create distribution packages
 create_distribution_packages() {
-    if [[ "${SKIP_PACKAGING:-}" == "true" ]]; then
+    if [[ "$SKIP_PACKAGING" == "true" ]]; then
         log_warning "Skipping packaging (SKIP_PACKAGING=true)"
         return 0
     fi
@@ -215,12 +253,22 @@ create_distribution_packages() {
     log_info "Creating distribution packages..."
     cd $DIST_DIR
     
-    # Get version from git tag or use default
-    local version=${BUILD_VERSION:-$(git describe --tags --exact-match 2>/dev/null || echo "dev")}
+    # Get version from BUILD_VERSION or git tag or use default
+    local version="$BUILD_VERSION"
+    if [[ -z "$version" ]]; then
+        version=$(git describe --tags --exact-match 2>/dev/null || echo "dev")
+    fi
+    
     local package_base="$PROJECT_NAME-$version-macos-universal"
     
+    # Files to include in packages
+    local files_to_package=("$PROJECT_NAME")
+    if [[ -f "checksum.txt" ]]; then
+        files_to_package+=("checksum.txt")
+    fi
+    
     # Create tar.gz
-    if tar -czf "$package_base.tar.gz" "$PROJECT_NAME" checksum.txt; then
+    if tar -czf "$package_base.tar.gz" "${files_to_package[@]}"; then
         log_success "Created $package_base.tar.gz"
     else
         log_error "Failed to create tar.gz package"
@@ -228,7 +276,7 @@ create_distribution_packages() {
     fi
     
     # Create zip
-    if zip -q "$package_base.zip" "$PROJECT_NAME" checksum.txt; then
+    if zip -q "$package_base.zip" "${files_to_package[@]}"; then
         log_success "Created $package_base.zip"
     else
         log_error "Failed to create zip package"
@@ -278,6 +326,12 @@ main() {
     echo "🔨 Vox CLI Universal Binary Build"
     echo "=================================="
     
+    # Detect CI environment
+    if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        export CI_MODE=true
+        log_info "CI environment detected - enabling CI mode"
+    fi
+    
     # Parse command line arguments
     case "${1:-}" in
         "clean")
@@ -302,9 +356,15 @@ main() {
             echo "  help      Show this help"
             echo ""
             echo "Environment variables:"
+            echo "  CI_MODE=true           Enable CI-friendly mode"
             echo "  SKIP_TESTS=true       Skip running tests"
             echo "  SKIP_PACKAGING=true   Skip creating packages"
+            echo "  SKIP_VALIDATION=true  Skip binary validation"
             echo "  BUILD_VERSION=x.y.z   Override version for packages"
+            echo ""
+            echo "CI/CD Integration:"
+            echo "  This script is designed to work in CI/CD environments."
+            echo "  Set CI_MODE=true for enhanced logging and error handling."
             echo ""
             exit 0
             ;;
