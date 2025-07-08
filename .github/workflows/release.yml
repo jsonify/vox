@@ -202,8 +202,8 @@ jobs:
         cd dist
         
         # Create archives
-        tar -czf "vox-${{ steps.version.outputs.version }}-macos.tar.gz" vox
-        zip "vox-${{ steps.version.outputs.version }}-macos.zip" vox
+        tar -czf "vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz" vox
+        zip "vox-${{ steps.version.outputs.version }}-macos-universal.zip" vox
         
         # Generate checksums
         shasum -a 256 *.tar.gz *.zip > checksums.txt
@@ -234,6 +234,13 @@ jobs:
         echo "" >> release_notes.md
         echo "## Installation" >> release_notes.md
         echo "" >> release_notes.md
+        echo "### Homebrew (Recommended)" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "brew tap jsonify/vox" >> release_notes.md
+        echo "brew install vox" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Manual Installation" >> release_notes.md
         echo "Download and extract the archive, then:" >> release_notes.md
         echo "\`\`\`bash" >> release_notes.md
         echo "sudo mv vox /usr/local/bin/" >> release_notes.md
@@ -254,6 +261,6 @@ jobs:
         draft: false
         prerelease: ${{ contains(steps.version.outputs.version, '-') }}
         files: |
-          dist/vox-${{ steps.version.outputs.version }}-macos.tar.gz
-          dist/vox-${{ steps.version.outputs.version }}-macos.zip
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+          dist/vox-${{ steps.version.outputs.version }}-macos-universal.zip
           dist/checksums.txt
