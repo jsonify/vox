@@ -253,24 +253,33 @@ class AudioProcessor {
             debugPrint("Export completed successfully, extracting audio format")
             // Extract audio format information
             self.extractAudioFormat(from: asset, outputURL: outputURL) { formatResult in
-                completion(formatResult)
+                // Always dispatch completion handlers to main queue for consistent thread safety
+                DispatchQueue.main.async {
+                    completion(formatResult)
+                }
             }
             
         case .failed:
-            let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export error"
+            let errorMessage = exportSession.error?.localizedDescription ?? "Unknown error"
             debugPrint("Export failed with error: \(errorMessage)")
             let voxError = VoxError.audioExtractionFailed("AVFoundation export failed: \(errorMessage)")
-            completion(.failure(voxError))
+            DispatchQueue.main.async {
+                completion(.failure(voxError))
+            }
             
         case .cancelled:
             debugPrint("Export was cancelled")
             let voxError = VoxError.audioExtractionFailed("Export was cancelled")
-            completion(.failure(voxError))
+            DispatchQueue.main.async {
+                completion(.failure(voxError))
+            }
             
         default:
             debugPrint("Export completed with unknown status: \(exportSession.status.rawValue)")
             let voxError = VoxError.audioExtractionFailed("Export completed with unknown status")
-            completion(.failure(voxError))
+            DispatchQueue.main.async {
+                completion(.failure(voxError))
+            }
         }
     }
     
@@ -292,7 +301,9 @@ class AudioProcessor {
                 let voxError = VoxError.audioExtractionFailed(
                     "Failed to load asset duration: \(error?.localizedDescription ?? "Unknown error")"
                 )
-                completion(.failure(voxError))
+                DispatchQueue.main.async {
+                    completion(.failure(voxError))
+                }
                 return
             }
             
@@ -306,7 +317,9 @@ class AudioProcessor {
             guard let audioTrack = audioTracks.first else {
                 debugPrint("No audio tracks found")
                 let voxError = VoxError.audioExtractionFailed("No audio tracks found")
-                completion(.failure(voxError))
+                DispatchQueue.main.async {
+                    completion(.failure(voxError))
+                }
                 return
             }
             
@@ -318,7 +331,9 @@ class AudioProcessor {
             guard let formatDescription = formatDescriptions.first else {
                 debugPrint("No format description found")
                 let voxError = VoxError.audioExtractionFailed("No format description found")
-                completion(.failure(voxError))
+                DispatchQueue.main.async {
+                    completion(.failure(voxError))
+                }
                 return
             }
             
@@ -352,7 +367,10 @@ class AudioProcessor {
             )
             
             debugPrint("Audio format created successfully, calling completion")
-            completion(.success(audioFormat))
+            // Ensure completion is called on main thread for consistent thread safety
+            DispatchQueue.main.async {
+                completion(.success(audioFormat))
+            }
         }
     }
     

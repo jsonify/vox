@@ -12,25 +12,25 @@ class SpeechTranscriber {
     // MARK: - Initialization
 
     init(locale: Locale = Locale(identifier: "en-US")) throws {
-        fputs("DEBUG: SpeechTranscriber init start\n", stderr)
+        debugPrint("SpeechTranscriber init start")
         guard let speechRecognizer = SFSpeechRecognizer(locale: locale) else {
             throw VoxError.transcriptionFailed(
                 "Speech recognizer not available for locale: \(locale.identifier)"
             )
         }
 
-        fputs("DEBUG: SpeechTranscriber created successfully\n", stderr)
+        debugPrint("SpeechTranscriber created successfully")
         guard speechRecognizer.isAvailable else {
             throw VoxError.transcriptionFailed("Speech recognizer is not available")
         }
 
-        fputs("DEBUG: SpeechTranscriber is available\n", stderr)
+        debugPrint("SpeechTranscriber is available")
         self.speechRecognizer = speechRecognizer
 
-        fputs("DEBUG: About to request speech recognition permission\n", stderr)
+        debugPrint("About to request speech recognition permission")
         // Request authorization if needed
         try requestSpeechRecognitionPermission()
-        fputs("DEBUG: Speech recognition permission request completed\n", stderr)
+        debugPrint("Speech recognition permission request completed")
     }
 
     // MARK: - Public Interface
@@ -49,53 +49,53 @@ class SpeechTranscriber {
         let audioURL = URL(fileURLWithPath: audioFile.path)
         let request = createRecognitionRequest(for: audioURL)
         
-        fputs("DEBUG: About to start speech recognition task\n", stderr)
+        debugPrint("About to start speech recognition task")
         
         // Use the exact same pattern as our working test
         let result: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
             var hasResumed = false
             
-            fputs("DEBUG: About to create recognitionTask\n", stderr)
+            debugPrint("About to create recognitionTask")
             recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
-                fputs("DEBUG: Speech recognition callback called\n", stderr)
+                debugPrint("Speech recognition callback called")
                 
                 if hasResumed { 
-                    fputs("DEBUG: Already resumed, ignoring callback\n", stderr)
+                    debugPrint("Already resumed, ignoring callback")
                     return 
                 }
                 
                 if let error = error {
-                    fputs("DEBUG: Speech recognition error: \(error.localizedDescription)\n", stderr)
+                    debugPrint("Speech recognition error: \(error.localizedDescription)")
                     hasResumed = true
                     continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
                     return
                 }
                 
                 if let result = result, result.isFinal {
-                    fputs("DEBUG: Final result received: \(result.bestTranscription.formattedString)\n", stderr)
+                    debugPrint("Final result received: \(result.bestTranscription.formattedString)")
                     hasResumed = true
                     continuation.resume(returning: result)
                 } else if let result = result {
-                    fputs("DEBUG: Partial result: \(result.bestTranscription.formattedString)\n", stderr)
+                    debugPrint("Partial result: \(result.bestTranscription.formattedString)")
                     // Handle progress updates here if needed
                 }
             }
-            fputs("DEBUG: Recognition task created, setting up timeout\n", stderr)
+            debugPrint("Recognition task created, setting up timeout")
             
-            // Add timeout with task cancellation 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-                fputs("DEBUG: Timeout timer fired\n", stderr)
+            // Add timeout with task cancellation (5 minutes)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
+                debugPrint("Timeout timer fired")
                 if !hasResumed {
                     hasResumed = true
-                    fputs("DEBUG: Canceling recognition task due to timeout\n", stderr)
+                    debugPrint("Canceling recognition task due to timeout")
                     self?.recognitionTask?.cancel()
-                    continuation.resume(throwing: VoxError.transcriptionFailed("Speech recognition timed out"))
+                    continuation.resume(throwing: VoxError.transcriptionFailed("Speech recognition timed out after 5 minutes"))
                 }
             }
-            fputs("DEBUG: Timeout set, waiting for recognition results\n", stderr)
+            debugPrint("Timeout set, waiting for recognition results")
         }
         
-        fputs("DEBUG: Building final transcription result\n", stderr)
+        debugPrint("Building final transcription result")
         return try buildTranscriptionResult(
             result: result,
             audioFile: audioFile,
@@ -122,16 +122,16 @@ class SpeechTranscriber {
         progressReporter: EnhancedProgressReporter,
         progressCallback: ProgressCallback?
     ) throws -> TranscriptionResult {
-        fputs("DEBUG: Building transcription result\n", stderr)
+        debugPrint("Building transcription result")
         let finalText = result.bestTranscription.formattedString
-        fputs("DEBUG: Got final text: \(finalText)\n", stderr)
+        debugPrint("Got final text: \(finalText)")
 
         // Calculate average confidence
         let confidences = result.bestTranscription.segments.compactMap { segment in
             segment.confidence > 0 ? Double(segment.confidence) : nil
         }
         let confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
-        fputs("DEBUG: Calculated confidence: \(confidence)\n", stderr)
+        debugPrint("Calculated confidence: \(confidence)")
 
         // Convert SFTranscriptionSegment to enhanced TranscriptionSegment
         let segments = createEnhancedSegments(from: result.bestTranscription.segments)
@@ -149,7 +149,7 @@ class SpeechTranscriber {
             audioFormat: audioFile.format
         )
         
-        fputs("DEBUG: Transcription result built successfully\n", stderr)
+        debugPrint("Transcription result built successfully")
         return transcriptionResult
     }
 
@@ -225,38 +225,38 @@ class SpeechTranscriber {
     }
 
     private func requestSpeechRecognitionPermission() throws {
-        fputs("DEBUG: In requestSpeechRecognitionPermission\n", stderr)
+        debugPrint("In requestSpeechRecognitionPermission")
         let semaphore = DispatchSemaphore(value: 0)
         var authError: Error?
 
-        fputs("DEBUG: About to call SFSpeechRecognizer.requestAuthorization\n", stderr)
+        debugPrint("About to call SFSpeechRecognizer.requestAuthorization")
         SFSpeechRecognizer.requestAuthorization { status in
-            fputs("DEBUG: SFSpeechRecognizer.requestAuthorization callback called\n", stderr)
+            debugPrint("SFSpeechRecognizer.requestAuthorization callback called")
             switch status {
             case .authorized:
-                fputs("DEBUG: Speech recognition authorization granted\n", stderr)
+                debugPrint("Speech recognition authorization granted")
             // TEMP DEBUG: Bypass Logger call
             // Logger.shared.info("Speech recognition authorization granted", component: "SpeechTranscriber")
             case .denied:
-                fputs("DEBUG: Speech recognition access denied by user\n", stderr)
+                debugPrint("Speech recognition access denied by user")
                 authError = VoxError.transcriptionFailed("Speech recognition access denied by user")
             case .restricted:
-                fputs("DEBUG: Speech recognition restricted on this device\n", stderr)
+                debugPrint("Speech recognition restricted on this device")
                 authError = VoxError.transcriptionFailed("Speech recognition restricted on this device")
             case .notDetermined:
-                fputs("DEBUG: Speech recognition authorization not determined\n", stderr)
+                debugPrint("Speech recognition authorization not determined")
                 authError = VoxError.transcriptionFailed("Speech recognition authorization not determined")
             @unknown default:
-                fputs("DEBUG: Unknown speech recognition authorization status\n", stderr)
+                debugPrint("Unknown speech recognition authorization status")
                 authError = VoxError.transcriptionFailed("Unknown speech recognition authorization status")
             }
-            fputs("DEBUG: About to signal semaphore\n", stderr)
+            debugPrint("About to signal semaphore")
             semaphore.signal()
         }
 
-        fputs("DEBUG: About to wait on semaphore\n", stderr)
+        debugPrint("About to wait on semaphore")
         semaphore.wait()
-        fputs("DEBUG: Semaphore wait completed\n", stderr)
+        debugPrint("Semaphore wait completed")
 
         if let error = authError {
             throw error
@@ -281,16 +281,16 @@ extension SpeechTranscriber {
         languages: [String],
         progressCallback: ProgressCallback?
     ) async throws -> TranscriptionResult {
-        fputs("DEBUG: In attemptTranscriptionWithLanguages\n", stderr)
+        debugPrint("In attemptTranscriptionWithLanguages")
         var lastError: Error?
         var bestResult: TranscriptionResult?
-        fputs("DEBUG: About to create ConfidenceManager\n", stderr)
+        debugPrint("About to create ConfidenceManager")
         let confidenceManager = ConfidenceManager()
         _ = ConfidenceConfig.default
-        fputs("DEBUG: ConfidenceManager created\n", stderr)
+        debugPrint("ConfidenceManager created")
 
         // Try each language in order
-        fputs("DEBUG: About to iterate languages: \(languages.joined(separator: ", "))\n", stderr)
+        debugPrint("About to iterate languages: \(languages.joined(separator: ", "))")
         for (index, languageCode) in languages.enumerated() {
             do {
                 if let result = try await attemptTranscriptionWithLanguage(
@@ -334,27 +334,25 @@ extension SpeechTranscriber {
         progressCallback: ProgressCallback?,
         confidenceManager: ConfidenceManager
     ) async throws -> TranscriptionResult? {
-        fputs("DEBUG: Trying language \(languageCode) (\(index + 1)/\(totalCount))\n", stderr)
+        debugPrint("Trying language \(languageCode) (\(index + 1)/\(totalCount))")
         let locale = Locale(identifier: languageCode)
 
-        fputs("DEBUG: About to check if speech recognition is available for \(languageCode)\n", stderr)
+        debugPrint("About to check if speech recognition is available for \(languageCode)")
         guard Self.isAvailable(for: locale) else {
-            fputs("DEBUG: Speech recognition not available for \(languageCode)\n", stderr)
+            debugPrint("Speech recognition not available for \(languageCode)")
             return nil
         }
 
-        let attemptMessage = "DEBUG: Attempting transcription with language: \(languageCode) " +
-            "(\(index + 1)/\(totalCount))\n"
-        fputs(attemptMessage, stderr)
+        debugPrint("Attempting transcription with language: \(languageCode) (\(index + 1)/\(totalCount))")
 
-        fputs("DEBUG: About to create SpeechTranscriber with locale \(languageCode)\n", stderr)
+        debugPrint("About to create SpeechTranscriber with locale \(languageCode)")
         let speechTranscriber = try SpeechTranscriber(locale: locale)
-        fputs("DEBUG: SpeechTranscriber created successfully, about to call transcribe\n", stderr)
+        debugPrint("SpeechTranscriber created successfully, about to call transcribe")
         let result = try await speechTranscriber.transcribe(
             audioFile: audioFile,
             progressCallback: progressCallback
         )
-        fputs("DEBUG: transcribe() completed successfully\n", stderr)
+        debugPrint("transcribe() completed successfully")
 
         Logger.shared.info(
             "Transcription confidence for \(languageCode): \(String(format: "%.1f%%", result.confidence * 100))",

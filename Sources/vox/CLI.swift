@@ -2,16 +2,6 @@ import ArgumentParser
 import Foundation
 import Speech
 
-// Global debug flag accessible throughout the application
-var globalDebugEnabled = false
-
-// Debug utility function
-func debugPrint(_ message: String) {
-    if globalDebugEnabled {
-        fputs("DEBUG: \(message)\n", stderr)
-    }
-}
-
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -93,8 +83,6 @@ struct Vox: ParsableCommand {
         
         try validateInputs(inputFile: inputFile)
         
-        // Set global debug flag
-        globalDebugEnabled = debug
         
         configureLogging()
         displayStartupInfo(inputFile: inputFile)
@@ -160,6 +148,9 @@ struct Vox: ParsableCommand {
 
     private func configureLogging() {
         Logger.shared.configure(verbose: verbose)
+        if debug {
+            Logger.shared.enableLogging(level: .debug)
+        }
         
         // Logging configuration is complete - startup info will be displayed separately
     }
@@ -254,7 +245,7 @@ struct Vox: ParsableCommand {
 
     private func transcribeAudio(_ audioFile: AudioFile) async throws -> TranscriptionResult {
         // TEMP: Use working transcription pattern from successful test
-        fputs("DEBUG: Using working transcription pattern\n", stderr)
+        Logger.shared.debug("Using working transcription pattern", component: "CLI")
         
         let startTime = Date()
         
@@ -282,7 +273,7 @@ struct Vox: ParsableCommand {
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = false
         
-        fputs("DEBUG: About to start recognition task\n", stderr)
+        Logger.shared.debug("About to start recognition task", component: "CLI")
         let speechResult: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
             var hasResumed = false
             
@@ -290,18 +281,18 @@ struct Vox: ParsableCommand {
                 if hasResumed { return }
                 
                 if let error = error {
-                    fputs("DEBUG: Recognition error: \(error.localizedDescription)\n", stderr)
+                    Logger.shared.debug("Recognition error: \(error.localizedDescription)", component: "CLI")
                     hasResumed = true
                     continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
                     return
                 }
                 
                 if let result = result, result.isFinal {
-                    fputs("DEBUG: Final result: \(result.bestTranscription.formattedString)\n", stderr)
+                    Logger.shared.debug("Final result: \(result.bestTranscription.formattedString)", component: "CLI")
                     hasResumed = true
                     continuation.resume(returning: result)
                 } else if let result = result {
-                    fputs("DEBUG: Partial: \(result.bestTranscription.formattedString)\n", stderr)
+                    Logger.shared.debug("Partial: \(result.bestTranscription.formattedString)", component: "CLI")
                 }
             }
             
@@ -315,7 +306,7 @@ struct Vox: ParsableCommand {
             }
         }
         
-        fputs("DEBUG: Creating TranscriptionResult\n", stderr)
+        Logger.shared.debug("Creating TranscriptionResult", component: "CLI")
         let processingTime = Date().timeIntervalSince(startTime)
         
         // Calculate confidence
@@ -335,7 +326,7 @@ struct Vox: ParsableCommand {
             audioFormat: audioFile.format
         )
         
-        fputs("DEBUG: Transcription completed successfully\n", stderr)
+        Logger.shared.debug("Transcription completed successfully", component: "CLI")
         return result
         
         /* ORIGINAL CODE - COMMENTED OUT FOR DEBUGGING
