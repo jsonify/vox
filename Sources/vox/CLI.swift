@@ -1,6 +1,16 @@
 import ArgumentParser
 import Foundation
 
+// Global debug flag accessible throughout the application
+var globalDebugEnabled = false
+
+// Debug utility function
+func debugPrint(_ message: String) {
+    if globalDebugEnabled {
+        fputs("DEBUG: \(message)\n", stderr)
+    }
+}
+
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Vox: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -50,6 +60,9 @@ struct Vox: ParsableCommand {
     @Flag(name: [.short, .long], help: "Show detailed progress and processing information")
     var verbose = false
 
+    @Flag(help: "Show debug output for troubleshooting")
+    var debug = false
+
     @Flag(help: "Skip native transcription and use cloud API directly")
     var forceCloud = false
 
@@ -78,6 +91,10 @@ struct Vox: ParsableCommand {
         }
         
         try validateInputs(inputFile: inputFile)
+        
+        // Set global debug flag
+        globalDebugEnabled = debug
+        
         configureLogging()
         displayStartupInfo(inputFile: inputFile)
         
