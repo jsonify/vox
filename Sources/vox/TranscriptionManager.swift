@@ -72,7 +72,7 @@ public struct TranscriptionManager {
         self.includeTimestamps = includeTimestamps
     }
 
-    func transcribeAudio(audioFile: AudioFile) async throws -> TranscriptionResult {
+    func transcribeAudio(audioFile: AudioFile, progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
         fputs("DEBUG: In TranscriptionManager.transcribeAudio\n", stderr)
         fputs("Starting transcription...\n", stdout)
 
@@ -87,14 +87,15 @@ public struct TranscriptionManager {
 
         let transcriptionResult = try await transcribeAudioWithAsyncFunction(
             audioFile: audioFile,
-            preferredLanguages: preferredLanguages
+            preferredLanguages: preferredLanguages,
+            progressCallback: progressCallback
         )
         fputs("DEBUG: transcribeAudioWithAsyncFunction completed\n", stderr)
 
         return transcriptionResult
     }
 
-    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String]) async throws -> TranscriptionResult {
+    private func transcribeAudioWithAsyncFunction(audioFile: AudioFile, preferredLanguages: [String], progressCallback: ProgressCallback? = nil) async throws -> TranscriptionResult {
         fputs("DEBUG: In transcribeAudioWithAsyncFunction - start\n", stderr)
         
         let capturedConfig = captureConfiguration()
@@ -107,13 +108,15 @@ public struct TranscriptionManager {
                 fallbackAPI: capturedConfig.fallbackAPI,
                 apiKey: capturedConfig.apiKey,
                 includeTimestamps: capturedConfig.includeTimestamps,
-                verbose: capturedConfig.verbose
+                verbose: capturedConfig.verbose,
+                progressCallback: progressCallback
             )
         } else {
             return try await self.performNativeTranscriptionWithFallback(
                 audioFile: audioFile,
                 preferredLanguages: preferredLanguages,
-                config: capturedConfig
+                config: capturedConfig,
+                progressCallback: progressCallback
             )
         }
     }
@@ -132,7 +135,8 @@ public struct TranscriptionManager {
     private func performNativeTranscriptionWithFallback(
         audioFile: AudioFile,
         preferredLanguages: [String],
-        config: TranscriptionConfig
+        config: TranscriptionConfig,
+        progressCallback: ProgressCallback? = nil
     ) async throws -> TranscriptionResult {
         fputs("DEBUG: Using native transcription path\n", stderr)
         
@@ -140,14 +144,16 @@ public struct TranscriptionManager {
             return try await performNativeTranscription(
                 audioFile: audioFile,
                 preferredLanguages: preferredLanguages,
-                verbose: config.verbose
+                verbose: config.verbose,
+                progressCallback: progressCallback
             )
         } catch {
             fputs("DEBUG: Native transcription failed, attempting fallback\n", stderr)
             return try await handleNativeTranscriptionFailure(
                 audioFile: audioFile,
                 config: config,
-                error: error
+                error: error,
+                progressCallback: progressCallback
             )
         }
     }
@@ -155,7 +161,8 @@ public struct TranscriptionManager {
     private func performNativeTranscription(
         audioFile: AudioFile,
         preferredLanguages: [String],
-        verbose: Bool
+        verbose: Bool,
+        progressCallback: ProgressCallback? = nil
     ) async throws -> TranscriptionResult {
         fputs("DEBUG: About to create SpeechTranscriber\n", stderr)
         let speechTranscriber = try SpeechTranscriber()
@@ -163,21 +170,23 @@ public struct TranscriptionManager {
         
         return try await speechTranscriber.transcribeWithLanguageDetection(
             audioFile: audioFile,
-            preferredLanguages: preferredLanguages
-        ) { @Sendable progressReport in
-            fputs("DEBUG: Progress callback called\n", stderr)
-            fputs(
-                "DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
-                stderr
-            )
-            fputs("DEBUG: Progress callback completed\n", stderr)
-        }
+            preferredLanguages: preferredLanguages,
+            progressCallback: progressCallback ?? { @Sendable progressReport in
+                fputs("DEBUG: Progress callback called\n", stderr)
+                fputs(
+                    "DEBUG: Progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
+                    stderr
+                )
+                fputs("DEBUG: Progress callback completed\n", stderr)
+            }
+        )
     }
 
     private func handleNativeTranscriptionFailure(
         audioFile: AudioFile,
         config: TranscriptionConfig,
-        error: Error
+        error: Error,
+        progressCallback: ProgressCallback? = nil
     ) async throws -> TranscriptionResult {
         fputs("DEBUG: Native transcription failed: \(error.localizedDescription)\n", stderr)
         
@@ -189,7 +198,8 @@ public struct TranscriptionManager {
                 fallbackAPI: config.fallbackAPI,
                 apiKey: config.apiKey,
                 includeTimestamps: config.includeTimestamps,
-                verbose: config.verbose
+                verbose: config.verbose,
+                progressCallback: progressCallback
             )
         } else {
             fputs("DEBUG: No cloud API key provided - creating demo transcription\n", stderr)
@@ -218,7 +228,8 @@ public struct TranscriptionManager {
         fallbackAPI: FallbackAPI?,
         apiKey: String?,
         includeTimestamps: Bool,
-        verbose: Bool
+        verbose: Bool,
+        progressCallback: ProgressCallback? = nil
     ) async throws -> TranscriptionResult {
         // Use injected test client if available, otherwise use real client
         let selectedAPI = fallbackAPI ?? .openai
@@ -228,15 +239,16 @@ public struct TranscriptionManager {
             return try await testClient.transcribe(
                 audioFile: audioFile,
                 language: preferredLanguage,
-                includeTimestamps: includeTimestamps
-            ) { @Sendable progress in
-                if verbose {
-                    fputs(
-                        "DEBUG: Cloud progress: \(String(format: "%.1f", progress.currentProgress * 100))%\n",
-                        stderr
-                    )
+                includeTimestamps: includeTimestamps,
+                progressCallback: progressCallback ?? { @Sendable progress in
+                    if verbose {
+                        fputs(
+                            "DEBUG: Cloud progress: \(String(format: "%.1f", progress.currentProgress * 100))%\n",
+                            stderr
+                        )
+                    }
                 }
-            }
+            )
         }
 
         switch selectedAPI {
@@ -249,15 +261,16 @@ public struct TranscriptionManager {
             return try await whisperClient.transcribe(
                 audioFile: audioFile,
                 language: preferredLanguage,
-                includeTimestamps: includeTimestamps
-            ) { @Sendable progressReport in
-                if verbose {
-                    fputs(
-                        "DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
-                        stderr
-                    )
+                includeTimestamps: includeTimestamps,
+                progressCallback: progressCallback ?? { @Sendable progressReport in
+                    if verbose {
+                        fputs(
+                            "DEBUG: Cloud progress: \(String(format: "%.1f", progressReport.currentProgress * 100))%\n",
+                            stderr
+                        )
+                    }
                 }
-            }
+            )
         case .revai:
             fputs("DEBUG: Rev.ai API not yet implemented\n", stderr)
             // TEMP DEBUG: Bypass Logger call

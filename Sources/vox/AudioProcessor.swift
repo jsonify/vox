@@ -162,7 +162,9 @@ class AudioProcessor {
             }
             
             // Configure export session
+            fputs("DEBUG: About to create AVAssetExportSession\n", stderr)
             guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+                fputs("DEBUG: Failed to create AVAssetExportSession\n", stderr)
                 let voxError = VoxError.audioExtractionFailed("Failed to create export session")
                 DispatchQueue.main.async {
                     completion(.failure(voxError))
@@ -170,8 +172,11 @@ class AudioProcessor {
                 return
             }
             
+            fputs("DEBUG: Export session created successfully\n", stderr)
             exportSession.outputURL = outputURL
             exportSession.outputFileType = .m4a
+            
+            fputs("DEBUG: Starting export session with output URL: \(outputURL.path)\n", stderr)
             
             // Start progress monitoring
             let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
@@ -187,9 +192,25 @@ class AudioProcessor {
                 }
             }
             
-            exportSession.exportAsynchronously {
+            // Add timeout protection (5 minutes max)
+            let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: false) { _ in
+                fputs("DEBUG: Export session timed out after 5 minutes\n", stderr)
+                exportSession.cancelExport()
                 progressTimer.invalidate()
+                let voxError = VoxError.audioExtractionFailed("Audio extraction timed out after 5 minutes")
+                DispatchQueue.main.async {
+                    completion(.failure(voxError))
+                }
+            }
+            
+            exportSession.exportAsynchronously {
+                fputs("DEBUG: Export completion handler called\n", stderr)
+                progressTimer.invalidate()
+                timeoutTimer.invalidate()
                 
+                fputs("DEBUG: Export session completed with status: \(exportSession.status) (raw: \(exportSession.status.rawValue))\n", stderr)
+                
+                fputs("DEBUG: About to call handleExportCompletion\n", stderr)
                 self.handleExportCompletion(
                     exportSession: exportSession,
                     asset: asset,
@@ -197,6 +218,7 @@ class AudioProcessor {
                     progressTimer: progressTimer,
                     completion: completion
                 )
+                fputs("DEBUG: handleExportCompletion call completed\n", stderr)
             }
         }
     }
@@ -208,27 +230,31 @@ class AudioProcessor {
         progressTimer: Timer,
         completion: @escaping (Result<AudioFormat, VoxError>) -> Void
     ) {
-        DispatchQueue.main.async {
-            switch exportSession.status {
-            case .completed:
-                // Extract audio format information
-                self.extractAudioFormat(from: asset, outputURL: outputURL) { formatResult in
-                    completion(formatResult)
-                }
-                
-            case .failed:
-                let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export error"
-                let voxError = VoxError.audioExtractionFailed("AVFoundation export failed: \(errorMessage)")
-                completion(.failure(voxError))
-                
-            case .cancelled:
-                let voxError = VoxError.audioExtractionFailed("Export was cancelled")
-                completion(.failure(voxError))
-                
-            default:
-                let voxError = VoxError.audioExtractionFailed("Export completed with unknown status")
-                completion(.failure(voxError))
+        fputs("DEBUG: handleExportCompletion called with status: \(exportSession.status) (raw: \(exportSession.status.rawValue))\n", stderr)
+        
+        switch exportSession.status {
+        case .completed:
+            fputs("DEBUG: Export completed successfully, extracting audio format\n", stderr)
+            // Extract audio format information
+            self.extractAudioFormat(from: asset, outputURL: outputURL) { formatResult in
+                completion(formatResult)
             }
+            
+        case .failed:
+            let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export error"
+            fputs("DEBUG: Export failed with error: \(errorMessage)\n", stderr)
+            let voxError = VoxError.audioExtractionFailed("AVFoundation export failed: \(errorMessage)")
+            completion(.failure(voxError))
+            
+        case .cancelled:
+            fputs("DEBUG: Export was cancelled\n", stderr)
+            let voxError = VoxError.audioExtractionFailed("Export was cancelled")
+            completion(.failure(voxError))
+            
+        default:
+            fputs("DEBUG: Export completed with unknown status: \(exportSession.status.rawValue)\n", stderr)
+            let voxError = VoxError.audioExtractionFailed("Export completed with unknown status")
+            completion(.failure(voxError))
         }
     }
     
@@ -237,42 +263,51 @@ class AudioProcessor {
         outputURL: URL,
         completion: @escaping (Result<AudioFormat, VoxError>) -> Void
     ) {
+        fputs("DEBUG: extractAudioFormat called\n", stderr)
         asset.loadValuesAsynchronously(forKeys: ["duration", "tracks"]) {
+            fputs("DEBUG: Asset values loaded asynchronously\n", stderr)
             var error: NSError?
             let status = asset.statusOfValue(forKey: "duration", error: &error)
             
+            fputs("DEBUG: Asset duration status: \(status.rawValue)\n", stderr)
+            
             guard status == .loaded else {
+                fputs("DEBUG: Failed to load asset duration\n", stderr)
                 let voxError = VoxError.audioExtractionFailed(
                     "Failed to load asset duration: \(error?.localizedDescription ?? "Unknown error")"
                 )
-                DispatchQueue.main.async {
-                    completion(.failure(voxError))
-                }
+                completion(.failure(voxError))
                 return
             }
             
+            fputs("DEBUG: Asset duration loaded successfully\n", stderr)
             let duration = CMTimeGetSeconds(asset.duration)
+            fputs("DEBUG: Duration: \(duration) seconds\n", stderr)
+            
             let audioTracks = asset.tracks(withMediaType: .audio)
+            fputs("DEBUG: Found \(audioTracks.count) audio tracks\n", stderr)
             
             guard let audioTrack = audioTracks.first else {
+                fputs("DEBUG: No audio tracks found\n", stderr)
                 let voxError = VoxError.audioExtractionFailed("No audio tracks found")
-                DispatchQueue.main.async {
-                    completion(.failure(voxError))
-                }
+                completion(.failure(voxError))
                 return
             }
             
             // Extract format descriptions
+            fputs("DEBUG: Extracting format descriptions\n", stderr)
             let formatDescriptions = audioTrack.formatDescriptions
+            fputs("DEBUG: Found \(formatDescriptions.count) format descriptions\n", stderr)
+            
             guard let formatDescription = formatDescriptions.first else {
+                fputs("DEBUG: No format description found\n", stderr)
                 let voxError = VoxError.audioExtractionFailed("No format description found")
-                DispatchQueue.main.async {
-                    completion(.failure(voxError))
-                }
+                completion(.failure(voxError))
                 return
             }
             
             // Extract audio format details
+            fputs("DEBUG: Extracting audio format details\n", stderr)
             // swiftlint:disable force_cast
             let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(
                 formatDescription as! CMAudioFormatDescription
@@ -281,10 +316,15 @@ class AudioProcessor {
             let sampleRate = Int(audioStreamBasicDescription?.pointee.mSampleRate ?? 44100)
             let channels = Int(audioStreamBasicDescription?.pointee.mChannelsPerFrame ?? 2)
             
+            fputs("DEBUG: Sample rate: \(sampleRate), Channels: \(channels)\n", stderr)
+            
             // Get file size
+            fputs("DEBUG: Getting file size for: \(outputURL.path)\n", stderr)
             let fileSize = try? FileManager.default.attributesOfItem(
                 atPath: outputURL.path
             )[.size] as? UInt64
+            
+            fputs("DEBUG: File size: \(fileSize ?? 0) bytes\n", stderr)
             
             let audioFormat = AudioFormat(
                 codec: "aac",
@@ -295,9 +335,8 @@ class AudioProcessor {
                 fileSize: fileSize
             )
             
-            DispatchQueue.main.async {
-                completion(.success(audioFormat))
-            }
+            fputs("DEBUG: Audio format created successfully, calling completion\n", stderr)
+            completion(.success(audioFormat))
         }
     }
     

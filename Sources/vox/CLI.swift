@@ -243,12 +243,19 @@ struct Vox: ParsableCommand {
             apiKey: apiKey,
             includeTimestamps: timestamps
         )
+        
+        let progressDisplay = ProgressDisplayManager(verbose: verbose)
 
         if verbose {
             Logger.shared.info("🗣️ Starting transcription...", component: "CLI")
         }
 
-        return try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+        return try await transcriptionManager.transcribeAudio(
+            audioFile: audioFile,
+            progressCallback: { progressReport in
+                progressDisplay.displayProgress(progressReport)
+            }
+        )
     }
 
     private func displayResults(_ result: TranscriptionResult) {
