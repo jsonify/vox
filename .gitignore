@@ -9,3 +9,5 @@ DerivedData/
 Package.resolved
 .roo/mcp.json
 /.vscode
+/dist
+transcript.txt

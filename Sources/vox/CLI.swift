@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import Speech
 
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Vox: ParsableCommand {
@@ -50,6 +51,9 @@ struct Vox: ParsableCommand {
     @Flag(name: [.short, .long], help: "Show detailed progress and processing information")
     var verbose = false
 
+    @Flag(help: "Show debug output for troubleshooting")
+    var debug = false
+
     @Flag(help: "Skip native transcription and use cloud API directly")
     var forceCloud = false
 
@@ -78,6 +82,8 @@ struct Vox: ParsableCommand {
         }
         
         try validateInputs(inputFile: inputFile)
+        
+        
         configureLogging()
         displayStartupInfo(inputFile: inputFile)
         
@@ -142,6 +148,9 @@ struct Vox: ParsableCommand {
 
     private func configureLogging() {
         Logger.shared.configure(verbose: verbose)
+        if debug {
+            Logger.shared.enableLogging(level: .debug)
+        }
         
         // Logging configuration is complete - startup info will be displayed separately
     }
@@ -235,6 +244,92 @@ struct Vox: ParsableCommand {
     }
 
     private func transcribeAudio(_ audioFile: AudioFile) async throws -> TranscriptionResult {
+        // TEMP: Use working transcription pattern from successful test
+        Logger.shared.debug("Using working transcription pattern", component: "CLI")
+        
+        let startTime = Date()
+        
+        // Request permission first
+        let authStatus = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
+        
+        guard authStatus == .authorized else {
+            throw VoxError.transcriptionFailed("Speech recognition not authorized")
+        }
+        
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")) else {
+            throw VoxError.transcriptionFailed("Cannot create speech recognizer")
+        }
+        
+        guard recognizer.isAvailable else {
+            throw VoxError.transcriptionFailed("Speech recognizer not available")
+        }
+        
+        let audioURL = URL(fileURLWithPath: audioFile.path)
+        let request = SFSpeechURLRecognitionRequest(url: audioURL)
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = false
+        
+        Logger.shared.debug("About to start recognition task", component: "CLI")
+        let speechResult: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            
+            let task = recognizer.recognitionTask(with: request) { result, error in
+                if hasResumed { return }
+                
+                if let error = error {
+                    Logger.shared.debug("Recognition error: \(error.localizedDescription)", component: "CLI")
+                    hasResumed = true
+                    continuation.resume(throwing: VoxError.transcriptionFailed(error.localizedDescription))
+                    return
+                }
+                
+                if let result = result, result.isFinal {
+                    Logger.shared.debug("Final result: \(result.bestTranscription.formattedString)", component: "CLI")
+                    hasResumed = true
+                    continuation.resume(returning: result)
+                } else if let result = result {
+                    Logger.shared.debug("Partial: \(result.bestTranscription.formattedString)", component: "CLI")
+                }
+            }
+            
+            // Timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                if !hasResumed {
+                    hasResumed = true
+                    task.cancel()
+                    continuation.resume(throwing: VoxError.transcriptionFailed("Timeout"))
+                }
+            }
+        }
+        
+        Logger.shared.debug("Creating TranscriptionResult", component: "CLI")
+        let processingTime = Date().timeIntervalSince(startTime)
+        
+        // Calculate confidence
+        let confidences = speechResult.bestTranscription.segments.compactMap { segment in
+            segment.confidence > 0 ? Double(segment.confidence) : nil
+        }
+        let confidence = confidences.isEmpty ? 0.0 : confidences.reduce(0, +) / Double(confidences.count)
+        
+        let result = TranscriptionResult(
+            text: speechResult.bestTranscription.formattedString,
+            language: "en-US",
+            confidence: confidence,
+            duration: audioFile.format.duration,
+            segments: [], // Simplified for now
+            engine: .speechAnalyzer,
+            processingTime: processingTime,
+            audioFormat: audioFile.format
+        )
+        
+        Logger.shared.debug("Transcription completed successfully", component: "CLI")
+        return result
+        
+        /* ORIGINAL CODE - COMMENTED OUT FOR DEBUGGING
         let transcriptionManager = TranscriptionManager(
             forceCloud: forceCloud,
             verbose: verbose,
@@ -243,12 +338,20 @@ struct Vox: ParsableCommand {
             apiKey: apiKey,
             includeTimestamps: timestamps
         )
+        
+        let progressDisplay = ProgressDisplayManager(verbose: verbose)
 
         if verbose {
             Logger.shared.info("🗣️ Starting transcription...", component: "CLI")
         }
 
-        return try await transcriptionManager.transcribeAudio(audioFile: audioFile)
+        return try await transcriptionManager.transcribeAudio(
+            audioFile: audioFile,
+            progressCallback: { progressReport in
+                progressDisplay.displayProgress(progressReport)
+            }
+        )
+        */
     }
 
     private func displayResults(_ result: TranscriptionResult) {

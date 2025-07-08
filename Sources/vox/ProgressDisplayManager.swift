@@ -52,7 +52,7 @@ struct ProgressDisplayManager {
 
     private func displaySimpleProgress(_ progress: TranscriptionProgress) {
         // Enhanced progress bar in normal mode
-        if progress.currentProgress > 0 {
+        if progress.currentProgress >= 0 {
             let barWidth = 40
             let filled = Int(progress.currentProgress * Double(barWidth))
             let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barWidth - filled)
